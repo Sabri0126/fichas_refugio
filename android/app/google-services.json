@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1203541671",
+    "project_id": "fichas-refugio",
+    "storage_bucket": "fichas-refugio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1203541671:android:6318a96eb49c33be522d82",
+        "android_client_info": {
+          "package_name": "com.example.fichas_refugio"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNfUKdSDXEzCtl9juppJ1-Lb2sylu7u20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
