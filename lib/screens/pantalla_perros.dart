@@ -5,7 +5,9 @@ import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 
 class PantallaPerros extends StatelessWidget {
-  const PantallaPerros({super.key});
+  final bool soloInactivos;
+
+  const PantallaPerros({super.key, this.soloInactivos = false});
 
   String _formatearFecha(dynamic fecha) {
     if (fecha == null) {
@@ -40,7 +42,10 @@ class PantallaPerros extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sector General', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
+        title: Text(
+          soloInactivos ? 'Difuntos' : 'Perritos',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+        ),
         backgroundColor: Colors.black87,
       ),
       body: StreamBuilder(
@@ -50,10 +55,22 @@ class PantallaPerros extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No hay perritos registrados aún.'));
+            return Center(child: Text(soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
 
-          final perros = snapshot.data!.docs;
+          final perros = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final estado = data['estado'] as String?;
+            if (soloInactivos) {
+              return estado == 'inactivo';
+            } else {
+              return estado == null || estado == 'activo';
+            }
+          }).toList();
+
+          if (perros.isEmpty) {
+            return Center(child: Text(soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
+          }
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -97,7 +114,7 @@ class PantallaPerros extends StatelessWidget {
                                 ? Image.network(
                                     perro['foto_perfil'],
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
+                                    errorBuilder: (_, _, _) => Container(
                                       color: Colors.blueGrey.shade700,
                                       child: const Icon(Icons.pets, color: Colors.white24, size: 80),
                                     ),
@@ -110,7 +127,7 @@ class PantallaPerros extends StatelessWidget {
                                 gradient: LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
                                 ),
                               ),
                             ),

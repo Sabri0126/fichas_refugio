@@ -29,6 +29,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   DateTime? _fechaIngreso;
   bool _estaCastrado = false;
   bool _estaGuardando = false;
+  String _estado = 'activo';
 
   File? _imagenSeleccionada;
   final ImagePicker _picker = ImagePicker();
@@ -55,6 +56,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           ? '${_fechaIngreso!.day.toString().padLeft(2, '0')}/${_fechaIngreso!.month.toString().padLeft(2, '0')}/${_fechaIngreso!.year}'
           : '';
       _estaCastrado = widget.datosActuales!['castrado'] ?? false;
+      _estado = widget.datosActuales!['estado'] ?? 'activo';
     }
   }
 
@@ -191,7 +193,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
           'historia': _historiaController.text.trim(),
           'ficha_medica': _fichaMedicaController.text.trim(),
           'castrado': _estaCastrado,
-          if (urlImagen != null) 'foto_perfil': urlImagen,
+          'estado': _estado,
+          'foto_perfil': ?urlImagen,
         };
 
         if (widget.idDocumento == null) {
@@ -259,6 +262,26 @@ class _FormularioPerroState extends State<FormularioPerro> {
               TextFormField(controller: _edadController, decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)), keyboardType: TextInputType.number),
               const SizedBox(height: 16),
               SwitchListTile(title: const Text('¿Ya está castrado?'), value: _estaCastrado, activeThumbColor: Colors.deepOrange, onChanged: (valor) => setState(() => _estaCastrado = valor)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Estado: ', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: const Text('Activo'),
+                    selected: _estado == 'activo',
+                    selectedColor: Colors.green.shade200,
+                    onSelected: (_) => setState(() => _estado = 'activo'),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Inactivo'),
+                    selected: _estado == 'inactivo',
+                    selectedColor: Colors.blueGrey.shade200,
+                    onSelected: (_) => setState(() => _estado = 'inactivo'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
