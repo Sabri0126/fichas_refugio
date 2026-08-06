@@ -57,7 +57,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.soloInactivos ? 'Difuntos' : 'Perritos',
+          widget.soloInactivos ? 'Difuntos' : 'Perritos del refugio',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
         ),
         backgroundColor: Colors.black87,

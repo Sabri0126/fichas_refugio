@@ -8,28 +8,40 @@ class PantallaMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.pets, size: 72, color: Colors.deepOrange),
-                const SizedBox(height: 16),
-                const Text(
-                  'Refugio Milagros de Amor',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Reemplazá NetworkImage('URL_DE_TU_IMAGEN') por AssetImage('assets/fondo.jpg') si usás un asset local
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/PortonRefugio.jpg'),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.4)),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.pets, size: 72, color: Colors.white),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Refugio Milagros de Amor',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                 const SizedBox(height: 60),
                 _MenuButton(
-                  label: 'Perritos',
+                  label: 'Perritos del refugio',
                   icon: Icons.favorite,
                   color: Colors.deepOrange,
                   onTap: () => Navigator.push(
@@ -51,6 +63,8 @@ class PantallaMenu extends StatelessWidget {
             ),
           ),
         ),
+      ),
+        ],
       ),
     );
   }
