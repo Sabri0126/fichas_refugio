@@ -48,26 +48,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   int _calcularEdadEstimada(Map<String, dynamic> perro) {
     final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
-    final fechaIngreso = perro['fecha_ingreso'];
+    final anioBase = int.tryParse(perro['edad_anio_base']?.toString() ?? '') ?? DateTime.now().year;
+    final aniosTranscurridos = DateTime.now().year - anioBase;
 
-    DateTime? ingresoDate;
-    if (fechaIngreso is Timestamp) {
-      ingresoDate = fechaIngreso.toDate();
-    } else if (fechaIngreso is DateTime) {
-      ingresoDate = fechaIngreso;
-    } else if (fechaIngreso is String) {
-      ingresoDate = DateTime.tryParse(fechaIngreso);
-    }
-
-    if (ingresoDate != null) {
-      final ahora = DateTime.now();
-      final aniosTranscurridos = ahora.year - ingresoDate.year;
-      if (aniosTranscurridos > 0) {
-        return edadBase + aniosTranscurridos;
-      }
-    }
-
-    return edadBase;
+    return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
   }
 
   Widget _construirTextoFormateado(String texto) {
@@ -336,156 +320,181 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               ],
             ],
           ),
-          body: Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: Container(
-                  color: Colors.grey.shade200,
-                  padding: const EdgeInsets.all(24.0),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(perro['nombre'] ?? 'Sin nombre', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold)),
-                        const Divider(color: Colors.black, thickness: 3),
-                        const SizedBox(height: 16),
-                        Text('Nombre: ${perro['nombre'] ?? 'Sin nombre'}', style: const TextStyle(fontSize: 18)),
-                        Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 18)),
-                        Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 18)),
-                        Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 18)),
-                        const SizedBox(height: 24),
-                        const Text('Historia:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.'),
-                        const SizedBox(height: 16),
-                        const Text('Ficha médica:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
-                      ],
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final esPantallaCompleta = constraints.maxWidth >= 1100;
+
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Container(
+                      color: Colors.grey.shade200,
+                      padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              perro['nombre']?.toString() ?? 'Sin nombre',
+                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 16),
+                            Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 20)),
+                            const SizedBox(height: 10),
+                            Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 20)),
+                            const SizedBox(height: 10),
+                            Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 20)),
+                            const SizedBox(height: 28),
+                            const Text('Historia:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 10),
+                            _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.'),
+                            const SizedBox(height: 24),
+                            const Text('Ficha médica:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 10),
+                            _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: galeria.isEmpty
-                    ? const Center(child: Text('Aún no hay fotos en la galería. ¡Tocá la cámara arriba a la derecha!', style: TextStyle(fontSize: 18)))
-                    : _modoReordenar
-                        ? Container(
-                            padding: const EdgeInsets.all(16),
-                            child: ReorderableListView.builder(
-                              itemCount: galeria.length,
-                              onReorder: (oldIndex, newIndex) => _reordenarFotos(galeria, oldIndex, newIndex),
-                              itemBuilder: (context, index) {
-                                final foto = galeria[index];
-                                return Card(
-                                  key: ValueKey('${foto['url'] ?? index}-$index'),
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ListTile(
-                                    leading: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        foto['url'] ?? '',
-                                        width: 56,
-                                        height: 56,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    title: Text(foto['texto']?.toString().isNotEmpty == true ? foto['texto'] : 'Sin descripción'),
-                                    subtitle: const Text('Arrastrá para cambiar el orden'),
-                                    trailing: const Icon(Icons.drag_handle),
-                                  ),
-                                );
-                              },
+                  Expanded(
+                    flex: esPantallaCompleta ? 2 : 1,
+                    child: galeria.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Aún no hay fotos en la galería. ¡Tocá la cámara arriba a la derecha!',
+                              style: TextStyle(fontSize: 18),
                             ),
                           )
-                        : Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              PageView.builder(
-                                controller: _controladorCarrusel,
-                                itemCount: galeria.length,
-                                onPageChanged: (index) => setState(() => _paginaActual = index),
-                                itemBuilder: (context, index) {
-                                  final foto = galeria[index];
-                                  return Stack(
-                                    children: [
-                                      Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Expanded(
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(16.0),
-                                                child: Center(
-                                                  child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    child: ConstrainedBox(
-                                                      constraints: const BoxConstraints(maxWidth: 600),
-                                                      child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
+                        : _modoReordenar
+                            ? Container(
+                                padding: const EdgeInsets.all(16),
+                                child: ReorderableListView.builder(
+                                  itemCount: galeria.length,
+                                  onReorder: (oldIndex, newIndex) => _reordenarFotos(galeria, oldIndex, newIndex),
+                                  itemBuilder: (context, index) {
+                                    final foto = galeria[index];
+                                    return Card(
+                                      key: ValueKey('${foto['url'] ?? index}-$index'),
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      child: ListTile(
+                                        leading: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            foto['url'] ?? '',
+                                            width: 56,
+                                            height: 56,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        title: Text(foto['texto']?.toString().isNotEmpty == true ? foto['texto'] : 'Sin descripción'),
+                                        subtitle: const Text('Arrastrá para cambiar el orden'),
+                                        trailing: const Icon(Icons.drag_handle),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              )
+                            : Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  PageView.builder(
+                                    controller: _controladorCarrusel,
+                                    itemCount: galeria.length,
+                                    onPageChanged: (index) => setState(() => _paginaActual = index),
+                                    itemBuilder: (context, index) {
+                                      final foto = galeria[index];
+                                      return Stack(
+                                        children: [
+                                          Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Expanded(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.all(16.0),
+                                                    child: Center(
+                                                      child: ClipRRect(
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        child: ConstrainedBox(
+                                                          constraints: const BoxConstraints(maxWidth: 600),
+                                                          child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
+                                                if (foto['texto'] != null && foto['texto'].toString().isNotEmpty)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(bottom: 24.0, left: 40, right: 40),
+                                                    child: Text(
+                                                      foto['texto'],
+                                                      style: const TextStyle(fontSize: 20, fontStyle: FontStyle.italic),
+                                                      textAlign: TextAlign.center,
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
-                                            if (foto['texto'] != null && foto['texto'].toString().isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(bottom: 24.0, left: 40, right: 40),
-                                                child: Text(foto['texto'], style: const TextStyle(fontSize: 20, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
-                                              ),
-                                          ],
+                                          ),
+                                          Positioned(
+                                            top: 24,
+                                            right: 24,
+                                            child: Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  backgroundColor: Colors.black54,
+                                                  child: IconButton(
+                                                    icon: const Icon(Icons.edit, color: Colors.white),
+                                                    onPressed: () => _editarFotoAGaleria(foto, index),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                CircleAvatar(
+                                                  backgroundColor: Colors.redAccent,
+                                                  child: IconButton(
+                                                    icon: const Icon(Icons.delete, color: Colors.white),
+                                                    onPressed: () => _eliminarFotoAGaleria(foto, index),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  if (_paginaActual > 0)
+                                    Positioned(
+                                      left: 16,
+                                      child: CircleAvatar(
+                                        backgroundColor: Colors.black54,
+                                        radius: 30,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
+                                          onPressed: _moverIzquierda,
                                         ),
                                       ),
-                                      Positioned(
-                                        top: 24,
-                                        right: 24,
-                                        child: Row(
-                                          children: [
-                                            CircleAvatar(
-                                              backgroundColor: Colors.black54,
-                                              child: IconButton(
-                                                icon: const Icon(Icons.edit, color: Colors.white),
-                                                onPressed: () => _editarFotoAGaleria(foto, index),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            CircleAvatar(
-                                              backgroundColor: Colors.redAccent,
-                                              child: IconButton(
-                                                icon: const Icon(Icons.delete, color: Colors.white),
-                                                onPressed: () => _eliminarFotoAGaleria(foto, index),
-                                              ),
-                                            ),
-                                          ],
+                                    ),
+                                  if (_paginaActual < galeria.length - 1)
+                                    Positioned(
+                                      right: 16,
+                                      child: CircleAvatar(
+                                        backgroundColor: Colors.black54,
+                                        radius: 30,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.arrow_forward, color: Colors.white, size: 30),
+                                          onPressed: _moverDerecha,
                                         ),
                                       ),
-                                    ],
-                                  );
-                                },
+                                    ),
+                                ],
                               ),
-                              if (_paginaActual > 0)
-                                Positioned(
-                                  left: 16,
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.black54,
-                                    radius: 30,
-                                    child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30), onPressed: _moverIzquierda),
-                                  ),
-                                ),
-                              if (_paginaActual < galeria.length - 1)
-                                Positioned(
-                                  right: 16,
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.black54,
-                                    radius: 30,
-                                    child: IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.white, size: 30), onPressed: _moverDerecha),
-                                  ),
-                                ),
-                            ],
-                          ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           ),
         );
       }

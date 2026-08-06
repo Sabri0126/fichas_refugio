@@ -187,6 +187,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           'nombre': _nombreController.text.trim(),
           if (_fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(_fechaIngreso!),
           'edad': int.tryParse(_edadController.text.trim()) ?? 0,
+          'edad_anio_base': DateTime.now().year,
           'historia': _historiaController.text.trim(),
           'ficha_medica': _fichaMedicaController.text.trim(),
           'castrado': _estaCastrado,

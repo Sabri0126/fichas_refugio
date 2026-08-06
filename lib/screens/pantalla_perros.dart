@@ -28,6 +28,14 @@ class PantallaPerros extends StatelessWidget {
     return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
   }
 
+  int _calcularEdadEstimada(Map<String, dynamic> perro) {
+    final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
+    final anioBase = int.tryParse(perro['edad_anio_base']?.toString() ?? '') ?? DateTime.now().year;
+    final aniosTranscurridos = DateTime.now().year - anioBase;
+
+    return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,7 +136,7 @@ class PantallaPerros extends StatelessWidget {
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
                                 Text(
-                                  'Edad estimada: ${perro['edad'] ?? 0} años',
+                                  'Edad estimada: ${_calcularEdadEstimada(perro)} años',
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
                                 Text(
