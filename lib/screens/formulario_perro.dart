@@ -34,6 +34,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   String _estado = 'activo';
   String _sexo = 'macho';
 
+  bool _hayCambios = false;
+
   File? _imagenSeleccionada;
   final ImagePicker _picker = ImagePicker();
 
@@ -73,6 +75,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _fechaFallecimientoController.text = _fechaFallecimiento != null
           ? '${_fechaFallecimiento!.day.toString().padLeft(2, '0')}/${_fechaFallecimiento!.month.toString().padLeft(2, '0')}/${_fechaFallecimiento!.year}'
           : '';
+    }
+    // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
+    for (final c in [_nombreController, _edadController, _historiaController, _fichaMedicaController]) {
+      c.addListener(() => setState(() => _hayCambios = true));
     }
   }
 
@@ -254,11 +260,50 @@ class _FormularioPerroState extends State<FormularioPerro> {
     }
   }
 
+  Future<void> _confirmarSalida() async {
+    if (!_hayCambios) {
+      Navigator.pop(context);
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hay cambios sin guardar'),
+        content: const Text('¿Qué querés hacer con los cambios?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            child: const Text('Descartar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _guardarDatos();
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final esEdicion = widget.idDocumento != null;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmarSalida();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(esEdicion ? 'Editar Ficha' : 'Nuevo Ingreso', style: const TextStyle(color: Colors.white)),
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -433,6 +478,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           ),
         ),
       ),
-    );
+    ),   // cierra Scaffold
+  );     // cierra PopScope
   }
 }
