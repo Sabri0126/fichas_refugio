@@ -33,6 +33,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   bool _estaGuardando = false;
   String _estado = 'activo';
   String _sexo = 'macho';
+  List<Map<String, dynamic>> _parientes = [];
 
   bool _hayCambios = false;
 
@@ -63,6 +64,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _estaCastrado = widget.datosActuales!['castrado'] ?? false;
       _estado = widget.datosActuales!['estado'] ?? 'activo';
       _sexo = widget.datosActuales!['sexo'] ?? 'macho';
+      final parientesRaw = widget.datosActuales!['parientes'];
+      if (parientesRaw is List) {
+        _parientes = parientesRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
 
       final fechaFall = widget.datosActuales!['fecha_fallecimiento'];
       if (fechaFall is Timestamp) {
@@ -236,6 +241,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           'estado': _estado,
           if (_estado == 'inactivo' && _fechaFallecimiento != null)
             'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
+          'parientes': _parientes,
           'foto_perfil': ?urlImagen,
         };
 
@@ -258,6 +264,77 @@ class _FormularioPerroState extends State<FormularioPerro> {
         }
       }
     }
+  }
+
+  Future<void> _mostrarDialogoAgregarFamiliar() async {
+    String? seleccionadoId;
+    String? seleccionadoNombre;
+    String seleccionadaRelacion = 'Hermano/a';
+    const relaciones = ['Hermano/a', 'Padre', 'Madre', 'Hijo/a'];
+
+    final snapshot = await FirebaseFirestore.instance.collection('perros').get();
+    final opciones = snapshot.docs
+        .where((d) => d.id != widget.idDocumento)
+        .map((d) => {'id': d.id, 'nombre': (d.data())['nombre']?.toString() ?? d.id})
+        .toList();
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Añadir familiar'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Perro', border: OutlineInputBorder()),
+                value: seleccionadoId,
+                items: opciones
+                    .map((o) => DropdownMenuItem(value: o['id'], child: Text(o['nombre']!)))
+                    .toList(),
+                onChanged: (val) => setDialogState(() {
+                  seleccionadoId = val;
+                  seleccionadoNombre = opciones.firstWhere((o) => o['id'] == val)['nombre'];
+                }),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Relación', border: OutlineInputBorder()),
+                value: seleccionadaRelacion,
+                items: relaciones
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (val) => setDialogState(() => seleccionadaRelacion = val!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: seleccionadoId == null
+                  ? null
+                  : () {
+                      setState(() {
+                        _parientes.add({
+                          'id_documento': seleccionadoId,
+                          'nombre': seleccionadoNombre,
+                          'relacion': seleccionadaRelacion,
+                        });
+                        _hayCambios = true;
+                      });
+                      Navigator.pop(ctx);
+                    },
+              child: const Text('Añadir'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmarSalida() async {
@@ -397,6 +474,43 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     onTap: _seleccionarFechaFallecimiento,
                   ),
                 ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text('Familiares', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Añadir familiar'),
+                    onPressed: _mostrarDialogoAgregarFamiliar,
+                  ),
+                ],
+              ),
+              if (_parientes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Sin familiares registrados.', style: TextStyle(color: Colors.grey)),
+                )
+              else
+                Column(
+                  children: _parientes.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final p = entry.value;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.people),
+                      title: Text(p['nombre']?.toString() ?? ''),
+                      subtitle: Text(p['relacion']?.toString() ?? ''),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        onPressed: () => setState(() {
+                          _parientes.removeAt(i);
+                          _hayCambios = true;
+                        }),
+                      ),
+                    );
+                  }).toList(),
+                ),
               const SizedBox(height: 16),
               Row(
                 children: [

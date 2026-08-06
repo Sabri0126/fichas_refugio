@@ -313,6 +313,33 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const Text('Ficha médica:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
+        if (perro['parientes'] is List && (perro['parientes'] as List).isNotEmpty) ...[
+          const SizedBox(height: 24),
+          const Text('Familiares en el refugio:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: (perro['parientes'] as List).map((p) {
+              final familiar = Map<String, dynamic>.from(p as Map);
+              final nombre = familiar['nombre']?.toString() ?? '';
+              final relacion = familiar['relacion']?.toString() ?? '';
+              final idDoc = familiar['id_documento']?.toString() ?? '';
+              return ActionChip(
+                avatar: const Icon(Icons.people, size: 18),
+                label: Text('$nombre ($relacion)'),
+                onPressed: idDoc.isEmpty
+                    ? null
+                    : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => FichaDetallePerro(idDocumento: idDoc),
+                          ),
+                        ),
+              );
+            }).toList(),
+          ),
+        ],
         const SizedBox(height: 24),
       ],
     );
