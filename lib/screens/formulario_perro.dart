@@ -25,11 +25,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final TextEditingController _historiaController = TextEditingController();
   final TextEditingController _fichaMedicaController = TextEditingController();
   final TextEditingController _fechaIngresoController = TextEditingController();
+  final TextEditingController _fechaFallecimientoController = TextEditingController();
 
   DateTime? _fechaIngreso;
+  DateTime? _fechaFallecimiento;
   bool _estaCastrado = false;
   bool _estaGuardando = false;
   String _estado = 'activo';
+  String _sexo = 'macho';
 
   File? _imagenSeleccionada;
   final ImagePicker _picker = ImagePicker();
@@ -57,6 +60,19 @@ class _FormularioPerroState extends State<FormularioPerro> {
           : '';
       _estaCastrado = widget.datosActuales!['castrado'] ?? false;
       _estado = widget.datosActuales!['estado'] ?? 'activo';
+      _sexo = widget.datosActuales!['sexo'] ?? 'macho';
+
+      final fechaFall = widget.datosActuales!['fecha_fallecimiento'];
+      if (fechaFall is Timestamp) {
+        _fechaFallecimiento = fechaFall.toDate();
+      } else if (fechaFall is DateTime) {
+        _fechaFallecimiento = fechaFall;
+      } else if (fechaFall is String) {
+        _fechaFallecimiento = DateTime.tryParse(fechaFall);
+      }
+      _fechaFallecimientoController.text = _fechaFallecimiento != null
+          ? '${_fechaFallecimiento!.day.toString().padLeft(2, '0')}/${_fechaFallecimiento!.month.toString().padLeft(2, '0')}/${_fechaFallecimiento!.year}'
+          : '';
     }
   }
 
@@ -67,7 +83,24 @@ class _FormularioPerroState extends State<FormularioPerro> {
     _historiaController.dispose();
     _fichaMedicaController.dispose();
     _fechaIngresoController.dispose();
+    _fechaFallecimientoController.dispose();
     super.dispose();
+  }
+
+  Future<void> _seleccionarFechaFallecimiento() async {
+    final fechaSeleccionada = await showDatePicker(
+      context: context,
+      initialDate: _fechaFallecimiento ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (fechaSeleccionada != null) {
+      setState(() {
+        _fechaFallecimiento = fechaSeleccionada;
+        _fechaFallecimientoController.text =
+            '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
+      });
+    }
   }
 
   Future<void> _seleccionarFechaIngreso() async {
@@ -188,12 +221,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
         final datosFicha = {
           'nombre': _nombreController.text.trim(),
           if (_fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(_fechaIngreso!),
+          'sexo': _sexo,
           'edad': int.tryParse(_edadController.text.trim()) ?? 0,
           'edad_anio_base': DateTime.now().year,
           'historia': _historiaController.text.trim(),
           'ficha_medica': _fichaMedicaController.text.trim(),
           'castrado': _estaCastrado,
           'estado': _estado,
+          if (_estado == 'inactivo' && _fechaFallecimiento != null)
+            'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
           'foto_perfil': ?urlImagen,
         };
 
@@ -259,6 +295,26 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 onTap: _seleccionarFechaIngreso,
               ),
               const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Sexo: ', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: const Text('Macho'),
+                    selected: _sexo == 'macho',
+                    selectedColor: Colors.blue.shade200,
+                    onSelected: (_) => setState(() => _sexo = 'macho'),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Hembra'),
+                    selected: _sexo == 'hembra',
+                    selectedColor: Colors.pink.shade200,
+                    onSelected: (_) => setState(() => _sexo = 'hembra'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextFormField(controller: _edadController, decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)), keyboardType: TextInputType.number),
               const SizedBox(height: 16),
               SwitchListTile(title: const Text('¿Ya está castrado?'), value: _estaCastrado, activeThumbColor: Colors.deepOrange, onChanged: (valor) => setState(() => _estaCastrado = valor)),
@@ -282,6 +338,20 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                 ],
               ),
+              if (_estado == 'inactivo') ...
+                [
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _fechaFallecimientoController,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Fecha de fallecimiento (opcional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.sentiment_very_dissatisfied),
+                    ),
+                    onTap: _seleccionarFechaFallecimiento,
+                  ),
+                ],
               const SizedBox(height: 16),
               Row(
                 children: [

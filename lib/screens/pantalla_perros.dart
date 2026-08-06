@@ -68,6 +68,19 @@ class PantallaPerros extends StatelessWidget {
             }
           }).toList();
 
+          perros.sort((a, b) {
+            final dataA = a.data() as Map<String, dynamic>;
+            final dataB = b.data() as Map<String, dynamic>;
+            final fechaA = dataA['fecha_ingreso'];
+            final fechaB = dataB['fecha_ingreso'];
+            DateTime? dtA = fechaA is Timestamp ? fechaA.toDate() : null;
+            DateTime? dtB = fechaB is Timestamp ? fechaB.toDate() : null;
+            if (dtA == null && dtB == null) return 0;
+            if (dtA == null) return 1;
+            if (dtB == null) return -1;
+            return dtB.compareTo(dtA);
+          });
+
           if (perros.isEmpty) {
             return Center(child: Text(soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
@@ -153,6 +166,10 @@ class PantallaPerros extends StatelessWidget {
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
                                 Text(
+                                  perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                ),
+                                Text(
                                   'Edad estimada: ${_calcularEdadEstimada(perro)} años',
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
@@ -160,6 +177,11 @@ class PantallaPerros extends StatelessWidget {
                                   perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No',
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
+                                if (soloInactivos && perro['fecha_fallecimiento'] != null)
+                                  Text(
+                                    'Fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
+                                    style: const TextStyle(fontSize: 13, color: Colors.white60),
+                                  ),
                               ],
                             ),
                           ),

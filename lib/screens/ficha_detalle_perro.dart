@@ -343,6 +343,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                             const SizedBox(height: 16),
                             Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 20)),
                             const SizedBox(height: 10),
+                            Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', style: const TextStyle(fontSize: 20)),
+                            const SizedBox(height: 10),
                             Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 20)),
                             const SizedBox(height: 10),
                             Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 20)),
