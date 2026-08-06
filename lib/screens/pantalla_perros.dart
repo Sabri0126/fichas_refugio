@@ -7,6 +7,27 @@ import 'formulario_perro.dart';
 class PantallaPerros extends StatelessWidget {
   const PantallaPerros({super.key});
 
+  String _formatearFecha(dynamic fecha) {
+    if (fecha == null) {
+      return 'No registrada';
+    }
+
+    DateTime? fechaDate;
+    if (fecha is Timestamp) {
+      fechaDate = fecha.toDate();
+    } else if (fecha is DateTime) {
+      fechaDate = fecha;
+    } else if (fecha is String) {
+      fechaDate = DateTime.tryParse(fecha);
+    }
+
+    if (fechaDate == null) {
+      return 'No registrada';
+    }
+
+    return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -26,75 +47,118 @@ class PantallaPerros extends StatelessWidget {
 
           final perros = snapshot.data!.docs;
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.8,
-            ),
-            itemCount: perros.length,
-            itemBuilder: (context, index) {
-              final idDocumento = perros[index].id;
-              var perro = perros[index].data() as Map<String, dynamic>;
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth >= 900
+                  ? 3
+                  : constraints.maxWidth >= 600
+                      ? 2
+                      : 1;
 
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FichaDetallePerro(idDocumento: idDocumento),
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.9,
+                ),
+                itemCount: perros.length,
+                itemBuilder: (context, index) {
+                  final idDocumento = perros[index].id;
+                  final perro = perros[index].data() as Map<String, dynamic>;
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FichaDetallePerro(idDocumento: idDocumento),
+                        ),
+                      );
+                    },
+                    child: Card(
+                      clipBehavior: Clip.antiAlias,
+                      elevation: 6,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned.fill(
+                            child: perro['foto_perfil'] != null && perro['foto_perfil'].toString().isNotEmpty
+                                ? Image.network(
+                                    perro['foto_perfil'],
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      color: Colors.blueGrey.shade700,
+                                      child: const Icon(Icons.pets, color: Colors.white24, size: 80),
+                                    ),
+                                  )
+                                : Container(color: Colors.blueGrey.shade700, child: const Icon(Icons.pets, color: Colors.white24, size: 80)),
+                          ),
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 12,
+                            right: 12,
+                            bottom: 12,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  perro['nombre'] ?? 'Sin nombre',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                ),
+                                Text(
+                                  'Edad estimada: ${perro['edad'] ?? 0} años',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                ),
+                                Text(
+                                  perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.white),
+                              style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  elevation: 6,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      perro['foto_perfil'] != null && perro['foto_perfil'].toString().isNotEmpty
-                          ? Image.network(perro['foto_perfil'], fit: BoxFit.cover)
-                          : Container(color: Colors.blueGrey.shade700, child: const Icon(Icons.pets, color: Colors.white24, size: 80)),
-
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 250,
-                          color: Colors.white.withValues(alpha: 0.95),
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(perro['nombre'] ?? 'Sin nombre', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 26, color: Colors.black87)),
-                              const Divider(color: Colors.black, thickness: 2),
-                              const SizedBox(height: 8),
-                              Text('• Edad: ${perro['edad']} años.', style: const TextStyle(fontSize: 13)),
-                              Text('• Estado: ${perro['estado']}.', style: const TextStyle(fontSize: 13)),
-                              Text(perro['castrado'] == true ? '• Castrado.' : '• Sin castrar.', style: const TextStyle(fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white),
-                          style: IconButton.styleFrom(backgroundColor: Colors.black54),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(
-                              builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro),
-                            ));
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               );
             },
           );

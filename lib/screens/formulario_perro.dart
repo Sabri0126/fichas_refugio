@@ -2,7 +2,10 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 class FormularioPerro extends StatefulWidget {
@@ -90,7 +93,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final suffix = text.substring(end);
 
     controller.value = TextEditingValue(
-      text: '$prefix- $suffix',
+      text: '$prefix• $suffix',
       selection: TextSelection.collapsed(offset: start + 2),
     );
   }
@@ -115,7 +118,55 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _seleccionarImagen() async {
     final XFile? imagen = await _picker.pickImage(source: ImageSource.gallery);
-    if (imagen != null) setState(() => _imagenSeleccionada = File(imagen.path));
+    if (imagen == null) return;
+
+    try {
+      final soportaRecorte = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+      if (!soportaRecorte) {
+        setState(() => _imagenSeleccionada = File(imagen.path));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Se usará la imagen original porque el recorte no está disponible en esta plataforma.')),
+          );
+        }
+        return;
+      }
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: imagen.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Ajustar imagen',
+            toolbarColor: Colors.black87,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: 'Ajustar imagen',
+            doneButtonTitle: 'Listo',
+            cancelButtonTitle: 'Cancelar',
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        setState(() => _imagenSeleccionada = File(croppedFile.path));
+      }
+    } on MissingPluginException catch (_) {
+      setState(() => _imagenSeleccionada = File(imagen.path));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El recorte de imagen no está disponible aquí. Se usará la imagen original.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo procesar la imagen.')));
+      }
+    }
   }
 
   Future<void> _guardarDatos() async {
@@ -145,10 +196,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
         if (widget.idDocumento == null) {
           await FirebaseFirestore.instance.collection('perros').add(datosFicha);
         } else {
-          await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).update(datosFicha);
+          await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).set(datosFicha, SetOptions(merge: true));
         }
 
-        mounted ? Navigator.pop(context) : null;
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al procesar la información')));
@@ -198,12 +251,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
               TextFormField(
                 controller: _fechaIngresoController,
                 readOnly: true,
-                decoration: const InputDecoration(labelText: 'Fecha de ingreso', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today)),
-                validator: (value) => value == null || value.trim().isEmpty ? 'Falta la fecha de ingreso' : null,
+                decoration: const InputDecoration(labelText: 'Fecha de ingreso (opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today)),
                 onTap: _seleccionarFechaIngreso,
               ),
               const SizedBox(height: 16),
-              TextFormField(controller: _edadController, decoration: const InputDecoration(labelText: 'Edad estimada (años)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)), keyboardType: TextInputType.number, validator: (value) => value == null || value.trim().isEmpty ? 'Falta ingresar la edad' : null),
+              TextFormField(controller: _edadController, decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)), keyboardType: TextInputType.number),
               const SizedBox(height: 16),
               SwitchListTile(title: const Text('¿Ya está castrado?'), value: _estaCastrado, activeThumbColor: Colors.deepOrange, onChanged: (valor) => setState(() => _estaCastrado = valor)),
               const SizedBox(height: 16),
