@@ -4,10 +4,24 @@ import 'package:flutter/material.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 
-class PantallaPerros extends StatelessWidget {
+class PantallaPerros extends StatefulWidget {
   final bool soloInactivos;
 
   const PantallaPerros({super.key, this.soloInactivos = false});
+
+  @override
+  State<PantallaPerros> createState() => _PantallaPerrosState();
+}
+
+class _PantallaPerrosState extends State<PantallaPerros> {
+  final TextEditingController _busquedaController = TextEditingController();
+  String _textoBusqueda = '';
+
+  @override
+  void dispose() {
+    _busquedaController.dispose();
+    super.dispose();
+  }
 
   String _formatearFecha(dynamic fecha) {
     if (fecha == null) {
@@ -43,29 +57,59 @@ class PantallaPerros extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          soloInactivos ? 'Difuntos' : 'Perritos',
+          widget.soloInactivos ? 'Difuntos' : 'Perritos',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
         ),
         backgroundColor: Colors.black87,
       ),
-      body: StreamBuilder(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: TextField(
+              controller: _busquedaController,
+              onChanged: (value) => setState(() => _textoBusqueda = value),
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _textoBusqueda.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _busquedaController.clear();
+                          setState(() => _textoBusqueda = '');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder(
         stream: FirebaseFirestore.instance.collection('perros').snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(child: Text(soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
+            return Center(child: Text(widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
 
           final perros = snapshot.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final estado = data['estado'] as String?;
-            if (soloInactivos) {
+            if (widget.soloInactivos) {
               return estado == 'inactivo';
             } else {
               return estado == null || estado == 'activo';
             }
+          }).where((doc) {
+            if (_textoBusqueda.isEmpty) return true;
+            final data = doc.data() as Map<String, dynamic>;
+            final nombre = (data['nombre'] as String? ?? '').toLowerCase();
+            return nombre.contains(_textoBusqueda.toLowerCase());
           }).toList();
 
           perros.sort((a, b) {
@@ -82,7 +126,7 @@ class PantallaPerros extends StatelessWidget {
           });
 
           if (perros.isEmpty) {
-            return Center(child: Text(soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
+            return Center(child: Text(_textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
 
           return LayoutBuilder(
@@ -177,7 +221,7 @@ class PantallaPerros extends StatelessWidget {
                                   perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No',
                                   style: const TextStyle(fontSize: 13, color: Colors.white70),
                                 ),
-                                if (soloInactivos && perro['fecha_fallecimiento'] != null)
+                                if (widget.soloInactivos && perro['fecha_fallecimiento'] != null)
                                   Text(
                                     'Fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
                                     style: const TextStyle(fontSize: 13, color: Colors.white60),
@@ -210,6 +254,9 @@ class PantallaPerros extends StatelessWidget {
             },
           );
         },
+      ),
+        ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),

@@ -288,6 +288,167 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
+  Column _buildInfoContenido(Map<String, dynamic> perro) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        Text(
+          perro['nombre']?.toString() ?? 'Sin nombre',
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 14),
+        Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', style: const TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 16)),
+        const SizedBox(height: 22),
+        const Text('Historia:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.'),
+        const SizedBox(height: 20),
+        const Text('Ficha médica:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildGaleria(List<dynamic> galeria) {
+    if (galeria.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Aún no hay fotos en la galería.\n¡Tocá la cámara arriba!',
+            style: TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    if (_modoReordenar) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: ReorderableListView.builder(
+          itemCount: galeria.length,
+          onReorder: (oldIndex, newIndex) => _reordenarFotos(galeria, oldIndex, newIndex),
+          itemBuilder: (context, index) {
+            final foto = galeria[index];
+            return Card(
+              key: ValueKey('${foto['url'] ?? index}-$index'),
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(foto['url'] ?? '', width: 56, height: 56, fit: BoxFit.cover),
+                ),
+                title: Text(foto['texto']?.toString().isNotEmpty == true ? foto['texto'] : 'Sin descripción'),
+                subtitle: const Text('Arrastrá para cambiar el orden'),
+                trailing: const Icon(Icons.drag_handle),
+              ),
+            );
+          },
+        ),
+      );
+    }
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        PageView.builder(
+          controller: _controladorCarrusel,
+          itemCount: galeria.length,
+          onPageChanged: (index) => setState(() => _paginaActual = index),
+          itemBuilder: (context, index) {
+            final foto = galeria[index];
+            return Stack(
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (foto['texto'] != null && foto['texto'].toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text(
+                          foto['texto'],
+                          style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                          onPressed: () => _editarFotoAGaleria(foto, index),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      CircleAvatar(
+                        backgroundColor: Colors.redAccent,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.white, size: 20),
+                          onPressed: () => _eliminarFotoAGaleria(foto, index),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        if (_paginaActual > 0)
+          Positioned(
+            left: 8,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              radius: 24,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: _moverIzquierda,
+              ),
+            ),
+          ),
+        if (_paginaActual < galeria.length - 1)
+          Positioned(
+            right: 8,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              radius: 24,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                onPressed: _moverDerecha,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
@@ -322,177 +483,35 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           ),
           body: LayoutBuilder(
             builder: (context, constraints) {
-              final esPantallaCompleta = constraints.maxWidth >= 1100;
+              final isWide = constraints.maxWidth >= 700;
+              final galeriaWidget = _buildGaleria(galeria);
 
-              return Row(
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      color: Colors.grey.shade200,
-                      padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 8),
-                            Text(
-                              perro['nombre']?.toString() ?? 'Sin nombre',
-                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                            Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 20)),
-                            const SizedBox(height: 10),
-                            Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', style: const TextStyle(fontSize: 20)),
-                            const SizedBox(height: 10),
-                            Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 20)),
-                            const SizedBox(height: 10),
-                            Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 20)),
-                            const SizedBox(height: 28),
-                            const Text('Historia:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.'),
-                            const SizedBox(height: 24),
-                            const Text('Ficha médica:', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
-                          ],
-                        ),
+              if (isWide) {
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        color: Colors.grey.shade200,
+                        padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
+                        child: SingleChildScrollView(child: _buildInfoContenido(perro)),
                       ),
                     ),
-                  ),
+                    Expanded(flex: 2, child: galeriaWidget),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  SizedBox(height: 300, child: galeriaWidget),
                   Expanded(
-                    flex: esPantallaCompleta ? 2 : 1,
-                    child: galeria.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Aún no hay fotos en la galería. ¡Tocá la cámara arriba a la derecha!',
-                              style: TextStyle(fontSize: 18),
-                            ),
-                          )
-                        : _modoReordenar
-                            ? Container(
-                                padding: const EdgeInsets.all(16),
-                                child: ReorderableListView.builder(
-                                  itemCount: galeria.length,
-                                  onReorder: (oldIndex, newIndex) => _reordenarFotos(galeria, oldIndex, newIndex),
-                                  itemBuilder: (context, index) {
-                                    final foto = galeria[index];
-                                    return Card(
-                                      key: ValueKey('${foto['url'] ?? index}-$index'),
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      child: ListTile(
-                                        leading: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Image.network(
-                                            foto['url'] ?? '',
-                                            width: 56,
-                                            height: 56,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        title: Text(foto['texto']?.toString().isNotEmpty == true ? foto['texto'] : 'Sin descripción'),
-                                        subtitle: const Text('Arrastrá para cambiar el orden'),
-                                        trailing: const Icon(Icons.drag_handle),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
-                            : Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  PageView.builder(
-                                    controller: _controladorCarrusel,
-                                    itemCount: galeria.length,
-                                    onPageChanged: (index) => setState(() => _paginaActual = index),
-                                    itemBuilder: (context, index) {
-                                      final foto = galeria[index];
-                                      return Stack(
-                                        children: [
-                                          Center(
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Expanded(
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(16.0),
-                                                    child: Center(
-                                                      child: ClipRRect(
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        child: ConstrainedBox(
-                                                          constraints: const BoxConstraints(maxWidth: 600),
-                                                          child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (foto['texto'] != null && foto['texto'].toString().isNotEmpty)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(bottom: 24.0, left: 40, right: 40),
-                                                    child: Text(
-                                                      foto['texto'],
-                                                      style: const TextStyle(fontSize: 20, fontStyle: FontStyle.italic),
-                                                      textAlign: TextAlign.center,
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 24,
-                                            right: 24,
-                                            child: Row(
-                                              children: [
-                                                CircleAvatar(
-                                                  backgroundColor: Colors.black54,
-                                                  child: IconButton(
-                                                    icon: const Icon(Icons.edit, color: Colors.white),
-                                                    onPressed: () => _editarFotoAGaleria(foto, index),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                CircleAvatar(
-                                                  backgroundColor: Colors.redAccent,
-                                                  child: IconButton(
-                                                    icon: const Icon(Icons.delete, color: Colors.white),
-                                                    onPressed: () => _eliminarFotoAGaleria(foto, index),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                  if (_paginaActual > 0)
-                                    Positioned(
-                                      left: 16,
-                                      child: CircleAvatar(
-                                        backgroundColor: Colors.black54,
-                                        radius: 30,
-                                        child: IconButton(
-                                          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
-                                          onPressed: _moverIzquierda,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_paginaActual < galeria.length - 1)
-                                    Positioned(
-                                      right: 16,
-                                      child: CircleAvatar(
-                                        backgroundColor: Colors.black54,
-                                        radius: 30,
-                                        child: IconButton(
-                                          icon: const Icon(Icons.arrow_forward, color: Colors.white, size: 30),
-                                          onPressed: _moverDerecha,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                    child: Container(
+                      color: Colors.grey.shade200,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: _buildInfoContenido(perro),
+                      ),
+                    ),
                   ),
                 ],
               );
