@@ -24,6 +24,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   bool _subiendoFoto = false;
   bool _modoReordenar = false;
   int _paginaActual = 0;
+  double _escalaTexto = 1.3;
 
   String _formatearFecha(dynamic fecha) {
     if (fecha == null) {
@@ -54,11 +55,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
   }
 
-  Widget _construirTextoFormateado(String texto) {
+  Widget _construirTextoFormateado(String texto, double escala) {
     final textoLimpio = texto.trim();
 
     if (textoLimpio.isEmpty) {
-      return const Text('Sin información.');
+      return Text('Sin información.', textScaler: TextScaler.linear(escala));
     }
 
     final textoMarkdown = textoLimpio.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), '\n\n');
@@ -67,12 +68,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       data: textoMarkdown,
       selectable: true,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        p: const TextStyle(fontSize: 16, height: 1.4),
+        p: TextStyle(fontSize: 16 * escala, height: 1.4),
         strong: const TextStyle(fontWeight: FontWeight.bold),
         em: const TextStyle(fontStyle: FontStyle.italic),
-        listBullet: const TextStyle(fontSize: 16),
-        h1: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        h2: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        listBullet: TextStyle(fontSize: 16 * escala),
+        h1: TextStyle(fontSize: 24 * escala, fontWeight: FontWeight.bold),
+        h2: TextStyle(fontSize: 20 * escala, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -295,27 +296,28 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 4),
         Text(
           perro['nombre']?.toString() ?? 'Sin nombre',
+          textScaler: TextScaler.linear(_escalaTexto),
           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 14),
-        Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', style: const TextStyle(fontSize: 16)),
+        Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', style: const TextStyle(fontSize: 16)),
+        Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', style: const TextStyle(fontSize: 16)),
+        Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', style: const TextStyle(fontSize: 16)),
+        Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 22),
-        const Text('Historia:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text('Historia:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.'),
+        _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.', _escalaTexto),
         const SizedBox(height: 20),
-        const Text('Ficha médica:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text('Ficha médica:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.'),
+        _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.', _escalaTexto),
         if (perro['parientes'] is List && (perro['parientes'] as List).isNotEmpty) ...[
           const SizedBox(height: 24),
-          const Text('Familiares en el refugio:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('Familiares en el refugio:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -327,7 +329,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               final idDoc = familiar['id_documento']?.toString() ?? '';
               return ActionChip(
                 avatar: const Icon(Icons.people, size: 18),
-                label: Text('$nombre ($relacion)'),
+                label: Text('$nombre ($relacion)', textScaler: TextScaler.linear(_escalaTexto)),
                 onPressed: idDoc.isEmpty
                     ? null
                     : () => Navigator.push(
@@ -496,6 +498,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 const Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(color: Colors.white))
               else ...[
                 IconButton(
+                  icon: const Icon(Icons.zoom_out),
+                  tooltip: 'Achicar texto',
+                  onPressed: _escalaTexto <= 1.0 ? null : () => setState(() => _escalaTexto -= 0.15),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.zoom_in),
+                  tooltip: 'Agrandar texto',
+                  onPressed: () => setState(() => _escalaTexto += 0.15),
+                ),
+                IconButton(
                   icon: Icon(_modoReordenar ? Icons.done : Icons.reorder),
                   tooltip: _modoReordenar ? 'Terminar reordenar' : 'Reordenar galería',
                   onPressed: () => setState(() => _modoReordenar = !_modoReordenar),
@@ -516,12 +528,21 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               if (isWide) {
                 return Row(
                   children: [
-                    Expanded(
-                      flex: 1,
+                    // Panel de info: ancho acotado, centrado, con margen para que respire
+                    Center(
                       child: Container(
-                        color: Colors.grey.shade200,
-                        padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
-                        child: SingleChildScrollView(child: _buildInfoContenido(perro)),
+                        margin: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 450),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                            child: _buildInfoContenido(perro),
+                          ),
+                        ),
                       ),
                     ),
                     Expanded(flex: 2, child: galeriaWidget),

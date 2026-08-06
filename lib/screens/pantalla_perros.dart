@@ -200,31 +200,31 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                   perro['nombre'] ?? 'Sin nombre',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 22,
+                                    fontSize: 26,
                                     color: Colors.white,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   'Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}',
-                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                  style: const TextStyle(fontSize: 15, color: Colors.white70),
                                 ),
                                 Text(
                                   perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
-                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                  style: const TextStyle(fontSize: 15, color: Colors.white70),
                                 ),
                                 Text(
                                   'Edad estimada: ${_calcularEdadEstimada(perro)} años',
-                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                  style: const TextStyle(fontSize: 15, color: Colors.white70),
                                 ),
                                 Text(
                                   perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No',
-                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                  style: const TextStyle(fontSize: 15, color: Colors.white70),
                                 ),
                                 if (widget.soloInactivos && perro['fecha_fallecimiento'] != null)
                                   Text(
                                     'Fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
-                                    style: const TextStyle(fontSize: 13, color: Colors.white60),
+                                    style: const TextStyle(fontSize: 15, color: Colors.white60),
                                   ),
                               ],
                             ),
