@@ -290,7 +290,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             children: [
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Perro', border: OutlineInputBorder()),
-                value: seleccionadoId,
+                initialValue: seleccionadoId,
                 items: opciones
                     .map((o) => DropdownMenuItem(value: o['id'], child: Text(o['nombre']!)))
                     .toList(),
@@ -302,7 +302,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Relación', border: OutlineInputBorder()),
-                value: seleccionadaRelacion,
+                initialValue: seleccionadaRelacion,
                 items: relaciones
                     .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                     .toList(),
