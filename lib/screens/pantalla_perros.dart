@@ -46,6 +46,12 @@ class _PantallaPerrosState extends State<PantallaPerros> {
 
   int _calcularEdadEstimada(Map<String, dynamic> perro) {
     final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
+
+    // Para difuntos/inactivos, la edad queda congelada en el valor guardado.
+    if ((perro['estado']?.toString() ?? '') == 'inactivo') {
+      return edadBase;
+    }
+
     final anioBase = int.tryParse(perro['edad_anio_base']?.toString() ?? '') ?? DateTime.now().year;
     final aniosTranscurridos = DateTime.now().year - anioBase;
 
