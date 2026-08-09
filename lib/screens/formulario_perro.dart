@@ -164,6 +164,16 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
+  String _obtenerRelacionInversa(String relacion, String sexoOriginal) {
+    if (relacion == 'Madre' || relacion == 'Padre') {
+      return sexoOriginal == 'hembra' ? 'Hija' : 'Hijo';
+    }
+    if (relacion == 'Hijo/a') {
+      return sexoOriginal == 'hembra' ? 'Madre' : 'Padre';
+    }
+    return 'Hermano/a';
+  }
+
   Future<void> _seleccionarImagen() async {
     final XFile? imagen = await _picker.pickImage(source: ImageSource.gallery);
     if (imagen == null) return;
@@ -222,6 +232,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
       setState(() => _estaGuardando = true);
 
       try {
+        final perrosRef = FirebaseFirestore.instance.collection('perros');
+        final docRef = widget.idDocumento == null ? perrosRef.doc() : perrosRef.doc(widget.idDocumento);
+        final idPerroActual = docRef.id;
+        final nombrePerroActual = _nombreController.text.trim();
+
         String? urlImagen = widget.datosActuales?['foto_perfil'];
 
         if (_imagenSeleccionada != null) {
@@ -230,6 +245,19 @@ class _FormularioPerroState extends State<FormularioPerro> {
           await ref.putFile(_imagenSeleccionada!);
           urlImagen = await ref.getDownloadURL();
         }
+
+        final parientesNormalizados = _parientes
+            .map((p) {
+              final id = (p['id'] ?? p['id_documento'] ?? '').toString();
+              return {
+                'id': id,
+                'id_documento': id,
+                'nombre': (p['nombre'] ?? '').toString(),
+                'relacion': (p['relacion'] ?? 'Hermano/a').toString(),
+              };
+            })
+            .where((p) => (p['id'] as String).isNotEmpty)
+            .toList();
 
         final datosFicha = {
           'nombre': _nombreController.text.trim(),
@@ -244,15 +272,36 @@ class _FormularioPerroState extends State<FormularioPerro> {
           'estado': _estado,
           if (_estado == 'inactivo' && _fechaFallecimiento != null)
             'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
-          'parientes': _parientes,
-          'foto_perfil': ?urlImagen,
+          'parientes': parientesNormalizados,
+          'foto_perfil': urlImagen,
         };
 
-        if (widget.idDocumento == null) {
-          await FirebaseFirestore.instance.collection('perros').add(datosFicha);
-        } else {
-          await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).set(datosFicha, SetOptions(merge: true));
+        final batch = FirebaseFirestore.instance.batch();
+        batch.set(docRef, datosFicha, SetOptions(merge: true));
+
+        for (final familiar in parientesNormalizados) {
+          final idFamiliar = familiar['id'] as String;
+          if (idFamiliar.isEmpty || idFamiliar == idPerroActual) continue;
+
+          final relacionInversa = _obtenerRelacionInversa(
+            familiar['relacion']?.toString() ?? 'Hermano/a',
+            _sexo,
+          );
+
+          final refFamiliar = perrosRef.doc(idFamiliar);
+          batch.update(refFamiliar, {
+            'parientes': FieldValue.arrayUnion([
+              {
+                'id': idPerroActual,
+                'id_documento': idPerroActual,
+                'nombre': nombrePerroActual,
+                'relacion': relacionInversa,
+              }
+            ])
+          });
         }
+
+        await batch.commit();
 
         if (mounted) {
           Navigator.pop(context);
@@ -324,6 +373,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   : () {
                       setState(() {
                         _parientes.add({
+                          'id': seleccionadoId,
                           'id_documento': seleccionadoId,
                           'nombre': seleccionadoNombre,
                           'relacion': seleccionadaRelacion,

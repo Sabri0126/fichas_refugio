@@ -87,7 +87,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                 hintText: 'Buscar por nombre...',
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.8),
+                fillColor: Colors.white.withValues(alpha: 0.8),
                 suffixIcon: _textoBusqueda.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -264,7 +264,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                         end: Alignment.bottomCenter,
                                         colors: [
                                           Colors.transparent,
-                                          Colors.black.withOpacity(0.8),
+                                          Colors.black.withValues(alpha: 0.8),
                                         ],
                                       ),
                                     ),
