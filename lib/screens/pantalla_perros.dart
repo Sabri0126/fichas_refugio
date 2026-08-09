@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'ficha_detalle_perro.dart';
@@ -67,6 +68,13 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
         ),
         backgroundColor: Colors.black87,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Cerrar sesión',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          ),
+        ],
       ),
       body: Column(
         children: [
