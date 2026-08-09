@@ -187,8 +187,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Ajustar imagen',
-            toolbarColor: Colors.black87,
-            toolbarWidgetColor: Colors.white,
+            toolbarColor: Theme.of(context).colorScheme.primary,
+            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
           ),
@@ -401,12 +401,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   onTap: _seleccionarImagen,
                   child: CircleAvatar(
                     radius: 60,
-                    backgroundColor: Colors.grey.shade300,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     backgroundImage: _imagenSeleccionada != null
                         ? FileImage(_imagenSeleccionada!) as ImageProvider
                         : (widget.datosActuales?['foto_perfil'] != null ? NetworkImage(widget.datosActuales!['foto_perfil']) : null),
                     child: _imagenSeleccionada == null && widget.datosActuales?['foto_perfil'] == null
-                        ? const Icon(Icons.add_a_photo, size: 40, color: Colors.grey)
+                        ? Icon(Icons.add_a_photo, size: 40, color: Theme.of(context).colorScheme.primary)
                         : null,
                   ),
                 ),
@@ -483,9 +483,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 children: [
                   Text('Familiares', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
-                  TextButton.icon(
+                  ElevatedButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text('Añadir familiar'),
+                    style: ElevatedButton.styleFrom(elevation: 2),
                     onPressed: _mostrarDialogoAgregarFamiliar,
                   ),
                 ],
@@ -493,7 +494,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               if (_parientes.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Sin familiares registrados.', style: TextStyle(color: Colors.grey)),
+                  child: Text('Sin familiares registrados.'),
                 )
               else
                 Column(
@@ -595,8 +596,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: _estaGuardando ? null : _guardarDatos,
-                  style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-                  child: _estaGuardando ? const CircularProgressIndicator(color: Colors.white) : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                  child: _estaGuardando
+                      ? CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary)
+                      : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
               ],

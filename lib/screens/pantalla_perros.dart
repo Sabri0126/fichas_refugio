@@ -68,10 +68,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           widget.soloInactivos ? 'Difuntos' : 'Perritos del refugio',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
         ),
-        backgroundColor: Colors.black87,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
             onPressed: () => FirebaseAuth.instance.signOut(),
           ),
@@ -87,6 +86,8 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               decoration: InputDecoration(
                 hintText: 'Buscar por nombre...',
                 prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.8),
                 suffixIcon: _textoBusqueda.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -238,11 +239,22 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                           perro['foto_perfil'],
                                           fit: BoxFit.cover,
                                           errorBuilder: (_, _, _) => Container(
-                                            color: Colors.blueGrey.shade700,
-                                            child: const Icon(Icons.pets, color: Colors.white24, size: 80),
+                                            color: Theme.of(context).colorScheme.primary,
+                                            child: Icon(
+                                              Icons.pets,
+                                              color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.4),
+                                              size: 80,
+                                            ),
                                           ),
                                         )
-                                      : Container(color: Colors.blueGrey.shade700, child: const Icon(Icons.pets, color: Colors.white24, size: 80)),
+                                      : Container(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          child: Icon(
+                                            Icons.pets,
+                                            color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.4),
+                                            size: 80,
+                                          ),
+                                        ),
                                 ),
                                 Positioned.fill(
                                   child: DecoratedBox(
@@ -250,7 +262,10 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                       gradient: LinearGradient(
                                         begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
-                                        colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.8),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -290,7 +305,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                       if (widget.soloInactivos && perro['fecha_fallecimiento'] != null)
                                         Text(
                                           'Fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
-                                          style: const TextStyle(fontSize: 15, color: Colors.white60),
+                                          style: const TextStyle(fontSize: 15, color: Colors.white70),
                                         ),
                                     ],
                                   ),
@@ -300,7 +315,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                   right: 8,
                                   child: IconButton(
                                     icon: const Icon(Icons.edit, color: Colors.white),
-                                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.black54,
+                                    ),
                                     onPressed: () {
                                       Navigator.push(
                                         context,
@@ -329,8 +346,8 @@ class _PantallaPerrosState extends State<PantallaPerros> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),
-        backgroundColor: Colors.black87,
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.secondary,
+        foregroundColor: Theme.of(context).colorScheme.onSecondary,
         child: const Icon(Icons.add),
       ),
     );

@@ -98,13 +98,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       context,
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
+            backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
             elevation: 0,
-            iconTheme: const IconThemeData(color: Colors.white),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -249,8 +248,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           uiSettings: [
             AndroidUiSettings(
               toolbarTitle: 'Ajustar foto',
-              toolbarColor: Colors.black87,
-              toolbarWidgetColor: Colors.white,
+              toolbarColor: Theme.of(context).colorScheme.primary,
+              toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
               initAspectRatio: CropAspectRatioPreset.original,
               lockAspectRatio: false,
             ),
@@ -369,6 +368,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               final relacion = familiar['relacion']?.toString() ?? '';
               final idDoc = familiar['id_documento']?.toString() ?? '';
               return ActionChip(
+                elevation: 3,
+                shadowColor: const Color.fromARGB(202, 0, 0, 0),
                 avatar: const Icon(Icons.people, size: 18),
                 label: Text('$nombre ($relacion)', textScaler: TextScaler.linear(_escalaTexto)),
                 onPressed: idDoc.isEmpty
@@ -474,17 +475,17 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   child: Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: Colors.black54,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         child: IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                          icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onPrimary, size: 20),
                           onPressed: () => _editarFotoAGaleria(foto, index),
                         ),
                       ),
                       const SizedBox(width: 8),
                       CircleAvatar(
-                        backgroundColor: Colors.redAccent,
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
                         child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.white, size: 20),
+                          icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.onSecondary, size: 20),
                           onPressed: () => _eliminarFotoAGaleria(foto, index),
                         ),
                       ),
@@ -499,10 +500,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Positioned(
             left: 8,
             child: CircleAvatar(
-              backgroundColor: Colors.black54,
+              backgroundColor: Theme.of(context).colorScheme.primary,
               radius: 24,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onPrimary),
                 onPressed: _moverIzquierda,
               ),
             ),
@@ -511,10 +512,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Positioned(
             right: 8,
             child: CircleAvatar(
-              backgroundColor: Colors.black54,
+              backgroundColor: Theme.of(context).colorScheme.primary,
               radius: 24,
               child: IconButton(
-                icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                icon: Icon(Icons.arrow_forward, color: Theme.of(context).colorScheme.onPrimary),
                 onPressed: _moverDerecha,
               ),
             ),
@@ -535,12 +536,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text('Ficha de ${perro['nombre']}', style: const TextStyle(color: Colors.white)),
-            backgroundColor: Colors.black87,
-            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text('Ficha de ${perro['nombre']}'),
             actions: [
               if (_subiendoFoto)
-                const Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(color: Colors.white))
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary),
+                )
               else ...[
                 IconButton(
                   icon: const Icon(Icons.zoom_out),
@@ -579,7 +581,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         child: Container(
                           margin: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ConstrainedBox(
@@ -600,7 +602,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     SizedBox(height: 300, child: galeriaWidget),
                     Expanded(
                       child: Container(
-                        color: Colors.grey.shade200,
+                        color: Theme.of(context).colorScheme.surface,
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
                           child: _buildInfoContenido(perro),
