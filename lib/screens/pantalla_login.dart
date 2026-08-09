@@ -39,6 +39,11 @@ class _PantallaLoginState extends State<PantallaLogin> {
         email: email,
         password: password,
       );
+      if (!context.mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const PantallaMenu()),
+      );
     } on FirebaseAuthException catch (e) {
       _mostrarError(_mensajeDeError(e.code));
     } catch (_) {

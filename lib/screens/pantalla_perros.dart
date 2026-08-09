@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
+import 'pantalla_login.dart';
 
 class PantallaPerros extends StatefulWidget {
   final bool soloInactivos;
@@ -74,12 +75,16 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
-            onPressed: () {
-              if (esInvitado) {
-                Navigator.pop(context);
-              } else {
-                FirebaseAuth.instance.signOut();
+            onPressed: () async {
+              if (!esInvitado) {
+                await FirebaseAuth.instance.signOut();
               }
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const PantallaLogin()),
+                (route) => false,
+              );
             },
           ),
         ],
