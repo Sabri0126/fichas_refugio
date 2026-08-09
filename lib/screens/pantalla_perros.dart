@@ -62,6 +62,8 @@ class _PantallaPerrosState extends State<PantallaPerros> {
 
   @override
   Widget build(BuildContext context) {
+    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -72,7 +74,13 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
-            onPressed: () => FirebaseAuth.instance.signOut(),
+            onPressed: () {
+              if (esInvitado) {
+                Navigator.pop(context);
+              } else {
+                FirebaseAuth.instance.signOut();
+              }
+            },
           ),
         ],
       ),
@@ -310,24 +318,25 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                     ],
                                   ),
                                 ),
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.white),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.black54,
+                                if (!esInvitado)
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.white),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: Colors.black54,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro),
-                                        ),
-                                      );
-                                    },
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -344,12 +353,14 @@ class _PantallaPerrosState extends State<PantallaPerros> {
         ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),
-        backgroundColor: Theme.of(context).colorScheme.secondary,
-        foregroundColor: Theme.of(context).colorScheme.onSecondary,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: esInvitado
+          ? null
+          : FloatingActionButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              foregroundColor: Theme.of(context).colorScheme.onSecondary,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }

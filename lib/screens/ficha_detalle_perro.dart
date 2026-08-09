@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -389,7 +390,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _buildGaleria(List<dynamic> galeria) {
+  Widget _buildGaleria(List<dynamic> galeria, bool esInvitado) {
     if (galeria.isEmpty) {
       return const Center(
         child: Padding(
@@ -469,29 +470,30 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     const SizedBox(height: 8),
                   ],
                 ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: IconButton(
-                          icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onPrimary, size: 20),
-                          onPressed: () => _editarFotoAGaleria(foto, index),
+                if (!esInvitado)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          child: IconButton(
+                            icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onPrimary, size: 20),
+                            onPressed: () => _editarFotoAGaleria(foto, index),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.secondary,
-                        child: IconButton(
-                          icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.onSecondary, size: 20),
-                          onPressed: () => _eliminarFotoAGaleria(foto, index),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.secondary,
+                          child: IconButton(
+                            icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.onSecondary, size: 20),
+                            onPressed: () => _eliminarFotoAGaleria(foto, index),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
               ],
             );
           },
@@ -526,6 +528,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   @override
   Widget build(BuildContext context) {
+    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).snapshots(),
       builder: (context, snapshot) {
@@ -554,16 +558,18 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   tooltip: 'Agrandar texto',
                   onPressed: () => setState(() => _escalaTexto += 0.15),
                 ),
-                IconButton(
-                  icon: Icon(_modoReordenar ? Icons.done : Icons.reorder),
-                  tooltip: _modoReordenar ? 'Terminar reordenar' : 'Reordenar galería',
-                  onPressed: () => setState(() => _modoReordenar = !_modoReordenar),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_a_photo),
-                  tooltip: 'Agregar foto a la galería',
-                  onPressed: _agregarFotoAGaleria,
-                ),
+                if (!esInvitado) ...[
+                  IconButton(
+                    icon: Icon(_modoReordenar ? Icons.done : Icons.reorder),
+                    tooltip: _modoReordenar ? 'Terminar reordenar' : 'Reordenar galería',
+                    onPressed: () => setState(() => _modoReordenar = !_modoReordenar),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_a_photo),
+                    tooltip: 'Agregar foto a la galería',
+                    onPressed: _agregarFotoAGaleria,
+                  ),
+                ],
               ],
             ],
           ),
@@ -571,7 +577,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 700;
-                final galeriaWidget = _buildGaleria(galeria);
+                final galeriaWidget = _buildGaleria(galeria, esInvitado);
 
                 if (isWide) {
                   return Row(

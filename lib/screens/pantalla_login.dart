@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'pantalla_menu.dart';
+
 class PantallaLogin extends StatefulWidget {
   const PantallaLogin({super.key});
 
@@ -151,6 +153,26 @@ class _PantallaLoginState extends State<PantallaLogin> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const PantallaMenu()),
+                        );
+                      },
+                      style: TextButton.styleFrom(foregroundColor: const Color(0xFFECDBBA)),
+                      child: const Text(
+                        'Entrar como visitante',
+                        style: TextStyle(
+                          fontSize: 14,
+                          decoration: TextDecoration.underline,
+                          shadows: [
+                            Shadow(color: Colors.black87, blurRadius: 4),
+                          ],
+                        ),
                       ),
                     ),
                   ],
