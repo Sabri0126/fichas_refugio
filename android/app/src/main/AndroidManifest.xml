@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
 
     <application
-        android:label="fichas_refugio"
+        android:label="Fichas Refugio"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
