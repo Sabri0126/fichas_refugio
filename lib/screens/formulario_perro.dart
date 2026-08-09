@@ -386,12 +386,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
-            children: [
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+            child: Column(
+              children: [
               Center(
                 child: GestureDetector(
                   onTap: _seleccionarImagen,
@@ -588,7 +589,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   child: _estaGuardando ? const CircularProgressIndicator(color: Colors.white) : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

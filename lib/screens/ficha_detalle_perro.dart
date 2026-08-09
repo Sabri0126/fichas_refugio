@@ -93,6 +93,33 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   void _moverIzquierda() => _controladorCarrusel.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
   void _moverDerecha() => _controladorCarrusel.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
 
+  void _abrirFotoPantallaCompleta(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _reordenarFotos(List<dynamic> galeria, int oldIndex, int newIndex) async {
     if (oldIndex == newIndex) return;
 
@@ -314,7 +341,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 8),
         Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 22),
-        Text('Historia:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        if (perro['estado']?.toString() == 'fallecido' && perro['fecha_fallecimiento'] != null) ...[
+          Text(
+            'Fecha de fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
+            textScaler: TextScaler.linear(_escalaTexto),
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Text('Historia/Observaciones:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.', _escalaTexto),
         const SizedBox(height: 20),
@@ -408,9 +443,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         child: Center(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
+                          child: GestureDetector(
+                            onTap: () => _abrirFotoPantallaCompleta(foto['url']?.toString() ?? ''),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),
+                            ),
                           ),
                         ),
                       ),
@@ -420,6 +458,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Text(
                           foto['texto'],
+                          textScaler: TextScaler.linear(_escalaTexto),
                           style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
                           textAlign: TextAlign.center,
                           maxLines: 2,
@@ -526,50 +565,52 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               ],
             ],
           ),
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 700;
-              final galeriaWidget = _buildGaleria(galeria);
+          body: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 700;
+                final galeriaWidget = _buildGaleria(galeria);
 
-              if (isWide) {
-                return Row(
-                  children: [
-                    // Panel de info: ancho acotado, centrado, con margen para que respire
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 450),
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-                            child: _buildInfoContenido(perro),
+                if (isWide) {
+                  return Row(
+                    children: [
+                      // Panel de info: ancho acotado, centrado, con margen para que respire
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 450),
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+                              child: _buildInfoContenido(perro),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(flex: 2, child: galeriaWidget),
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  SizedBox(height: 300, child: galeriaWidget),
-                  Expanded(
-                    child: Container(
-                      color: Colors.grey.shade200,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: _buildInfoContenido(perro),
+                      Expanded(flex: 2, child: galeriaWidget),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    SizedBox(height: 300, child: galeriaWidget),
+                    Expanded(
+                      child: Container(
+                        color: Colors.grey.shade200,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                          child: _buildInfoContenido(perro),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         );
       }
