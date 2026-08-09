@@ -17,6 +17,7 @@ class PantallaPerros extends StatefulWidget {
 class _PantallaPerrosState extends State<PantallaPerros> {
   final TextEditingController _busquedaController = TextEditingController();
   String _textoBusqueda = '';
+  String _filtroUbicacion = 'Todos';
 
   @override
   void dispose() {
@@ -100,6 +101,30 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('Todos'),
+                  selected: _filtroUbicacion == 'Todos',
+                  onSelected: (_) => setState(() => _filtroUbicacion = 'Todos'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Refugio'),
+                  selected: _filtroUbicacion == 'Refugio',
+                  onSelected: (_) => setState(() => _filtroUbicacion = 'Refugio'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('En casa'),
+                  selected: _filtroUbicacion == 'En casa',
+                  onSelected: (_) => setState(() => _filtroUbicacion = 'En casa'),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: StreamBuilder(
         stream: FirebaseFirestore.instance.collection('perros').snapshots(),
@@ -111,7 +136,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             return Center(child: Text(widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
 
-          final perros = snapshot.data!.docs.where((doc) {
+          final perrosPorEstado = snapshot.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final estado = data['estado'] as String?;
             if (widget.soloInactivos) {
@@ -119,13 +144,28 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             } else {
               return estado == null || estado == 'activo';
             }
+          }).toList();
+
+          final totalEnCasa = perrosPorEstado.where((p) => (p.data() as Map<String, dynamic>)['en_casa'] == true).length;
+          final totalRefugio = perrosPorEstado.length - totalEnCasa;
+
+          final perros = perrosPorEstado.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final enCasa = data['en_casa'] == true;
+
+            if (_filtroUbicacion == 'En casa') {
+              return enCasa;
+            }
+            if (_filtroUbicacion == 'Refugio') {
+              return !enCasa;
+            }
+            return true;
           }).where((doc) {
             if (_textoBusqueda.isEmpty) return true;
             final data = doc.data() as Map<String, dynamic>;
             final nombre = (data['nombre'] as String? ?? '').toLowerCase();
             return nombre.contains(_textoBusqueda.toLowerCase());
           }).toList();
-          final cantidadFichas = perros.length;
 
           perros.sort((a, b) {
             final dataA = a.data() as Map<String, dynamic>;
@@ -156,10 +196,10 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                     child: Text(
-                      widget.soloInactivos ? 'Difuntos ($cantidadFichas)' : 'Perritos del refugio ($cantidadFichas)',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      'Perritos del refugio ($totalRefugio) | En casa ($totalEnCasa)',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
                   Expanded(

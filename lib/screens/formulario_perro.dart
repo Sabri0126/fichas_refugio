@@ -30,6 +30,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   DateTime? _fechaIngreso;
   DateTime? _fechaFallecimiento;
   bool _estaCastrado = false;
+  bool _enCasa = false;
   bool _estaGuardando = false;
   String _estado = 'activo';
   String _sexo = 'macho';
@@ -62,6 +63,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           ? '${_fechaIngreso!.day.toString().padLeft(2, '0')}/${_fechaIngreso!.month.toString().padLeft(2, '0')}/${_fechaIngreso!.year}'
           : '';
       _estaCastrado = widget.datosActuales!['castrado'] ?? false;
+      _enCasa = widget.datosActuales!['en_casa'] ?? false;
       _estado = widget.datosActuales!['estado'] ?? 'activo';
       _sexo = widget.datosActuales!['sexo'] ?? 'macho';
       final parientesRaw = widget.datosActuales!['parientes'];
@@ -238,6 +240,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           'historia': _historiaController.text.trim(),
           'ficha_medica': _fichaMedicaController.text.trim(),
           'castrado': _estaCastrado,
+          'en_casa': _enCasa,
           'estado': _estado,
           if (_estado == 'inactivo' && _fechaFallecimiento != null)
             'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
@@ -579,6 +582,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 controller: _fichaMedicaController,
                 decoration: const InputDecoration(labelText: 'Detalles médicos, tratamientos y seguimiento', border: OutlineInputBorder()),
                 maxLines: 6,
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Este perrito/a está en casa'),
+                value: _enCasa,
+                onChanged: (valor) => setState(() => _enCasa = valor ?? false),
               ),
               const SizedBox(height: 32),
               SizedBox(
