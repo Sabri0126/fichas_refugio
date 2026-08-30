@@ -26,6 +26,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   bool _modoReordenar = false;
   int _paginaActual = 0;
   double _escalaTexto = 1.3;
+  List<Map<String, dynamic>> _fotosReordenar = [];
 
   String _formatearFecha(dynamic fecha) {
     if (fecha == null) {
@@ -120,20 +121,85 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Future<void> _reordenarFotos(List<dynamic> galeria, int oldIndex, int newIndex) async {
+  List<Map<String, dynamic>> _construirListaReordenamiento(Map<String, dynamic> perro) {
+    final perfilUrl = perro['foto_perfil']?.toString() ?? '';
+    final galeria = List<dynamic>.from(perro['galeria'] ?? []);
+    final listaUnificada = <Map<String, dynamic>>[];
+
+    if (perfilUrl.trim().isNotEmpty) {
+      listaUnificada.add({'url': perfilUrl, 'texto': 'Foto de perfil', 'descripcion': 'Foto de perfil'});
+    }
+
+    for (final foto in galeria) {
+      final item = foto is Map ? Map<String, dynamic>.from(foto as Map) : {'url': foto?.toString() ?? ''};
+      final url = item['url']?.toString() ?? '';
+      if (url.trim().isEmpty) continue;
+
+      item['url'] = url;
+      item['texto'] ??= item['descripcion'] ?? 'Sin descripción';
+      item['descripcion'] ??= item['texto'] ?? 'Sin descripción';
+      listaUnificada.add(item);
+    }
+
+    return listaUnificada;
+  }
+
+  void _activarModoReordenar(Map<String, dynamic> perro) {
+    setState(() {
+      _modoReordenar = true;
+      _fotosReordenar = _construirListaReordenamiento(perro);
+    });
+  }
+
+  void _reordenarListaUnificada(int oldIndex, int newIndex) {
     if (oldIndex == newIndex) return;
 
-    final nuevaGaleria = List<dynamic>.from(galeria);
-    final elemento = nuevaGaleria.removeAt(oldIndex);
-    final indiceAjustado = oldIndex < newIndex ? newIndex - 1 : newIndex;
-    nuevaGaleria.insert(indiceAjustado.clamp(0, nuevaGaleria.length), elemento);
+    setState(() {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final elemento = _fotosReordenar.removeAt(oldIndex);
+      _fotosReordenar.insert(newIndex, elemento);
+    });
+  }
+
+  Future<void> _confirmarOrdenFotos() async {
+    if (_fotosReordenar.isEmpty) {
+      setState(() {
+        _modoReordenar = false;
+        _fotosReordenar = [];
+      });
+      return;
+    }
+
+    final perfilItem = _fotosReordenar.first;
+    final perfilUrl = perfilItem['url']?.toString() ?? '';
+    final galeriaOrdenada = _fotosReordenar.sublist(1).map((foto) {
+      final mapa = Map<String, dynamic>.from(foto);
+      final url = mapa['url']?.toString() ?? '';
+      if (url.isEmpty) return null;
+      mapa['url'] = url;
+      mapa['texto'] ??= mapa['descripcion'] ?? 'Sin descripción';
+      mapa['descripcion'] ??= mapa['texto'];
+      return mapa;
+    }).whereType<Map<String, dynamic>>().toList();
 
     setState(() => _subiendoFoto = true);
     try {
-      await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).update({'galeria': nuevaGaleria});
+      await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).update({
+        'foto_perfil': perfilUrl.isNotEmpty ? perfilUrl : null,
+        'galeria': galeriaOrdenada,
+      });
+
+      if (mounted) {
+        setState(() {
+          _modoReordenar = false;
+          _fotosReordenar = [];
+        });
+      }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo reordenar la galería')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar el orden de las fotos')));
       }
     } finally {
       if (mounted) {
@@ -393,7 +459,72 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _buildGaleria(List<dynamic> galeria, bool esInvitado) {
+  Widget _buildGaleria(List<dynamic> galeria, bool esInvitado, Map<String, dynamic> perro) {
+    if (_modoReordenar) {
+      final fotosReordenables = _fotosReordenar.isNotEmpty ? _fotosReordenar : _construirListaReordenamiento(perro);
+      if (fotosReordenables.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Aún no hay fotos para ordenar.',
+              style: TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: ReorderableListView.builder(
+          itemCount: fotosReordenables.length,
+          onReorder: _reordenarListaUnificada,
+          itemBuilder: (context, index) {
+            final foto = fotosReordenables[index];
+            final url = foto['url']?.toString() ?? '';
+            final titulo = foto['texto']?.toString().isNotEmpty == true
+                ? foto['texto']
+                : (foto['descripcion']?.toString().isNotEmpty == true ? foto['descripcion'] : 'Sin descripción');
+
+            return Card(
+              key: ValueKey('$url-$index'),
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Stack(
+                children: [
+                  ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(url, width: 56, height: 56, fit: BoxFit.cover),
+                    ),
+                    title: Text(titulo),
+                    subtitle: Text(index == 0 ? 'Portada actual' : 'Arrastrá para cambiar el orden'),
+                    trailing: const Icon(Icons.drag_handle),
+                  ),
+                  if (index == 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Portada actual',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
     if (galeria.isEmpty) {
       return const Center(
         child: Padding(
@@ -403,31 +534,6 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             style: TextStyle(fontSize: 16),
             textAlign: TextAlign.center,
           ),
-        ),
-      );
-    }
-    if (_modoReordenar) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        child: ReorderableListView.builder(
-          itemCount: galeria.length,
-          onReorder: (oldIndex, newIndex) => _reordenarFotos(galeria, oldIndex, newIndex),
-          itemBuilder: (context, index) {
-            final foto = galeria[index];
-            return Card(
-              key: ValueKey('${foto['url'] ?? index}-$index'),
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(foto['url'] ?? '', width: 56, height: 56, fit: BoxFit.cover),
-                ),
-                title: Text(foto['texto']?.toString().isNotEmpty == true ? foto['texto'] : 'Sin descripción'),
-                subtitle: const Text('Arrastrá para cambiar el orden'),
-                trailing: const Icon(Icons.drag_handle),
-              ),
-            );
-          },
         ),
       );
     }
@@ -563,9 +669,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 ),
                 if (!esInvitado) ...[
                   IconButton(
-                    icon: Icon(_modoReordenar ? Icons.done : Icons.reorder),
-                    tooltip: _modoReordenar ? 'Terminar reordenar' : 'Reordenar galería',
-                    onPressed: () => setState(() => _modoReordenar = !_modoReordenar),
+                    icon: Icon(_modoReordenar ? Icons.check : Icons.reorder),
+                    tooltip: _modoReordenar ? 'Guardar orden de fotos' : 'Reordenar fotos',
+                    onPressed: () async {
+                      if (_modoReordenar) {
+                        await _confirmarOrdenFotos();
+                      } else {
+                        _activarModoReordenar(perro);
+                      }
+                    },
                   ),
                   IconButton(
                     icon: const Icon(Icons.add_a_photo),
@@ -580,7 +692,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 700;
-                final galeriaWidget = _buildGaleria(galeria, esInvitado);
+                final galeriaWidget = _buildGaleria(galeria, esInvitado, perro);
 
                 if (isWide) {
                   return Row(
