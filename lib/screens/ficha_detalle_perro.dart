@@ -323,6 +323,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Column _buildInfoContenido(Map<String, dynamic> perro) {
+    final fechaFallecimiento = perro['fecha_fallecimiento'];
+    final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -340,15 +343,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
         Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
-        const SizedBox(height: 22),
-        if (perro['estado']?.toString() == 'fallecido' && perro['fecha_fallecimiento'] != null) ...[
+        if (tieneFechaFallecimiento) ...[
+          const SizedBox(height: 8),
           Text(
-            'Fecha de fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
+            'Fecha de fallecimiento: ${_formatearFecha(fechaFallecimiento)}',
             textScaler: TextScaler.linear(_escalaTexto),
             style: const TextStyle(fontSize: 16),
           ),
-          const SizedBox(height: 8),
         ],
+        const SizedBox(height: 22),
         Text('Historia/Observaciones:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.', _escalaTexto),
