@@ -131,7 +131,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
 
     for (final foto in galeria) {
-      final item = foto is Map ? Map<String, dynamic>.from(foto as Map) : {'url': foto?.toString() ?? ''};
+      final item = foto is Map ? Map<String, dynamic>.from(foto) : {'url': foto?.toString() ?? ''};
       final url = item['url']?.toString() ?? '';
       if (url.trim().isEmpty) continue;
 
@@ -148,18 +148,6 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     setState(() {
       _modoReordenar = true;
       _fotosReordenar = _construirListaReordenamiento(perro);
-    });
-  }
-
-  void _reordenarListaUnificada(int oldIndex, int newIndex) {
-    if (oldIndex == newIndex) return;
-
-    setState(() {
-      if (oldIndex < newIndex) {
-        newIndex -= 1;
-      }
-      final elemento = _fotosReordenar.removeAt(oldIndex);
-      _fotosReordenar.insert(newIndex, elemento);
     });
   }
 
@@ -334,25 +322,28 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
       if (!mounted) return;
 
-      final currentContext = context;
-      TextEditingController textoController = TextEditingController();
+      if (!mounted) return;
 
-      String? textoDescriptivo = await showDialog<String>(
-        context: currentContext,
-        builder: (context) => AlertDialog(
+      final textoController = TextEditingController();
+
+      final textoDescriptivo = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
           title: const Text('Agregar descripción (opcional)'),
           content: TextField(
             controller: textoController,
             decoration: const InputDecoration(hintText: "Ej: Jugando en el patio..."),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Cancelar')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, textoController.text), child: const Text('Subir Foto')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, null), child: const Text('Cancelar')),
+            ElevatedButton(onPressed: () => Navigator.pop(dialogContext, textoController.text), child: const Text('Subir Foto')),
           ],
         ),
       );
 
       if (textoDescriptivo != null) {
+        if (!mounted || !context.mounted) return;
+
         setState(() => _subiendoFoto = true);
         try {
           final nombreArchivo = 'galeria_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -370,7 +361,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             'galeria': FieldValue.arrayUnion([nuevoItemGaleria])
           });
         } catch (e) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al subir la foto')));
+          if (mounted && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al subir la foto')));
+          }
         } finally {
           if (mounted) setState(() => _subiendoFoto = false);
         }
@@ -444,7 +437,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 label: Text('$nombre ($relacion)', textScaler: TextScaler.linear(_escalaTexto)),
                 onPressed: idDoc.isEmpty
                     ? null
-                    : () => Navigator.push(
+                    : () => Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
                             builder: (_) => FichaDetallePerro(idDocumento: idDoc),
@@ -479,7 +472,17 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         padding: const EdgeInsets.all(16),
         child: ReorderableListView.builder(
           itemCount: fotosReordenables.length,
-          onReorder: _reordenarListaUnificada,
+          onReorderItem: (oldIndex, newIndex) {
+            if (oldIndex == newIndex) return;
+
+            setState(() {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              final elemento = _fotosReordenar.removeAt(oldIndex);
+              _fotosReordenar.insert(newIndex, elemento);
+            });
+          },
           itemBuilder: (context, index) {
             final foto = fotosReordenables[index];
             final url = foto['url']?.toString() ?? '';
