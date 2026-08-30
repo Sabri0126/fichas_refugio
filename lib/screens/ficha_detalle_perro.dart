@@ -63,6 +63,19 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
   }
 
+  String _formatearEdadTexto(Map<String, dynamic> perro) {
+    if (perro['edad_indeterminada'] == true) {
+      return 'Edad: Indeterminada';
+    }
+
+    final edadValor = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
+    if (edadValor == 0) {
+      return 'Edad: ${perro['meses'] ?? 0} meses';
+    }
+
+    return 'Edad estimada: ${_calcularEdadEstimada(perro)} años';
+  }
+
   Widget _construirTextoFormateado(String texto, double escala) {
     final textoLimpio = texto.trim();
 
@@ -399,7 +412,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 8),
         Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text('Edad estimada: ${_calcularEdadEstimada(perro)} años', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
+        Text(_formatearEdadTexto(perro), textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
         Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         if (tieneFechaFallecimiento) ...[

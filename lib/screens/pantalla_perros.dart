@@ -61,6 +61,19 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
   }
 
+  String _formatearEdadTexto(Map<String, dynamic> perro) {
+    if (perro['edad_indeterminada'] == true) {
+      return 'Edad: Indeterminada';
+    }
+
+    final edadValor = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
+    if (edadValor == 0) {
+      return 'Edad: ${perro['meses'] ?? 0} meses';
+    }
+
+    return 'Edad estimada: ${_calcularEdadEstimada(perro)} años';
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
@@ -308,7 +321,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
                                       Text(
-                                        'Edad estimada: ${_calcularEdadEstimada(perro)} años',
+                                        _formatearEdadTexto(perro),
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
                                       Text(

@@ -22,6 +22,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
+  final TextEditingController _mesesController = TextEditingController();
   final TextEditingController _historiaController = TextEditingController();
   final TextEditingController _fichaMedicaController = TextEditingController();
   final TextEditingController _fechaIngresoController = TextEditingController();
@@ -32,6 +33,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   bool _estaCastrado = false;
   bool _enCasa = false;
   bool _estaGuardando = false;
+  bool _edadIndeterminada = false;
   String _estado = 'activo';
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
@@ -47,6 +49,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     if (widget.datosActuales != null) {
       _nombreController.text = widget.datosActuales!['nombre'] ?? '';
       _edadController.text = widget.datosActuales!['edad']?.toString() ?? '';
+      _mesesController.text = widget.datosActuales!['meses']?.toString() ?? '';
+      _edadIndeterminada = widget.datosActuales!['edad_indeterminada'] ?? false;
       _historiaController.text = widget.datosActuales!['historia'] ?? '';
       _fichaMedicaController.text = widget.datosActuales!['ficha_medica'] ?? '';
 
@@ -84,7 +88,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           : '';
     }
     // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
-    for (final c in [_nombreController, _edadController, _historiaController, _fichaMedicaController]) {
+    for (final c in [_nombreController, _edadController, _mesesController, _historiaController, _fichaMedicaController]) {
       c.addListener(() => setState(() => _hayCambios = true));
     }
   }
@@ -93,6 +97,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   void dispose() {
     _nombreController.dispose();
     _edadController.dispose();
+    _mesesController.dispose();
     _historiaController.dispose();
     _fichaMedicaController.dispose();
     _fechaIngresoController.dispose();
@@ -227,6 +232,57 @@ class _FormularioPerroState extends State<FormularioPerro> {
     }
   }
 
+  DateTime? _leerFecha(dynamic valor) {
+    if (valor is Timestamp) return valor.toDate();
+    if (valor is DateTime) return valor;
+    if (valor is String) return DateTime.tryParse(valor);
+    return null;
+  }
+
+  Future<void> _actualizarEdadesCachorros(
+    WriteBatch batch,
+    CollectionReference<Map<String, dynamic>> perrosRef,
+    String idExcluir,
+  ) async {
+    final ahora = DateTime.now();
+    final cachorrosSnapshot = await perrosRef.where('edad', isEqualTo: 0).get();
+
+    for (final doc in cachorrosSnapshot.docs) {
+      if (doc.id == idExcluir) continue;
+
+      final datos = doc.data();
+
+      // Los perros fallecidos quedan congelados: nunca deben envejecer.
+      final fechaFallecimiento = datos['fecha_fallecimiento'];
+      final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
+      if (tieneFechaFallecimiento || datos['estado']?.toString() == 'inactivo') continue;
+
+      if (datos['edad_indeterminada'] == true) continue;
+
+      final ultimaActualizacion = _leerFecha(datos['ultima_actualizacion_edad']) ?? _leerFecha(datos['fecha_ingreso']);
+      if (ultimaActualizacion == null) continue;
+
+      final mesesPasados = (ahora.year - ultimaActualizacion.year) * 12 + ahora.month - ultimaActualizacion.month;
+      if (mesesPasados <= 0) continue;
+
+      final mesesActuales = int.tryParse(datos['meses']?.toString() ?? '') ?? 0;
+      final nuevoTotalMeses = mesesActuales + mesesPasados;
+
+      if (nuevoTotalMeses >= 12) {
+        batch.update(doc.reference, {
+          'edad': 1,
+          'meses': 0,
+          'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
+        });
+      } else {
+        batch.update(doc.reference, {
+          'meses': nuevoTotalMeses,
+          'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
+        });
+      }
+    }
+  }
+
   Future<void> _guardarDatos() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _estaGuardando = true);
@@ -264,6 +320,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
           if (_fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(_fechaIngreso!),
           'sexo': _sexo,
           'edad': int.tryParse(_edadController.text.trim()) ?? 0,
+          'edad_indeterminada': _edadIndeterminada,
+          'meses': int.tryParse(_mesesController.text.trim()) ?? 0,
           if (_estado != 'inactivo') 'edad_anio_base': DateTime.now().year,
           'historia': _historiaController.text.trim(),
           'ficha_medica': _fichaMedicaController.text.trim(),
@@ -274,6 +332,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
           'parientes': parientesNormalizados,
           'foto_perfil': urlImagen,
+          'ultima_actualizacion_edad': FieldValue.serverTimestamp(),
         };
 
         final batch = FirebaseFirestore.instance.batch();
@@ -300,6 +359,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ])
           });
         }
+
+        await _actualizarEdadesCachorros(batch, perrosRef, idPerroActual);
 
         await batch.commit();
 
@@ -491,7 +552,40 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 ],
               ),
               const SizedBox(height: 16),
-              TextFormField(controller: _edadController, decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)), keyboardType: TextInputType.number),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Edad indeterminada'),
+                value: _edadIndeterminada,
+                onChanged: (valor) => setState(() {
+                  _edadIndeterminada = valor ?? false;
+                  if (_edadIndeterminada) {
+                    _edadController.clear();
+                    _mesesController.clear();
+                  }
+                }),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _edadController,
+                enabled: !_edadIndeterminada,
+                decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)),
+                keyboardType: TextInputType.number,
+              ),
+              if (!_edadIndeterminada && _edadController.text.trim() == '0') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _mesesController,
+                  decoration: const InputDecoration(labelText: 'Meses (opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_view_month)),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [LengthLimitingTextInputFormatter(2)],
+                  validator: (value) {
+                    if (value != null && (int.tryParse(value) ?? 0) >= 12) {
+                      return 'El valor debe estar entre 0 y 11. A partir de los 12 meses equivale a 1 año.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
               SwitchListTile(title: const Text('¿Ya está castrado?'), value: _estaCastrado, activeThumbColor: Colors.deepOrange, onChanged: (valor) => setState(() => _estaCastrado = valor)),
               const SizedBox(height: 16),
