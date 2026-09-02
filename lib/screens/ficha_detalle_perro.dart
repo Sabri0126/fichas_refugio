@@ -7,8 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
@@ -109,29 +111,112 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   void _moverDerecha() => _controladorCarrusel.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
 
   void _abrirFotoPantallaCompleta(String url) {
+    bool procesando = false;
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
-            elevation: 0,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
-              onPressed: () => Navigator.pop(context),
+        builder: (_) => StatefulBuilder(
+          builder: (context, setStateLocal) => Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            appBar: AppBar(
+              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
+                onPressed: () => Navigator.pop(context),
+              ),
+              actions: [
+                procesando
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : IconButton(
+                        icon: Icon(Icons.crop, color: Theme.of(context).colorScheme.onSurface),
+                        onPressed: () => _recortarFotoExistente(url, context, setStateLocal, (valor) => procesando = valor),
+                      ),
+              ],
             ),
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Image.network(url, fit: BoxFit.contain),
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.network(url, fit: BoxFit.contain),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _recortarFotoExistente(
+    String url,
+    BuildContext context,
+    StateSetter setStateLocal,
+    void Function(bool) actualizarProcesando,
+  ) async {
+    setStateLocal(() => actualizarProcesando(true));
+    try {
+      final respuesta = await http.get(Uri.parse(url));
+      final directorioTemporal = await getTemporaryDirectory();
+      final archivoTemp = File('${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await archivoTemp.writeAsBytes(respuesta.bodyBytes);
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: archivoTemp.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Recortar foto',
+            toolbarColor: Theme.of(context).colorScheme.primary,
+            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
+            activeControlsWidgetColor: Theme.of(context).colorScheme.secondary,
+            initAspectRatio: CropAspectRatioPreset.original,
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(
+            title: 'Recortar foto',
+            doneButtonTitle: 'Listo',
+            cancelButtonTitle: 'Cancelar',
+          ),
+        ],
+      );
+
+      if (croppedFile == null) {
+        setStateLocal(() => actualizarProcesando(false));
+        return;
+      }
+
+      final nombreArchivo = 'recorte_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final refStorage = FirebaseStorage.instance.ref().child('galeria_perros').child(nombreArchivo);
+      await refStorage.putFile(File(croppedFile.path));
+      final nuevaUrl = await refStorage.getDownloadURL();
+
+      final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
+      final snapshot = await docRef.get();
+      final data = snapshot.data() as Map<String, dynamic>;
+
+      if (data['foto_perfil']?.toString() == url) {
+        await docRef.update({'foto_perfil': nuevaUrl});
+      } else {
+        final galeria = List<dynamic>.from(data['galeria'] ?? []);
+        final indice = galeria.indexWhere((foto) => (foto is Map ? foto['url']?.toString() : foto?.toString()) == url);
+        if (indice != -1) {
+          final item = Map<String, dynamic>.from(galeria[indice] as Map);
+          item['url'] = nuevaUrl;
+          galeria[indice] = item;
+          await docRef.update({'galeria': galeria});
+        }
+      }
+
+      if (context.mounted) Navigator.pop(context);
+    } catch (_) {
+      if (context.mounted) {
+        setStateLocal(() => actualizarProcesando(false));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo recortar la foto')));
+      }
+    }
   }
 
   List<Map<String, dynamic>> _construirListaReordenamiento(Map<String, dynamic> perro) {
@@ -196,7 +281,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         setState(() {
           _modoReordenar = false;
           _fotosReordenar = [];
+          _paginaActual = 0;
         });
+        if (_controladorCarrusel.hasClients) {
+          _controladorCarrusel.jumpToPage(0);
+        }
       }
     } catch (_) {
       if (mounted) {

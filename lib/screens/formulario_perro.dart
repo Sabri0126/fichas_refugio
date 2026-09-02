@@ -5,8 +5,10 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -177,6 +179,88 @@ class _FormularioPerroState extends State<FormularioPerro> {
       return sexoOriginal == 'hembra' ? 'Madre' : 'Padre';
     }
     return 'Hermano/a';
+  }
+
+  void _abrirOpcionesFotoPerfil() {
+    final urlActual = widget.datosActuales?['foto_perfil']?.toString();
+    final hayFotoActual = _imagenSeleccionada != null || (urlActual != null && urlActual.isNotEmpty);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Cambiar foto'),
+              onTap: () {
+                Navigator.pop(context);
+                _seleccionarImagen();
+              },
+            ),
+            if (hayFotoActual)
+              ListTile(
+                leading: const Icon(Icons.crop),
+                title: const Text('Recortar foto actual'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _recortarFotoActual();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _recortarFotoActual() async {
+    setState(() => _estaGuardando = true);
+    try {
+      File archivoOrigen;
+
+      if (_imagenSeleccionada != null) {
+        archivoOrigen = _imagenSeleccionada!;
+      } else {
+        final urlActual = widget.datosActuales!['foto_perfil'].toString();
+        final respuesta = await http.get(Uri.parse(urlActual));
+        final directorioTemporal = await getTemporaryDirectory();
+        archivoOrigen = File('${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await archivoOrigen.writeAsBytes(respuesta.bodyBytes);
+      }
+
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: archivoOrigen.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Ajustar imagen',
+            toolbarColor: Theme.of(context).colorScheme.primary,
+            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
+            initAspectRatio: CropAspectRatioPreset.square,
+            aspectRatioPresets: const [CropAspectRatioPreset.square],
+            lockAspectRatio: true,
+          ),
+          IOSUiSettings(
+            title: 'Ajustar imagen',
+            doneButtonTitle: 'Listo',
+            cancelButtonTitle: 'Cancelar',
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        setState(() => _imagenSeleccionada = File(croppedFile.path));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo recortar la foto actual.')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _estaGuardando = false);
+      }
+    }
   }
 
   Future<void> _seleccionarImagen() async {
@@ -532,7 +616,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               children: [
               Center(
                 child: GestureDetector(
-                  onTap: _seleccionarImagen,
+                  onTap: _abrirOpcionesFotoPerfil,
                   child: CircleAvatar(
                     radius: 60,
                     backgroundColor: Theme.of(context).colorScheme.surface,
