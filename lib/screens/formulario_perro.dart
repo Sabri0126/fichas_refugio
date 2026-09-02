@@ -283,6 +283,29 @@ class _FormularioPerroState extends State<FormularioPerro> {
     }
   }
 
+  void _confirmarEliminarFicha() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Eliminar ficha?'),
+        content: const Text('Esta acción es irreversible y borrará todos los datos del perro.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).delete();
+              Navigator.of(context)..pop()..pop();
+            },
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _guardarDatos() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _estaGuardando = true);
@@ -749,6 +772,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
+              if (widget.idDocumento != null)
+                TextButton(
+                  onPressed: _confirmarEliminarFicha,
+                  child: const Text('Eliminar ficha', style: TextStyle(color: Colors.red)),
+                ),
               ],
             ),
           ),
