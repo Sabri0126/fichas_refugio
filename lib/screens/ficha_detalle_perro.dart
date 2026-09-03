@@ -522,6 +522,51 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
+  String _fechaISO(DateTime fecha) {
+    return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildHistorialDosis(Map<String, dynamic> tratamiento) {
+    final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
+    final fechaInicio = _leerFechaGenerica(tratamiento['fecha_inicio']);
+
+    final circulos = <Widget>[];
+    for (int i = 4; i >= 0; i--) {
+      final dia = DateTime.now().subtract(Duration(days: i));
+      final diaSoloFecha = DateTime(dia.year, dia.month, dia.day);
+
+      Color color;
+      if (fechaInicio != null &&
+          diaSoloFecha.isBefore(DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day))) {
+        color = Colors.grey.shade200;
+      } else if (registroDosis.contains(_fechaISO(dia))) {
+        color = Colors.green;
+      } else if (i == 0) {
+        color = Colors.grey;
+      } else {
+        color = Colors.red;
+      }
+
+      if (circulos.isNotEmpty) circulos.add(const SizedBox(width: 4));
+      circulos.add(
+        Container(
+          width: 15,
+          height: 15,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+      );
+    }
+
+    return Row(mainAxisAlignment: MainAxisAlignment.start, children: circulos);
+  }
+
+  DateTime? _leerFechaGenerica(dynamic valor) {
+    if (valor is Timestamp) return valor.toDate();
+    if (valor is DateTime) return valor;
+    if (valor is String) return DateTime.tryParse(valor);
+    return null;
+  }
+
   List<Widget> _buildTratamientos(Map<String, dynamic> perro, bool esInvitado) {
     final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
     if (tratamientos.isEmpty) return [];
@@ -542,9 +587,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           margin: const EdgeInsets.only(bottom: 10),
           child: CheckboxListTile(
             title: Text(tratamiento['medicacion']?.toString() ?? '', textScaler: TextScaler.linear(_escalaTexto)),
-            subtitle: Text(
-              '${tratamiento['indicaciones'] ?? ''} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
-              textScaler: TextScaler.linear(_escalaTexto),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${tratamiento['indicaciones'] ?? ''} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
+                  textScaler: TextScaler.linear(_escalaTexto),
+                ),
+                const SizedBox(height: 6),
+                _buildHistorialDosis(tratamiento),
+              ],
             ),
             value: marcadoHoy,
             onChanged: esInvitado
