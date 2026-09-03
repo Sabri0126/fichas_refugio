@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import '../screens/ficha_detalle_perro.dart';
 
 /// Programa recordatorios diarios de medicación usando notificaciones locales.
 class NotificacionesService {
@@ -12,6 +14,7 @@ class NotificacionesService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _inicializado = false;
   bool _inicializando = false;
+  GlobalKey<NavigatorState>? _navigatorKey;
 
   // Debe coincidir con el channelId usado en programarRecordatorios().
   static const _canalTratamientos = AndroidNotificationChannel(
@@ -21,7 +24,8 @@ class NotificacionesService {
     importance: Importance.high,
   );
 
-  Future<void> inicializar() async {
+  Future<void> inicializar({GlobalKey<NavigatorState>? navigatorKey}) async {
+    if (navigatorKey != null) _navigatorKey = navigatorKey;
     if (_inicializado || _inicializando) return;
     _inicializando = true;
 
@@ -33,7 +37,10 @@ class NotificacionesService {
       const configuracionAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
       const configuracionInicializacion = InitializationSettings(android: configuracionAndroid);
 
-      await _plugin.initialize(configuracionInicializacion);
+      await _plugin.initialize(
+        configuracionInicializacion,
+        onDidReceiveNotificationResponse: _alRecibirRespuestaNotificacion,
+      );
 
       final androidPlugin = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       // Se crea explícitamente con importancia alta para que Samsung/Android 13+
@@ -58,6 +65,14 @@ class NotificacionesService {
     }
   }
 
+  void _alRecibirRespuestaNotificacion(NotificationResponse respuesta) {
+    final idPerro = respuesta.payload;
+    if (idPerro == null || idPerro.isEmpty) return;
+    _navigatorKey?.currentState?.push(
+      MaterialPageRoute(builder: (_) => FichaDetallePerro(idDocumento: idPerro)),
+    );
+  }
+
   DateTime? _leerFecha(dynamic valor) {
     if (valor is Timestamp) return valor.toDate();
     if (valor is DateTime) return valor;
@@ -74,6 +89,8 @@ class NotificacionesService {
     final ahora = DateTime.now();
 
     for (final perro in perrosConTratamiento) {
+      if (perro['estado'] == 'inactivo') continue;
+
       final idPerro = perro['id']?.toString() ?? perro['id_documento']?.toString() ?? '';
       final nombrePerro = perro['nombre']?.toString() ?? 'tu perrito';
       final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
@@ -113,6 +130,7 @@ class NotificacionesService {
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           matchDateTimeComponents: DateTimeComponents.time,
+          payload: idPerro,
         );
       }
     }

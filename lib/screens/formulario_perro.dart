@@ -677,6 +677,125 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
+  Future<void> _mostrarDialogoEditarTratamiento(int indice) async {
+    final tratamiento = _tratamientos[indice];
+    final medicacionController = TextEditingController(text: tratamiento['medicacion']?.toString() ?? '');
+    final indicacionesController = TextEditingController(text: tratamiento['indicaciones']?.toString() ?? '');
+    final diasController = TextEditingController(text: tratamiento['dias_duracion']?.toString() ?? '0');
+
+    final fechaInicioActual = tratamiento['fecha_inicio'];
+    DateTime fechaInicio = fechaInicioActual is Timestamp ? fechaInicioActual.toDate() : DateTime.now();
+
+    final partesHora = (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(':');
+    TimeOfDay horaRecordatorio = TimeOfDay(
+      hour: int.tryParse(partesHora.isNotEmpty ? partesHora[0] : '') ?? 9,
+      minute: int.tryParse(partesHora.length > 1 ? partesHora[1] : '') ?? 0,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Editar tratamiento'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: medicacionController,
+                  decoration: const InputDecoration(labelText: 'Medicación', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: indicacionesController,
+                  decoration: const InputDecoration(labelText: 'Indicaciones', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: diasController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Fecha de inicio: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final seleccionada = await showDatePicker(
+                      context: ctx,
+                      initialDate: fechaInicio,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (seleccionada != null) {
+                      setDialogState(() => fechaInicio = seleccionada);
+                    }
+                  },
+                ),
+                InkWell(
+                  onTap: () async {
+                    final seleccionada = await showTimePicker(
+                      context: ctx,
+                      initialTime: horaRecordatorio,
+                      builder: (BuildContext context, Widget? child) {
+                        return MediaQuery(
+                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (seleccionada != null) {
+                      setDialogState(() => horaRecordatorio = seleccionada);
+                    }
+                  },
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
+                    ),
+                    trailing: const Icon(Icons.access_time),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final medicacion = medicacionController.text.trim();
+                if (medicacion.isEmpty) return;
+
+                final horaFormateada =
+                    '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
+
+                setState(() {
+                  _tratamientos[indice] = {
+                    ...tratamiento,
+                    'medicacion': medicacion,
+                    'indicaciones': indicacionesController.text.trim(),
+                    'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
+                    'fecha_inicio': Timestamp.fromDate(fechaInicio),
+                    'hora_recordatorio': horaFormateada,
+                  };
+                  _hayCambios = true;
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmarSalida() async {
     if (!_hayCambios) {
       Navigator.pop(context);
@@ -984,17 +1103,27 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     final horaRecordatorio = t['hora_recordatorio']?.toString() ?? '';
                     return Card(
                       child: ListTile(
+                        onTap: () => _mostrarDialogoEditarTratamiento(i),
                         title: Text(t['medicacion']?.toString() ?? ''),
                         subtitle: Text(
                           '${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
                           '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () => setState(() {
-                            _tratamientos.removeAt(i);
-                            _hayCambios = true;
-                          }),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () => _mostrarDialogoEditarTratamiento(i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () => setState(() {
+                                _tratamientos.removeAt(i);
+                                _hayCambios = true;
+                              }),
+                            ),
+                          ],
                         ),
                       ),
                     );

@@ -7,9 +7,11 @@ import 'firebase_options.dart';
 import 'screens/pantalla_login.dart';
 import 'screens/pantalla_bloqueo.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificacionesService.instance.inicializar();
+  await NotificacionesService.instance.inicializar(navigatorKey: navigatorKey);
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -32,6 +34,7 @@ class MyApp extends StatelessWidget {
     );
 
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Fichas Refugio',
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
