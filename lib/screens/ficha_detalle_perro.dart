@@ -10,7 +10,9 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
@@ -626,49 +628,29 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   void _mostrarHistorialCompleto(List<dynamic> tratamientos) {
-    final registros = <Map<String, String>>[];
+    final Map<DateTime, List<Map<String, dynamic>>> eventosCalendario = {};
+
     for (final t in tratamientos) {
       final tratamiento = Map<String, dynamic>.from(t as Map);
       final medicacion = tratamiento['medicacion']?.toString() ?? '';
       final indicaciones = tratamiento['indicaciones']?.toString() ?? '';
       final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
-      for (final fecha in registroDosis) {
-        registros.add({'fecha': fecha, 'medicacion': medicacion, 'indicaciones': indicaciones});
+
+      for (final fechaTexto in registroDosis) {
+        final fecha = DateTime.tryParse(fechaTexto);
+        if (fecha == null) continue;
+        final fechaNormalizada = DateTime.utc(fecha.year, fecha.month, fecha.day);
+
+        eventosCalendario
+            .putIfAbsent(fechaNormalizada, () => [])
+            .add({'medicacion': medicacion, 'indicaciones': indicaciones});
       }
     }
-    registros.sort((a, b) => b['fecha']!.compareTo(a['fecha']!));
 
     showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Historial médico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Flexible(
-                child: registros.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text('No hay registros'),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: registros.length,
-                        itemBuilder: (context, index) => ListTile(
-                          leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                          title: Text(registros[index]['fecha']!),
-                          subtitle: Text('${registros[index]['medicacion']} - ${registros[index]['indicaciones']}'),
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      isScrollControlled: true,
+      builder: (ctx) => CalendarioHistorialWidget(eventosCalendario: eventosCalendario),
     );
   }
 
@@ -1032,6 +1014,117 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           ),
         );
       }
+    );
+  }
+}
+
+class CalendarioHistorialWidget extends StatefulWidget {
+  final Map<DateTime, List<Map<String, dynamic>>> eventosCalendario;
+
+  const CalendarioHistorialWidget({super.key, required this.eventosCalendario});
+
+  @override
+  State<CalendarioHistorialWidget> createState() => _CalendarioHistorialWidgetState();
+}
+
+class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
+  DateTime _selectedDay = DateTime.now();
+  DateTime _focusedDay = DateTime.now();
+  late final Future<void> _localeListo;
+
+  static const _azulMarino = Color.fromARGB(255, 47, 67, 99);
+
+  @override
+  void initState() {
+    super.initState();
+    _localeListo = initializeDateFormatting('es_ES');
+  }
+
+  List<Map<String, dynamic>> _eventosDelDia(DateTime dia) {
+    return widget.eventosCalendario[DateTime.utc(dia.year, dia.month, dia.day)] ?? [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final eventosSeleccionados = _eventosDelDia(_selectedDay);
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Historial médico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            FutureBuilder<void>(
+              future: _localeListo,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return TableCalendar<Map<String, dynamic>>(
+                  locale: 'es_ES',
+                  firstDay: DateTime.utc(_focusedDay.year - 2, _focusedDay.month, _focusedDay.day),
+                  lastDay: DateTime.utc(_focusedDay.year + 1, _focusedDay.month, _focusedDay.day),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (dia) => isSameDay(dia, _selectedDay),
+                  eventLoader: _eventosDelDia,
+                  headerStyle: const HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
+                  calendarStyle: CalendarStyle(
+                    selectedDecoration: const BoxDecoration(
+                      color: _azulMarino,
+                      shape: BoxShape.circle,
+                    ),
+                    todayDecoration: BoxDecoration(
+                      color: _azulMarino.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                    ),
+                    markerDecoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                    markerMargin: const EdgeInsets.only(top: 6),
+                  ),
+                  onDaySelected: (diaSeleccionado, diaEnfocado) {
+                    setState(() {
+                      _selectedDay = diaSeleccionado;
+                      _focusedDay = diaEnfocado;
+                    });
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: eventosSeleccionados.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No hay registros médicos para este día',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: eventosSeleccionados.length,
+                      itemBuilder: (context, index) {
+                        final evento = eventosSeleccionados[index];
+                        return Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.check_circle, color: Colors.green),
+                            title: Text('${evento['medicacion']} - ${evento['indicaciones']}'),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
