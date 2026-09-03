@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/notificaciones_service.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 import 'pantalla_login.dart';
@@ -19,9 +22,28 @@ class _PantallaPerrosState extends State<PantallaPerros> {
   final TextEditingController _busquedaController = TextEditingController();
   String _textoBusqueda = '';
   String _filtroUbicacion = 'Todos';
+  StreamSubscription<QuerySnapshot>? _suscripcionTratamientos;
+
+  @override
+  void initState() {
+    super.initState();
+    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+    // Los visitantes no deben programar notificaciones locales.
+    if (!esInvitado) {
+      _suscripcionTratamientos = FirebaseFirestore.instance.collection('perros').snapshots().listen((snapshot) {
+        final perros = snapshot.docs.map((doc) {
+          final data = Map<String, dynamic>.from(doc.data());
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+        NotificacionesService.instance.programarRecordatorios(perros);
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _suscripcionTratamientos?.cancel();
     _busquedaController.dispose();
     super.dispose();
   }

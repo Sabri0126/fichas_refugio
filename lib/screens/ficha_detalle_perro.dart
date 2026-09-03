@@ -51,6 +51,45 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
   }
 
+  String _fechaHoyISO() {
+    final hoy = DateTime.now();
+    return '${hoy.year.toString().padLeft(4, '0')}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _actualizarDosisTratamiento(
+    Map<String, dynamic> perro,
+    Map<String, dynamic> tratamiento,
+    String fechaHoy,
+    bool marcar,
+  ) async {
+    final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
+    final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
+    final indice = tratamientos.indexWhere(
+      (t) => t is Map && t['id']?.toString() == tratamiento['id']?.toString(),
+    );
+    if (indice == -1) return;
+
+    final tratamientoActualizado = Map<String, dynamic>.from(tratamientos[indice] as Map);
+    final registroDosis = List<String>.from(tratamientoActualizado['registro_dosis'] ?? []);
+
+    if (marcar) {
+      if (!registroDosis.contains(fechaHoy)) registroDosis.add(fechaHoy);
+    } else {
+      registroDosis.remove(fechaHoy);
+    }
+
+    tratamientoActualizado['registro_dosis'] = registroDosis;
+    tratamientos[indice] = tratamientoActualizado;
+
+    try {
+      await docRef.update({'tratamientos': tratamientos});
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar el tratamiento')));
+      }
+    }
+  }
+
   int _calcularEdadEstimada(Map<String, dynamic> perro) {
     final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
 
@@ -483,7 +522,41 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  Column _buildInfoContenido(Map<String, dynamic> perro) {
+  List<Widget> _buildTratamientos(Map<String, dynamic> perro, bool esInvitado) {
+    final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
+    if (tratamientos.isEmpty) return [];
+
+    final fechaHoy = _fechaHoyISO();
+
+    return [
+      const SizedBox(height: 24),
+      Text('Tratamientos activos:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10),
+      ...tratamientos.map((t) {
+        final tratamiento = Map<String, dynamic>.from(t as Map);
+        final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
+        final marcadoHoy = registroDosis.contains(fechaHoy);
+        final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: CheckboxListTile(
+            title: Text(tratamiento['medicacion']?.toString() ?? '', textScaler: TextScaler.linear(_escalaTexto)),
+            subtitle: Text(
+              '${tratamiento['indicaciones'] ?? ''} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
+              textScaler: TextScaler.linear(_escalaTexto),
+            ),
+            value: marcadoHoy,
+            onChanged: esInvitado
+                ? null
+                : (valor) => _actualizarDosisTratamiento(perro, tratamiento, fechaHoy, valor ?? false),
+          ),
+        );
+      }),
+    ];
+  }
+
+  Column _buildInfoContenido(Map<String, dynamic> perro, bool esInvitado) {
     final fechaFallecimiento = perro['fecha_fallecimiento'];
     final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
 
@@ -520,6 +593,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         Text('Ficha médica:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.', _escalaTexto),
+        ..._buildTratamientos(perro, esInvitado),
         if (perro['parientes'] is List && (perro['parientes'] as List).isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('Familiares en el refugio:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -814,7 +888,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                             constraints: const BoxConstraints(maxWidth: 450),
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-                              child: _buildInfoContenido(perro),
+                              child: _buildInfoContenido(perro, esInvitado),
                             ),
                           ),
                         ),
@@ -831,7 +905,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         color: Theme.of(context).colorScheme.surface,
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                          child: _buildInfoContenido(perro),
+                          child: _buildInfoContenido(perro, esInvitado),
                         ),
                       ),
                     ),

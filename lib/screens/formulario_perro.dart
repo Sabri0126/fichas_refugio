@@ -39,6 +39,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   String _estado = 'activo';
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
+  List<Map<String, dynamic>> _tratamientos = [];
 
   bool _hayCambios = false;
 
@@ -75,6 +76,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
       final parientesRaw = widget.datosActuales!['parientes'];
       if (parientesRaw is List) {
         _parientes = parientesRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+
+      final tratamientosRaw = widget.datosActuales!['tratamientos'];
+      if (tratamientosRaw is List) {
+        _tratamientos = tratamientosRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
 
       final fechaFall = widget.datosActuales!['fecha_fallecimiento'];
@@ -438,6 +444,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           if (_estado == 'inactivo' && _fechaFallecimiento != null)
             'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
           'parientes': parientesNormalizados,
+          'tratamientos': _tratamientos,
           'foto_perfil': urlImagen,
           'ultima_actualizacion_edad': FieldValue.serverTimestamp(),
         };
@@ -551,6 +558,118 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       Navigator.pop(ctx);
                     },
               child: const Text('Añadir'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mostrarDialogoAgregarTratamiento() async {
+    final medicacionController = TextEditingController();
+    final indicacionesController = TextEditingController();
+    final diasController = TextEditingController(text: '0');
+    DateTime fechaInicio = DateTime.now();
+    TimeOfDay horaRecordatorio = const TimeOfDay(hour: 9, minute: 0);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Agregar tratamiento'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: medicacionController,
+                  decoration: const InputDecoration(labelText: 'Medicación', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: indicacionesController,
+                  decoration: const InputDecoration(labelText: 'Indicaciones', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: diasController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Fecha de inicio: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final seleccionada = await showDatePicker(
+                      context: ctx,
+                      initialDate: fechaInicio,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (seleccionada != null) {
+                      setDialogState(() => fechaInicio = seleccionada);
+                    }
+                  },
+                ),
+                InkWell(
+                  onTap: () async {
+                    final seleccionada = await showTimePicker(
+                      context: ctx,
+                      initialTime: horaRecordatorio,
+                      builder: (BuildContext context, Widget? child) {
+                        return MediaQuery(
+                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (seleccionada != null) {
+                      setDialogState(() => horaRecordatorio = seleccionada);
+                    }
+                  },
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
+                    ),
+                    trailing: const Icon(Icons.access_time),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final medicacion = medicacionController.text.trim();
+                if (medicacion.isEmpty) return;
+
+                final horaFormateada =
+                    '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
+
+                setState(() {
+                  _tratamientos.add({
+                    'id': FirebaseFirestore.instance.collection('perros').doc().id,
+                    'medicacion': medicacion,
+                    'indicaciones': indicacionesController.text.trim(),
+                    'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
+                    'fecha_inicio': Timestamp.fromDate(fechaInicio),
+                    'hora_recordatorio': horaFormateada,
+                    'registro_dosis': <String>[],
+                  });
+                  _hayCambios = true;
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Agregar'),
             ),
           ],
         ),
@@ -832,9 +951,55 @@ class _FormularioPerroState extends State<FormularioPerro> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _fichaMedicaController,
-                decoration: const InputDecoration(labelText: 'Detalles médicos, tratamientos y seguimiento', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Detalles médicos', border: OutlineInputBorder()),
                 maxLines: 6,
               ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Tratamientos Activos', style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  ElevatedButton(
+                    onPressed: _mostrarDialogoAgregarTratamiento,
+                    child: const Text('+ Agregar tratamiento'),
+                  ),
+                ],
+              ),
+              if (_tratamientos.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Sin tratamientos registrados.'),
+                )
+              else
+                Column(
+                  children: _tratamientos.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final t = entry.value;
+                    final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
+                    final fechaInicio = t['fecha_inicio'];
+                    final fechaTexto = fechaInicio is Timestamp
+                        ? '${fechaInicio.toDate().day.toString().padLeft(2, '0')}/${fechaInicio.toDate().month.toString().padLeft(2, '0')}/${fechaInicio.toDate().year}'
+                        : '';
+                    final horaRecordatorio = t['hora_recordatorio']?.toString() ?? '';
+                    return Card(
+                      child: ListTile(
+                        title: Text(t['medicacion']?.toString() ?? ''),
+                        subtitle: Text(
+                          '${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
+                          '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          onPressed: () => setState(() {
+                            _tratamientos.removeAt(i);
+                            _hayCambios = true;
+                          }),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               const SizedBox(height: 16),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
