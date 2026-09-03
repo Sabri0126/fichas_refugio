@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'services/notificaciones_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,13 +10,29 @@ import 'screens/pantalla_bloqueo.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+/// Guarda el payload de una notificación que abrió la app en frío,
+/// hasta que la pantalla de bloqueo pueda navegar tras la autenticación.
+class EstadoNotificacion {
+  static String? payloadPendiente;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificacionesService.instance.inicializar(navigatorKey: navigatorKey);
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await _capturarNotificacionDeInicio();
   runApp(const MyApp());
+}
+
+Future<void> _capturarNotificacionDeInicio() async {
+  final NotificationAppLaunchDetails? launchDetails =
+      await FlutterLocalNotificationsPlugin().getNotificationAppLaunchDetails();
+
+  if (launchDetails?.didNotificationLaunchApp ?? false) {
+    EstadoNotificacion.payloadPendiente = launchDetails!.notificationResponse?.payload;
+  }
 }
 
 class MyApp extends StatelessWidget {

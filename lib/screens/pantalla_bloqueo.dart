@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../main.dart';
+import 'ficha_detalle_perro.dart';
 import 'pantalla_menu.dart';
 
 class PantallaBloqueo extends StatefulWidget {
@@ -43,9 +45,17 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
       );
 
       if (autenticado && mounted) {
-        Navigator.of(context).pushReplacement(
+        final idPendiente = EstadoNotificacion.payloadPendiente;
+        EstadoNotificacion.payloadPendiente = null;
+
+        navigatorKey.currentState?.pushReplacement(
           MaterialPageRoute(builder: (_) => const PantallaMenu()),
         );
+        if (idPendiente != null && idPendiente.isNotEmpty) {
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(builder: (_) => FichaDetallePerro(idDocumento: idPendiente)),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
