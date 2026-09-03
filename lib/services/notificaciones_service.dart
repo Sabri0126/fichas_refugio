@@ -97,6 +97,8 @@ class NotificacionesService {
 
       for (final tratamientoRaw in tratamientos) {
         final tratamiento = Map<String, dynamic>.from(tratamientoRaw as Map);
+        if (tratamiento['activo'] == false) continue;
+
         final medicacion = tratamiento['medicacion']?.toString() ?? '';
         if (medicacion.isEmpty) continue;
 

@@ -664,6 +664,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     'fecha_inicio': Timestamp.fromDate(fechaInicio),
                     'hora_recordatorio': horaFormateada,
                     'registro_dosis': <String>[],
+                    'activo': true,
                   });
                   _hayCambios = true;
                 });
@@ -792,6 +793,42 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _mostrarDialogoEliminarTratamiento(int indice) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar tratamiento'),
+        content: const Text('¿Qué querés hacer con este tratamiento?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _tratamientos[indice] = {..._tratamientos[indice], 'activo': false};
+                _hayCambios = true;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Archivar historial'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _tratamientos.removeAt(indice);
+                _hayCambios = true;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Eliminar definitivamente', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
       ),
     );
   }
@@ -1085,50 +1122,104 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                 ],
               ),
-              if (_tratamientos.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Sin tratamientos registrados.'),
-                )
-              else
-                Column(
-                  children: _tratamientos.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final t = entry.value;
-                    final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
-                    final fechaInicio = t['fecha_inicio'];
-                    final fechaTexto = fechaInicio is Timestamp
-                        ? '${fechaInicio.toDate().day.toString().padLeft(2, '0')}/${fechaInicio.toDate().month.toString().padLeft(2, '0')}/${fechaInicio.toDate().year}'
-                        : '';
-                    final horaRecordatorio = t['hora_recordatorio']?.toString() ?? '';
-                    return Card(
-                      child: ListTile(
-                        onTap: () => _mostrarDialogoEditarTratamiento(i),
-                        title: Text(t['medicacion']?.toString() ?? ''),
-                        subtitle: Text(
-                          '${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
-                          '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
+              Builder(
+                builder: (context) {
+                  final entradasActivas = _tratamientos.asMap().entries.where((e) => e.value['activo'] != false).toList();
+                  final entradasArchivadas = _tratamientos.asMap().entries.where((e) => e.value['activo'] == false).toList();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (entradasActivas.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Sin tratamientos registrados.'),
+                        )
+                      else
+                        Column(
+                          children: entradasActivas.map((entry) {
+                            final i = entry.key;
+                            final t = entry.value;
+                            final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
+                            final fechaInicio = t['fecha_inicio'];
+                            final fechaTexto = fechaInicio is Timestamp
+                                ? '${fechaInicio.toDate().day.toString().padLeft(2, '0')}/${fechaInicio.toDate().month.toString().padLeft(2, '0')}/${fechaInicio.toDate().year}'
+                                : '';
+                            final horaRecordatorio = t['hora_recordatorio']?.toString() ?? '';
+                            return Card(
+                              child: ListTile(
+                                onTap: () => _mostrarDialogoEditarTratamiento(i),
+                                title: Text(t['medicacion']?.toString() ?? ''),
+                                subtitle: Text(
+                                  '${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
+                                  '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined),
+                                      onPressed: () => _mostrarDialogoEditarTratamiento(i),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: () => _mostrarDialogoEliminarTratamiento(i),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined),
-                              onPressed: () => _mostrarDialogoEditarTratamiento(i),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                              onPressed: () => setState(() {
-                                _tratamientos.removeAt(i);
-                                _hayCambios = true;
-                              }),
-                            ),
-                          ],
+                      if (entradasArchivadas.isNotEmpty)
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Tratamientos Archivados'),
+                          children: entradasArchivadas.map((entry) {
+                            final i = entry.key;
+                            final t = entry.value;
+                            final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
+
+                            return Card(
+                              color: Colors.grey.shade200,
+                              child: ListTile(
+                                title: Opacity(
+                                  opacity: 0.6,
+                                  child: Text(t['medicacion']?.toString() ?? ''),
+                                ),
+                                subtitle: Opacity(
+                                  opacity: 0.6,
+                                  child: Text('${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'}'),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.restore),
+                                      tooltip: 'Restaurar tratamiento',
+                                      onPressed: () => setState(() {
+                                        _tratamientos[i] = {..._tratamientos[i], 'activo': true};
+                                        _hayCambios = true;
+                                      }),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                                      tooltip: 'Eliminar definitivamente',
+                                      onPressed: () => setState(() {
+                                        _tratamientos.removeAt(i);
+                                        _hayCambios = true;
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 16),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,

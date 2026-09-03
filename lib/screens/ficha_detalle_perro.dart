@@ -572,12 +572,28 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     if (tratamientos.isEmpty) return [];
 
     final fechaHoy = _fechaHoyISO();
+    final tratamientosActivos = tratamientos.where((t) => (t as Map)['activo'] == true).toList();
 
     return [
       const SizedBox(height: 24),
-      Text('Tratamientos activos:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Tratamientos activos:',
+              textScaler: TextScaler.linear(_escalaTexto),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_outlined),
+            tooltip: 'Ver historial médico completo',
+            onPressed: () => _mostrarHistorialCompleto(tratamientos),
+          ),
+        ],
+      ),
       const SizedBox(height: 10),
-      ...tratamientos.map((t) {
+      ...tratamientosActivos.map((t) {
         final tratamiento = Map<String, dynamic>.from(t as Map);
         final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
         final marcadoHoy = registroDosis.contains(fechaHoy);
@@ -586,6 +602,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: CheckboxListTile(
+            controlAffinity: ListTileControlAffinity.leading,
             title: Text(tratamiento['medicacion']?.toString() ?? '', textScaler: TextScaler.linear(_escalaTexto)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,6 +623,53 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         );
       }),
     ];
+  }
+
+  void _mostrarHistorialCompleto(List<dynamic> tratamientos) {
+    final registros = <Map<String, String>>[];
+    for (final t in tratamientos) {
+      final tratamiento = Map<String, dynamic>.from(t as Map);
+      final medicacion = tratamiento['medicacion']?.toString() ?? '';
+      final indicaciones = tratamiento['indicaciones']?.toString() ?? '';
+      final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
+      for (final fecha in registroDosis) {
+        registros.add({'fecha': fecha, 'medicacion': medicacion, 'indicaciones': indicaciones});
+      }
+    }
+    registros.sort((a, b) => b['fecha']!.compareTo(a['fecha']!));
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Historial médico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Flexible(
+                child: registros.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text('No hay registros'),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: registros.length,
+                        itemBuilder: (context, index) => ListTile(
+                          leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                          title: Text(registros[index]['fecha']!),
+                          subtitle: Text('${registros[index]['medicacion']} - ${registros[index]['indicaciones']}'),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Column _buildInfoContenido(Map<String, dynamic> perro, bool esInvitado) {
