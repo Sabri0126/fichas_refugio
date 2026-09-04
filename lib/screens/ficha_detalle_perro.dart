@@ -693,7 +693,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
         eventosCalendario
             .putIfAbsent(fechaNormalizada, () => [])
-            .add({'medicacion': medicacion, 'indicaciones': indicaciones, 'detalle': detalle});
+            .add({'medicacion': medicacion, 'indicaciones': indicaciones, 'detalle': detalle, 'categoria': categoria});
       }
     }
 
@@ -1095,6 +1095,12 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     return widget.eventosCalendario[DateTime.utc(dia.year, dia.month, dia.day)] ?? [];
   }
 
+  Color obtenerColorCategoria(String? categoria) {
+    if (categoria == 'unico') return Colors.blue;
+    if (categoria == 'veterinaria') return Colors.orange;
+    return Colors.green; // Por defecto (Tratamiento Diario)
+  }
+
   @override
   Widget build(BuildContext context) {
     final eventosSeleccionados = _eventosDelDia(_selectedDay);
@@ -1142,6 +1148,25 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                     ),
                     markerMargin: const EdgeInsets.only(top: 6),
                   ),
+                  calendarBuilders: CalendarBuilders(
+                    markerBuilder: (context, date, events) {
+                      if (events.isEmpty) return null;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: events.take(4).map((evento) {
+                          return Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.symmetric(horizontal: 1),
+                            decoration: BoxDecoration(
+                              color: obtenerColorCategoria(evento['categoria']?.toString()),
+                              shape: BoxShape.circle,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
                   onDaySelected: (diaSeleccionado, diaEnfocado) {
                     setState(() {
                       _selectedDay = diaSeleccionado;
@@ -1164,9 +1189,15 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                       itemCount: eventosSeleccionados.length,
                       itemBuilder: (context, index) {
                         final evento = eventosSeleccionados[index];
+                        final categoriaEvento = evento['categoria']?.toString();
+                        final icono = categoriaEvento == 'unico'
+                            ? Icons.medication
+                            : categoriaEvento == 'veterinaria'
+                                ? Icons.local_hospital
+                                : Icons.check_circle;
                         return Card(
                           child: ListTile(
-                            leading: const Icon(Icons.check_circle, color: Colors.green),
+                            leading: Icon(icono, color: obtenerColorCategoria(categoriaEvento)),
                             title: Text(evento['detalle']?.toString() ?? '${evento['medicacion']} - ${evento['indicaciones']}'),
                           ),
                         );
