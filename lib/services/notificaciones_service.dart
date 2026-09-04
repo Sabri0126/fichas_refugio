@@ -4,7 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
-import '../screens/ficha_detalle_perro.dart';
+import '../views/ficha_detalle_perro.dart';
 
 /// Programa recordatorios diarios de medicación usando notificaciones locales.
 class NotificacionesService {

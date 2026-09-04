@@ -215,4 +215,36 @@ class PerroModel {
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
     };
   }
+
+  /// Crea una copia de este [PerroModel] reemplazando únicamente los campos
+  /// indicados, útil para aplicar reglas de negocio (p. ej. auto-archivado
+  /// de tratamientos) sin reconstruir manualmente todos los campos.
+  PerroModel copyWith({
+    List<TratamientoModel>? tratamientos,
+    List<Map<String, dynamic>>? parientes,
+    List<Map<String, dynamic>>? galeria,
+    String? fotoPerfil,
+  }) {
+    return PerroModel(
+      id: id,
+      nombre: nombre,
+      sexo: sexo,
+      estado: estado,
+      edad: edad,
+      meses: meses,
+      edadIndeterminada: edadIndeterminada,
+      edadAnioBase: edadAnioBase,
+      fechaIngreso: fechaIngreso,
+      fechaFallecimiento: fechaFallecimiento,
+      ultimaActualizacionEdad: ultimaActualizacionEdad,
+      historia: historia,
+      fichaMedica: fichaMedica,
+      castrado: castrado,
+      enCasa: enCasa,
+      fotoPerfil: fotoPerfil ?? this.fotoPerfil,
+      parientes: parientes ?? this.parientes,
+      galeria: galeria ?? this.galeria,
+      tratamientos: tratamientos ?? this.tratamientos,
+    );
+  }
 }

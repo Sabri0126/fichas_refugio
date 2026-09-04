@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -39,41 +38,18 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   double _escalaTexto = 1.3;
   List<Map<String, dynamic>> _fotosReordenar = [];
 
-  String _formatearFecha(dynamic fecha) {
-    if (fecha == null) {
-      return 'No registrada';
-    }
-
-    DateTime? fechaDate;
-    if (fecha is Timestamp) {
-      fechaDate = fecha.toDate();
-    } else if (fecha is DateTime) {
-      fechaDate = fecha;
-    } else if (fecha is String) {
-      fechaDate = DateTime.tryParse(fecha);
-    }
-
-    if (fechaDate == null) {
-      return 'No registrada';
-    }
-
-    return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
-  }
+  String _formatearFecha(DateTime? fecha) => _perroController.formatearFecha(fecha);
 
   String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
   Future<void> _actualizarDosisTratamiento(
-    Map<String, dynamic> perro,
-    Map<String, dynamic> tratamiento,
+    PerroModel perro,
+    TratamientoModel tratamiento,
     String fechaHoy,
     bool marcar,
   ) async {
-    final tratamientosRaw = List<dynamic>.from(perro['tratamientos'] ?? []);
-    final tratamientos = tratamientosRaw
-        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
-        .toList();
-
-    final indice = tratamientos.indexWhere((t) => t.id == tratamiento['id']?.toString());
+    final tratamientos = List<TratamientoModel>.from(perro.tratamientos);
+    final indice = tratamientos.indexWhere((t) => t.id == tratamiento.id);
     if (indice == -1) return;
 
     final fecha = DateTime.tryParse(fechaHoy) ?? DateTime.now();
@@ -88,8 +64,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  String _formatearEdadTexto(Map<String, dynamic> perro) =>
-      _perroController.formatearEdadTexto(PerroModel.fromMap(perro, widget.idDocumento));
+  String _formatearEdadTexto(PerroModel perro) => _perroController.formatearEdadTexto(perro);
 
   Widget _construirTextoFormateado(String texto, double escala) {
     final textoLimpio = texto.trim();
@@ -171,6 +146,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     void Function(bool) actualizarProcesando,
   ) async {
     setStateLocal(() => actualizarProcesando(true));
+    final colorScheme = Theme.of(context).colorScheme;
     try {
       final respuesta = await http.get(Uri.parse(url));
       final directorioTemporal = await getTemporaryDirectory();
@@ -182,9 +158,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Recortar foto',
-            toolbarColor: Theme.of(context).colorScheme.primary,
-            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
-            activeControlsWidgetColor: Theme.of(context).colorScheme.secondary,
+            toolbarColor: colorScheme.primary,
+            toolbarWidgetColor: colorScheme.onPrimary,
+            activeControlsWidgetColor: colorScheme.secondary,
             initAspectRatio: CropAspectRatioPreset.original,
             lockAspectRatio: false,
           ),
@@ -217,9 +193,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  List<Map<String, dynamic>> _construirListaReordenamiento(Map<String, dynamic> perro) {
-    final perfilUrl = perro['foto_perfil']?.toString() ?? '';
-    final galeria = List<dynamic>.from(perro['galeria'] ?? []);
+  List<Map<String, dynamic>> _construirListaReordenamiento(PerroModel perro) {
+    final perfilUrl = perro.fotoPerfil ?? '';
+    final galeria = perro.galeria;
     final listaUnificada = <Map<String, dynamic>>[];
 
     if (perfilUrl.trim().isNotEmpty) {
@@ -227,7 +203,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
 
     for (final foto in galeria) {
-      final item = foto is Map ? Map<String, dynamic>.from(foto) : {'url': foto?.toString() ?? ''};
+      final item = Map<String, dynamic>.from(foto);
       final url = item['url']?.toString() ?? '';
       if (url.trim().isEmpty) continue;
 
@@ -240,7 +216,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return listaUnificada;
   }
 
-  void _activarModoReordenar(Map<String, dynamic> perro) {
+  void _activarModoReordenar(PerroModel perro) {
     setState(() {
       _modoReordenar = true;
       _fotosReordenar = _construirListaReordenamiento(perro);
@@ -465,9 +441,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildHistorialDosis(Map<String, dynamic> tratamiento) {
-    final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
-    final fechaInicio = _leerFechaGenerica(tratamiento['fecha_inicio']);
+  Widget _buildHistorialDosis(TratamientoModel tratamiento) {
+    final registroDosis = tratamiento.registroDosis;
+    final fechaInicio = tratamiento.fechaInicio;
 
     final circulos = <Widget>[];
     for (int i = 4; i >= 0; i--) {
@@ -499,40 +475,26 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return Row(mainAxisAlignment: MainAxisAlignment.start, children: circulos);
   }
 
-  DateTime? _leerFechaGenerica(dynamic valor) {
-    if (valor is Timestamp) return valor.toDate();
-    if (valor is DateTime) return valor;
-    if (valor is String) return DateTime.tryParse(valor);
-    return null;
-  }
-
   /// Marca como inactivos los tratamientos diarios cuyo ciclo (fecha_inicio + dias_duracion) ya venció,
   /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos activos".
-  Map<String, dynamic> _procesarAutoArchivado(Map<String, dynamic> perro) {
-    final tratamientosRaw = List<dynamic>.from(perro['tratamientos'] ?? []);
-    if (tratamientosRaw.isEmpty) return perro;
+  PerroModel _procesarAutoArchivado(PerroModel perro) {
+    if (perro.tratamientos.isEmpty) return perro;
 
-    final tratamientos = tratamientosRaw
-        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
-        .toList();
-
-    final actualizados = _tratamientoController.autoArchivarVencidos(tratamientos);
-    if (!_tratamientoController.huboCambiosDeArchivado(tratamientos, actualizados)) return perro;
+    final actualizados = _tratamientoController.autoArchivarVencidos(perro.tratamientos);
+    if (!_tratamientoController.huboCambiosDeArchivado(perro.tratamientos, actualizados)) return perro;
 
     _tratamientoController.guardarTratamientos(widget.idDocumento, actualizados).catchError((_) {});
 
-    return {...perro, 'tratamientos': actualizados.map((t) => t.toMap()).toList()};
+    return perro.copyWith(tratamientos: actualizados);
   }
 
-  List<Widget> _buildTratamientos(Map<String, dynamic> perro, bool esInvitado) {
-    final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
+  List<Widget> _buildTratamientos(PerroModel perro, bool esInvitado) {
+    final tratamientos = perro.tratamientos;
     if (tratamientos.isEmpty) return [];
 
     final fechaHoy = _fechaHoyISO();
     // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
-    final tratamientosActivos = tratamientos
-        .where((t) => (t as Map)['activo'] == true && (t['categoria'] ?? 'diario') == 'diario')
-        .toList();
+    final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
 
     return [
       const SizedBox(height: 24),
@@ -554,42 +516,38 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       ),
       const SizedBox(height: 10),
       ...tratamientosActivos.map((t) {
-        final tratamiento = Map<String, dynamic>.from(t as Map);
-        final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
+        final registroDosis = t.registroDosis;
         final marcadoHoy = registroDosis.contains(fechaHoy);
-        final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+        final diasDuracion = t.diasDuracion;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: CheckboxListTile(
             controlAffinity: ListTileControlAffinity.leading,
-            title: Text(tratamiento['medicacion']?.toString() ?? '', textScaler: TextScaler.linear(_escalaTexto)),
+            title: Text(t.medicacion, textScaler: TextScaler.linear(_escalaTexto)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${tratamiento['indicaciones'] ?? ''} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
+                  '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
                   textScaler: TextScaler.linear(_escalaTexto),
                 ),
                 const SizedBox(height: 6),
-                _buildHistorialDosis(tratamiento),
+                _buildHistorialDosis(t),
               ],
             ),
             value: marcadoHoy,
             onChanged: esInvitado
                 ? null
-                : (valor) => _actualizarDosisTratamiento(perro, tratamiento, fechaHoy, valor ?? false),
+                : (valor) => _actualizarDosisTratamiento(perro, t, fechaHoy, valor ?? false),
           ),
         );
       }),
     ];
   }
 
-  void _mostrarHistorialCompleto(List<dynamic> tratamientos) {
-    final modelos = tratamientos
-        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
-        .toList();
-    final eventosCalendario = _tratamientoController.construirEventosCalendario(modelos);
+  void _mostrarHistorialCompleto(List<TratamientoModel> tratamientos) {
+    final eventosCalendario = _tratamientoController.construirEventosCalendario(tratamientos);
 
     showModalBottomSheet<void>(
       context: context,
@@ -598,31 +556,30 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Column _buildInfoContenido(Map<String, dynamic> perro, bool esInvitado) {
-    final fechaFallecimiento = perro['fecha_fallecimiento'];
-    final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
+  Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
+    final tieneFechaFallecimiento = perro.fechaFallecimiento != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
         Text(
-          perro['nombre']?.toString() ?? 'Sin nombre',
+          perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
           textScaler: TextScaler.linear(_escalaTexto),
           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 14),
-        Text('Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
+        Text('Fecha de ingreso: ${_formatearFecha(perro.fechaIngreso)}', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text(perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
+        Text(perro.sexo == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
         Text(_formatearEdadTexto(perro), textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
-        Text(perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
+        Text(perro.castrado ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
         if (tieneFechaFallecimiento) ...[
           const SizedBox(height: 8),
           Text(
-            'Fecha de fallecimiento: ${_formatearFecha(fechaFallecimiento)}',
+            'Fecha de fallecimiento: ${_formatearFecha(perro.fechaFallecimiento)}',
             textScaler: TextScaler.linear(_escalaTexto),
             style: const TextStyle(fontSize: 16),
           ),
@@ -630,21 +587,20 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 22),
         Text('Historia/Observaciones:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _construirTextoFormateado(perro['historia']?.toString() ?? 'No hay historia registrada.', _escalaTexto),
+        _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
         const SizedBox(height: 20),
         Text('Ficha médica:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _construirTextoFormateado(perro['ficha_medica']?.toString() ?? 'No hay ficha médica registrada.', _escalaTexto),
+        _construirTextoFormateado(perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.', _escalaTexto),
         ..._buildTratamientos(perro, esInvitado),
-        if (perro['parientes'] is List && (perro['parientes'] as List).isNotEmpty) ...[
+        if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('Familiares en el refugio:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: (perro['parientes'] as List).map((p) {
-              final familiar = Map<String, dynamic>.from(p as Map);
+            children: perro.parientes.map((familiar) {
               final nombre = familiar['nombre']?.toString() ?? '';
               final relacion = familiar['relacion']?.toString() ?? '';
               final idDoc = familiar['id_documento']?.toString() ?? '';
@@ -670,7 +626,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _buildGaleria(List<dynamic> galeria, bool esInvitado, Map<String, dynamic> perro) {
+  Widget _buildGaleria(List<Map<String, dynamic>> galeria, bool esInvitado, PerroModel perro) {
     if (_modoReordenar) {
       final fotosReordenables = _fotosReordenar.isNotEmpty ? _fotosReordenar : _construirListaReordenamiento(perro);
       if (fotosReordenables.isEmpty) {
@@ -867,13 +823,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        var perro = {...snapshot.data!.toMap(), 'id': snapshot.data!.id};
-        perro = _procesarAutoArchivado(perro);
-        List<dynamic> galeria = perro['galeria'] ?? [];
+        // --- SECCIÓN: Datos del perro y auto-archivado de tratamientos vencidos ---
+        final perro = _procesarAutoArchivado(snapshot.data!);
+        final galeria = perro.galeria;
 
         return Scaffold(
+          // --- SECCIÓN: AppBar (título y acciones de galería/accesibilidad) ---
           appBar: AppBar(
-            title: Text('Ficha de ${perro['nombre']}'),
+            title: Text('Ficha de ${perro.nombre}'),
             actions: [
               if (_subiendoFoto)
                 Padding(
@@ -916,11 +873,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 700;
+                // --- SECCIÓN: Galería de fotos (carrusel o modo reordenar) ---
                 final galeriaWidget = _buildGaleria(galeria, esInvitado, perro);
 
                 if (isWide) {
                   return Row(
                     children: [
+                      // --- SECCIÓN: Panel de información (layout ancho) ---
                       // Panel de info: ancho acotado, centrado, con margen para que respire
                       Center(
                         child: Container(
@@ -942,6 +901,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     ],
                   );
                 }
+                // --- SECCIÓN: Panel de información (layout angosto, apilado bajo la galería) ---
                 return Column(
                   children: [
                     SizedBox(height: 300, child: galeriaWidget),
@@ -1009,6 +969,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
           children: [
             const Text('Historial médico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
+            // --- SECCIÓN: Calendario Histórico ---
             FutureBuilder<void>(
               future: _localeListo,
               builder: (context, snapshot) {
@@ -1073,6 +1034,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
               },
             ),
             const SizedBox(height: 12),
+            // --- SECCIÓN: Detalle de eventos del día seleccionado ---
             Expanded(
               child: eventosSeleccionados.isEmpty
                   ? const Center(

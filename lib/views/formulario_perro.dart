@@ -16,9 +16,9 @@ import '../models/tratamiento_model.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
-  final Map<String, dynamic>? datosActuales;
+  final PerroModel? perroActual;
 
-  const FormularioPerro({super.key, this.idDocumento, this.datosActuales});
+  const FormularioPerro({super.key, this.idDocumento, this.perroActual});
 
   @override
   State<FormularioPerro> createState() => _FormularioPerroState();
@@ -55,8 +55,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   @override
   void initState() {
     super.initState();
-    if (widget.datosActuales != null) {
-      final perro = PerroModel.fromMap(widget.datosActuales!, widget.idDocumento ?? '');
+    if (widget.perroActual != null) {
+      final perro = widget.perroActual!;
       _nombreController.text = perro.nombre;
       _edadController.text = perro.edad.toString();
       _mesesController.text = perro.meses.toString();
@@ -163,7 +163,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   void _abrirOpcionesFotoPerfil() {
-    final urlActual = widget.datosActuales?['foto_perfil']?.toString();
+    final urlActual = widget.perroActual?.fotoPerfil;
     final hayFotoActual = _imagenSeleccionada != null || (urlActual != null && urlActual.isNotEmpty);
 
     showModalBottomSheet(
@@ -197,13 +197,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _recortarFotoActual() async {
     setState(() => _estaGuardando = true);
+    final colorScheme = Theme.of(context).colorScheme;
     try {
       File archivoOrigen;
 
       if (_imagenSeleccionada != null) {
         archivoOrigen = _imagenSeleccionada!;
       } else {
-        final urlActual = widget.datosActuales!['foto_perfil'].toString();
+        final urlActual = widget.perroActual!.fotoPerfil!;
         final respuesta = await http.get(Uri.parse(urlActual));
         final directorioTemporal = await getTemporaryDirectory();
         archivoOrigen = File('${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg');
@@ -216,8 +217,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Ajustar imagen',
-            toolbarColor: Theme.of(context).colorScheme.primary,
-            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
+            toolbarColor: colorScheme.primary,
+            toolbarWidgetColor: colorScheme.onPrimary,
             initAspectRatio: CropAspectRatioPreset.square,
             aspectRatioPresets: const [CropAspectRatioPreset.square],
             lockAspectRatio: true,
@@ -246,7 +247,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _seleccionarImagen() async {
     final XFile? imagen = await _picker.pickImage(source: ImageSource.gallery);
-    if (imagen == null) return;
+    if (imagen == null || !mounted) return;
 
     try {
       final soportaRecorte = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
@@ -261,14 +262,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
         return;
       }
 
+      final colorScheme = Theme.of(context).colorScheme;
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: imagen.path,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Ajustar imagen',
-            toolbarColor: Theme.of(context).colorScheme.primary,
-            toolbarWidgetColor: Theme.of(context).colorScheme.onPrimary,
+            toolbarColor: colorScheme.primary,
+            toolbarWidgetColor: colorScheme.onPrimary,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
           ),
@@ -311,6 +313,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           TextButton(
             onPressed: () async {
               await _perroController.eliminarPerro(widget.idDocumento!);
+              if (!context.mounted) return;
               Navigator.of(context)..pop()..pop();
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
@@ -325,7 +328,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
       setState(() => _estaGuardando = true);
 
       try {
-        String? urlImagen = widget.datosActuales?['foto_perfil'];
+        String? urlImagen = widget.perroActual?.fotoPerfil;
 
         if (_imagenSeleccionada != null) {
           final nombreArchivo = '${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -582,6 +585,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           lastDate: DateTime(2100),
                         );
                         if (fechaSeleccionada == null) return;
+                        if (!ctx.mounted) return;
 
                         final horaSeleccionada = await showTimePicker(
                           context: ctx,
@@ -857,6 +861,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
             child: Column(
               children: [
+              // --- SECCIÓN: Foto de perfil ---
               Center(
                 child: GestureDetector(
                   onTap: _abrirOpcionesFotoPerfil,
@@ -865,14 +870,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     backgroundColor: Theme.of(context).colorScheme.surface,
                     backgroundImage: _imagenSeleccionada != null
                         ? FileImage(_imagenSeleccionada!) as ImageProvider
-                        : (widget.datosActuales?['foto_perfil'] != null ? NetworkImage(widget.datosActuales!['foto_perfil']) : null),
-                    child: _imagenSeleccionada == null && widget.datosActuales?['foto_perfil'] == null
+                        : (widget.perroActual?.fotoPerfil != null ? NetworkImage(widget.perroActual!.fotoPerfil!) : null),
+                    child: _imagenSeleccionada == null && widget.perroActual?.fotoPerfil == null
                         ? Icon(Icons.add_a_photo, size: 40, color: Theme.of(context).colorScheme.primary)
                         : null,
                   ),
                 ),
               ),
               const SizedBox(height: 24),
+              // --- SECCIÓN: Datos básicos (nombre, ingreso, sexo, edad, castración, estado) ---
               TextFormField(controller: _nombreController, decoration: const InputDecoration(labelText: 'Nombre del perrito', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pets)), validator: _perroController.validarNombre),
               const SizedBox(height: 16),
               TextFormField(
@@ -968,6 +974,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                 ],
               const SizedBox(height: 16),
+              // --- SECCIÓN: Familiares vinculados ---
               Row(
                 children: [
                   Text('Familiares', style: Theme.of(context).textTheme.titleMedium),
@@ -1006,6 +1013,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   }).toList(),
                 ),
               const SizedBox(height: 16),
+              // --- SECCIÓN: Historia / observaciones ---
               Row(
                 children: [
                   Expanded(
@@ -1040,6 +1048,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 maxLines: 6,
               ),
               const SizedBox(height: 16),
+              // --- SECCIÓN: Ficha médica ---
               Row(
                 children: [
                   Expanded(
@@ -1074,6 +1083,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 maxLines: 6,
               ),
               const SizedBox(height: 24),
+              // --- SECCIÓN: Tratamientos (activos y archivados) ---
               Row(
                 children: [
                   Expanded(
@@ -1183,6 +1193,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 },
               ),
               const SizedBox(height: 16),
+              // --- SECCIÓN: Ubicación (en casa / refugio) ---
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Este perrito/a está en casa'),
@@ -1190,6 +1201,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 onChanged: (valor) => setState(() => _enCasa = valor ?? false),
               ),
               const SizedBox(height: 32),
+              // --- SECCIÓN: Acciones de guardado y eliminación ---
               SizedBox(
                 height: 50,
                 child: ElevatedButton(

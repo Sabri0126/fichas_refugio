@@ -5,8 +5,8 @@ import 'services/notificaciones_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
-import 'screens/pantalla_login.dart';
-import 'screens/pantalla_bloqueo.dart';
+import 'views/pantalla_login.dart';
+import 'views/pantalla_bloqueo.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 

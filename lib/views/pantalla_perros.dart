@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:fichas_refugio/views/pantalla_login.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +8,7 @@ import '../models/perro_model.dart';
 import '../services/notificaciones_service.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
+import 'pantalla_login.dart';
 
 class PantallaPerros extends StatefulWidget {
   final bool soloInactivos;
@@ -51,6 +51,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
 
     return Scaffold(
+      // --- SECCIÓN: AppBar (título y botón de cerrar sesión) ---
       appBar: AppBar(
         title: Text(
           widget.soloInactivos ? 'Difuntos' : 'Perritos del refugio',
@@ -76,6 +77,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
       ),
       body: Column(
         children: [
+          // --- SECCIÓN: Barra de búsqueda por nombre ---
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
             child: TextField(
@@ -124,6 +126,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               ],
             ),
           ),
+          // --- SECCIÓN: Listado de perros (filtrado, orden y grilla) ---
           Expanded(
             child: StreamBuilder<List<PerroModel>>(
         stream: _perroController.observarPerros(),
@@ -310,7 +313,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro.toMap()),
+                                            builder: (context) => FormularioPerro(idDocumento: idDocumento, perroActual: perro),
                                           ),
                                         );
                                       },
@@ -332,6 +335,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
         ),
         ],
       ),
+      // --- SECCIÓN: Botón flotante para dar de alta un nuevo perro ---
       floatingActionButton: esInvitado
           ? null
           : FloatingActionButton(
