@@ -569,12 +569,54 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return null;
   }
 
+  /// Marca como inactivos los tratamientos diarios cuyo ciclo (fecha_inicio + dias_duracion) ya venció,
+  /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos activos".
+  Map<String, dynamic> _procesarAutoArchivado(Map<String, dynamic> perro) {
+    final tratamientosRaw = List<dynamic>.from(perro['tratamientos'] ?? []);
+    if (tratamientosRaw.isEmpty) return perro;
+
+    final ahora = DateTime.now();
+    var huboCambios = false;
+
+    final tratamientosActualizados = tratamientosRaw.map((t) {
+      final tratamiento = Map<String, dynamic>.from(t as Map);
+      final categoria = tratamiento['categoria']?.toString() ?? 'diario';
+
+      if (categoria == 'diario' && tratamiento['activo'] == true) {
+        final fechaInicio = _leerFechaGenerica(tratamiento['fecha_inicio']);
+        final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+
+        if (fechaInicio != null && diasDuracion > 0) {
+          final fechaFin = fechaInicio.add(Duration(days: diasDuracion));
+          if (ahora.isAfter(fechaFin)) {
+            tratamiento['activo'] = false;
+            huboCambios = true;
+          }
+        }
+      }
+      return tratamiento;
+    }).toList();
+
+    if (!huboCambios) return perro;
+
+    FirebaseFirestore.instance
+        .collection('perros')
+        .doc(widget.idDocumento)
+        .update({'tratamientos': tratamientosActualizados})
+        .catchError((_) {});
+
+    return {...perro, 'tratamientos': tratamientosActualizados};
+  }
+
   List<Widget> _buildTratamientos(Map<String, dynamic> perro, bool esInvitado) {
     final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
     if (tratamientos.isEmpty) return [];
 
     final fechaHoy = _fechaHoyISO();
-    final tratamientosActivos = tratamientos.where((t) => (t as Map)['activo'] == true).toList();
+    // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
+    final tratamientosActivos = tratamientos
+        .where((t) => (t as Map)['activo'] == true && (t['categoria'] ?? 'diario') == 'diario')
+        .toList();
 
     return [
       const SizedBox(height: 24),
@@ -634,7 +676,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       final tratamiento = Map<String, dynamic>.from(t as Map);
       final medicacion = tratamiento['medicacion']?.toString() ?? '';
       final indicaciones = tratamiento['indicaciones']?.toString() ?? '';
+      final categoria = tratamiento['categoria']?.toString() ?? 'diario';
       final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
+
+      final String detalle;
+      if (categoria == 'veterinaria') {
+        detalle = '🏥 $medicacion - $indicaciones';
+      } else {
+        detalle = '$medicacion - $indicaciones';
+      }
 
       for (final fechaTexto in registroDosis) {
         final fecha = DateTime.tryParse(fechaTexto);
@@ -643,7 +693,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
         eventosCalendario
             .putIfAbsent(fechaNormalizada, () => [])
-            .add({'medicacion': medicacion, 'indicaciones': indicaciones});
+            .add({'medicacion': medicacion, 'indicaciones': indicaciones, 'detalle': detalle});
       }
     }
 
@@ -922,6 +972,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         if (!snapshot.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
         var perro = snapshot.data!.data() as Map<String, dynamic>;
+        perro = _procesarAutoArchivado(perro);
         List<dynamic> galeria = perro['galeria'] ?? [];
 
         return Scaffold(
@@ -1116,7 +1167,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.check_circle, color: Colors.green),
-                            title: Text('${evento['medicacion']} - ${evento['indicaciones']}'),
+                            title: Text(evento['detalle']?.toString() ?? '${evento['medicacion']} - ${evento['indicaciones']}'),
                           ),
                         );
                       },

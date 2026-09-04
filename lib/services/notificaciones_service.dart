@@ -97,30 +97,93 @@ class NotificacionesService {
 
       for (final tratamientoRaw in tratamientos) {
         final tratamiento = Map<String, dynamic>.from(tratamientoRaw as Map);
-        if (tratamiento['activo'] == false) continue;
-
+        final categoria = tratamiento['categoria']?.toString() ?? 'diario';
         final medicacion = tratamiento['medicacion']?.toString() ?? '';
-        if (medicacion.isEmpty) continue;
-
-        final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
-        final fechaInicio = _leerFecha(tratamiento['fecha_inicio']) ?? ahora;
-        final diasTranscurridos = ahora.difference(fechaInicio).inDays;
-
-        final tratamientoActivo = diasDuracion == 0 || diasTranscurridos <= diasDuracion;
-        if (!tratamientoActivo) continue;
-
-        final partesHora = (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(':');
-        final hora = partesHora.isNotEmpty ? int.tryParse(partesHora[0]) ?? 9 : 9;
-        final minuto = partesHora.length > 1 ? int.tryParse(partesHora[1]) ?? 0 : 0;
-
         final idTratamiento = tratamiento['id']?.toString() ?? medicacion;
         final idNotificacion = '$idPerro-$idTratamiento'.hashCode & 0x7fffffff;
 
+        if (categoria == 'diario') {
+          if (tratamiento['activo'] == false) continue;
+          if (medicacion.isEmpty) continue;
+
+          final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+          final fechaInicio = _leerFecha(tratamiento['fecha_inicio']) ?? ahora;
+
+          final partesHora = (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(':');
+          final hora = partesHora.isNotEmpty ? int.tryParse(partesHora[0]) ?? 9 : 9;
+          final minuto = partesHora.length > 1 ? int.tryParse(partesHora[1]) ?? 0 : 0;
+
+          const detallesNotificacion = NotificationDetails(
+            android: AndroidNotificationDetails(
+              'tratamientos_diarios',
+              'Recordatorios de tratamientos',
+              channelDescription: 'Recordatorio diario para administrar medicación a los perros',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+          );
+
+          if (diasDuracion == 0) {
+            // Sin fecha de finalización (indefinido): se mantiene la alarma diaria recurrente.
+            await _plugin.zonedSchedule(
+              idNotificacion,
+              'Medicación pendiente',
+              'Toca darle $medicacion a $nombrePerro',
+              _proximaInstancia(hora, minuto),
+              detallesNotificacion,
+              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+              matchDateTimeComponents: DateTimeComponents.time,
+              payload: idPerro,
+            );
+            continue;
+          }
+
+          // Tratamiento con fecha de fin: se programa una notificación puntual por cada día
+          // restante para que las alarmas se detengan solas al llegar a fechaFin.
+          final fechaFin = fechaInicio.add(Duration(days: diasDuracion));
+          if (ahora.isAfter(fechaFin)) continue;
+
+          final inicioBucle = ahora.isAfter(fechaInicio) ? ahora : fechaInicio;
+          var fechaCursor = DateTime(inicioBucle.year, inicioBucle.month, inicioBucle.day);
+          var indiceDia = 0;
+
+          while (!fechaCursor.isAfter(fechaFin)) {
+            final horarioDelDia = DateTime(fechaCursor.year, fechaCursor.month, fechaCursor.day, hora, minuto);
+            if (horarioDelDia.isAfter(ahora)) {
+              final idNotificacionDia = '$idPerro-$idTratamiento-$indiceDia'.hashCode & 0x7fffffff;
+              await _plugin.zonedSchedule(
+                idNotificacionDia,
+                'Medicación pendiente',
+                'Toca darle $medicacion a $nombrePerro',
+                tz.TZDateTime.from(horarioDelDia, tz.local),
+                detallesNotificacion,
+                androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+                matchDateTimeComponents: null,
+                payload: idPerro,
+              );
+            }
+            fechaCursor = fechaCursor.add(const Duration(days: 1));
+            indiceDia++;
+          }
+          continue;
+        }
+
+        // Dosis única / Visita veterinaria: alarma única a futuro (no recurrente).
+        final fechaProximoRecordatorio = _leerFecha(tratamiento['fecha_proximo_recordatorio']);
+        if (fechaProximoRecordatorio == null) continue;
+        if (!fechaProximoRecordatorio.isAfter(ahora)) continue;
+
+        final esVisitaVet = categoria == 'veterinaria';
+        final titulo = esVisitaVet ? 'Visita veterinaria' : 'Dosis única pendiente';
+        final cuerpo = esVisitaVet
+            ? 'Recordatorio: visita veterinaria para $nombrePerro'
+            : 'Recordatorio: aplicar $medicacion a $nombrePerro';
+
         await _plugin.zonedSchedule(
           idNotificacion,
-          'Medicación pendiente',
-          'Toca darle $medicacion a $nombrePerro',
-          _proximaInstancia(hora, minuto),
+          titulo,
+          cuerpo,
+          tz.TZDateTime.from(fechaProximoRecordatorio, tz.local),
           const NotificationDetails(
             android: AndroidNotificationDetails(
               'tratamientos_diarios',
@@ -131,7 +194,7 @@ class NotificacionesService {
             ),
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          matchDateTimeComponents: DateTimeComponents.time,
+          matchDateTimeComponents: null,
           payload: idPerro,
         );
       }

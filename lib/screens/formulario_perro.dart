@@ -565,115 +565,213 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
+  String _formatearFechaISO(DateTime fecha) {
+    return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _mostrarDialogoAgregarTratamiento() async {
     final medicacionController = TextEditingController();
     final indicacionesController = TextEditingController();
     final diasController = TextEditingController(text: '0');
     DateTime fechaInicio = DateTime.now();
     TimeOfDay horaRecordatorio = const TimeOfDay(hour: 9, minute: 0);
+    String categoria = 'diario';
+    DateTime? fechaProximoRecordatorio;
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Agregar tratamiento'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: medicacionController,
-                  decoration: const InputDecoration(labelText: 'Medicación', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: indicacionesController,
-                  decoration: const InputDecoration(labelText: 'Indicaciones', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: diasController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Fecha de inicio: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
+        builder: (ctx, setDialogState) {
+          final esEventoUnico = categoria != 'diario';
+          final labelPrimerCampo = categoria == 'veterinaria'
+              ? 'Motivo de la visita'
+              : categoria == 'unico'
+                  ? 'Medicación / Aplicación'
+                  : 'Medicación';
+          final labelSegundoCampo = categoria == 'veterinaria' ? 'Diagnóstico / Indicaciones' : 'Indicaciones';
+          final labelFecha = categoria == 'veterinaria'
+              ? 'Fecha de visita'
+              : categoria == 'unico'
+                  ? 'Fecha de aplicación'
+                  : 'Fecha de inicio';
+
+          return AlertDialog(
+            title: const Text('Agregar tratamiento'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: categoria,
+                    decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'diario', child: Text('Tratamiento Diario')),
+                      DropdownMenuItem(value: 'unico', child: Text('Dosis Única / Higiene')),
+                      DropdownMenuItem(value: 'veterinaria', child: Text('Visita Veterinaria')),
+                    ],
+                    onChanged: (nuevaCategoria) => setDialogState(() => categoria = nuevaCategoria ?? 'diario'),
                   ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final seleccionada = await showDatePicker(
-                      context: ctx,
-                      initialDate: fechaInicio,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (seleccionada != null) {
-                      setDialogState(() => fechaInicio = seleccionada);
-                    }
-                  },
-                ),
-                InkWell(
-                  onTap: () async {
-                    final seleccionada = await showTimePicker(
-                      context: ctx,
-                      initialTime: horaRecordatorio,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (seleccionada != null) {
-                      setDialogState(() => horaRecordatorio = seleccionada);
-                    }
-                  },
-                  child: ListTile(
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: medicacionController,
+                    decoration: InputDecoration(labelText: labelPrimerCampo, border: const OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: indicacionesController,
+                    decoration: InputDecoration(labelText: labelSegundoCampo, border: const OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  if (!esEventoUnico)
+                    TextField(
+                      controller: diasController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
+                    ),
+                  if (!esEventoUnico) const SizedBox(height: 16),
+                  ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
+                      '$labelFecha: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
                     ),
-                    trailing: const Icon(Icons.access_time),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final seleccionada = await showDatePicker(
+                        context: ctx,
+                        initialDate: fechaInicio,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (seleccionada != null) {
+                        setDialogState(() => fechaInicio = seleccionada);
+                      }
+                    },
                   ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final medicacion = medicacionController.text.trim();
-                if (medicacion.isEmpty) return;
+                  if (!esEventoUnico)
+                    InkWell(
+                      onTap: () async {
+                        final seleccionada = await showTimePicker(
+                          context: ctx,
+                          initialTime: horaRecordatorio,
+                          builder: (BuildContext context, Widget? child) {
+                            return MediaQuery(
+                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (seleccionada != null) {
+                          setDialogState(() => horaRecordatorio = seleccionada);
+                        }
+                      },
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
+                        ),
+                        trailing: const Icon(Icons.access_time),
+                      ),
+                    ),
+                  if (categoria == 'unico')
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        fechaProximoRecordatorio != null
+                            ? 'Recordar próxima vez: ${fechaProximoRecordatorio!.day.toString().padLeft(2, '0')}/${fechaProximoRecordatorio!.month.toString().padLeft(2, '0')}/${fechaProximoRecordatorio!.year} ${fechaProximoRecordatorio!.hour.toString().padLeft(2, '0')}:${fechaProximoRecordatorio!.minute.toString().padLeft(2, '0')}'
+                            : 'Recordar próxima vez (opcional)',
+                      ),
+                      trailing: fechaProximoRecordatorio != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setDialogState(() => fechaProximoRecordatorio = null),
+                            )
+                          : const Icon(Icons.event),
+                      onTap: () async {
+                        final fechaSeleccionada = await showDatePicker(
+                          context: ctx,
+                          initialDate: fechaProximoRecordatorio ?? DateTime.now(),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime(2100),
+                        );
+                        if (fechaSeleccionada == null) return;
 
-                final horaFormateada =
-                    '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
+                        final horaSeleccionada = await showTimePicker(
+                          context: ctx,
+                          initialTime: TimeOfDay.fromDateTime(fechaProximoRecordatorio ?? DateTime.now()),
+                          builder: (BuildContext context, Widget? child) {
+                            return MediaQuery(
+                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (horaSeleccionada == null) return;
 
-                setState(() {
-                  _tratamientos.add({
+                        setDialogState(() {
+                          fechaProximoRecordatorio = DateTime(
+                            fechaSeleccionada.year,
+                            fechaSeleccionada.month,
+                            fechaSeleccionada.day,
+                            horaSeleccionada.hour,
+                            horaSeleccionada.minute,
+                          );
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final medicacion = medicacionController.text.trim();
+                  if (medicacion.isEmpty) return;
+
+                  final nuevoTratamiento = <String, dynamic>{
                     'id': FirebaseFirestore.instance.collection('perros').doc().id,
                     'medicacion': medicacion,
                     'indicaciones': indicacionesController.text.trim(),
-                    'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
+                    'categoria': categoria,
                     'fecha_inicio': Timestamp.fromDate(fechaInicio),
-                    'hora_recordatorio': horaFormateada,
-                    'registro_dosis': <String>[],
-                    'activo': true,
+                  };
+
+                  if (esEventoUnico) {
+                    nuevoTratamiento.addAll({
+                      'dias_duracion': 0,
+                      // Se registra la fecha elegida en el formulario (no la de hoy) para que el TableCalendar la ubique.
+                      'registro_dosis': [_formatearFechaISO(fechaInicio)],
+                      'activo': false,
+                      'fecha_proximo_recordatorio':
+                          categoria == 'unico' && fechaProximoRecordatorio != null
+                              ? Timestamp.fromDate(fechaProximoRecordatorio!)
+                              : null,
+                    });
+                  } else {
+                    final horaFormateada =
+                        '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
+                    nuevoTratamiento.addAll({
+                      'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
+                      'hora_recordatorio': horaFormateada,
+                      'registro_dosis': <String>[],
+                      'activo': true,
+                    });
+                  }
+
+                  setState(() {
+                    _tratamientos.add(nuevoTratamiento);
+                    _hayCambios = true;
                   });
-                  _hayCambios = true;
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Agregar'),
-            ),
-          ],
-        ),
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Agregar'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
