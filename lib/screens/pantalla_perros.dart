@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../controllers/perro_controller.dart';
+import '../models/perro_model.dart';
 import '../services/notificaciones_service.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
@@ -19,10 +20,11 @@ class PantallaPerros extends StatefulWidget {
 }
 
 class _PantallaPerrosState extends State<PantallaPerros> {
+  final PerroController _perroController = PerroController();
   final TextEditingController _busquedaController = TextEditingController();
   String _textoBusqueda = '';
   String _filtroUbicacion = 'Todos';
-  StreamSubscription<QuerySnapshot>? _suscripcionTratamientos;
+  StreamSubscription<List<PerroModel>>? _suscripcionTratamientos;
 
   @override
   void initState() {
@@ -30,13 +32,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
     // Los visitantes no deben programar notificaciones locales.
     if (!esInvitado) {
-      _suscripcionTratamientos = FirebaseFirestore.instance.collection('perros').snapshots().listen((snapshot) {
-        final perros = snapshot.docs.map((doc) {
-          final data = Map<String, dynamic>.from(doc.data());
-          data['id'] = doc.id;
-          return data;
-        }).toList();
-        NotificacionesService.instance.programarRecordatorios(perros);
+      _suscripcionTratamientos = _perroController.observarPerros().listen((perros) {
+        final perrosConId = perros.map((p) => {...p.toMap(), 'id': p.id}).toList();
+        NotificacionesService.instance.programarRecordatorios(perrosConId);
       });
     }
   }
@@ -46,54 +44,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     _suscripcionTratamientos?.cancel();
     _busquedaController.dispose();
     super.dispose();
-  }
-
-  String _formatearFecha(dynamic fecha) {
-    if (fecha == null) {
-      return 'No registrada';
-    }
-
-    DateTime? fechaDate;
-    if (fecha is Timestamp) {
-      fechaDate = fecha.toDate();
-    } else if (fecha is DateTime) {
-      fechaDate = fecha;
-    } else if (fecha is String) {
-      fechaDate = DateTime.tryParse(fecha);
-    }
-
-    if (fechaDate == null) {
-      return 'No registrada';
-    }
-
-    return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
-  }
-
-  int _calcularEdadEstimada(Map<String, dynamic> perro) {
-    final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
-
-    // Para difuntos/inactivos, la edad queda congelada en el valor guardado.
-    if ((perro['estado']?.toString() ?? '') == 'inactivo') {
-      return edadBase;
-    }
-
-    final anioBase = int.tryParse(perro['edad_anio_base']?.toString() ?? '') ?? DateTime.now().year;
-    final aniosTranscurridos = DateTime.now().year - anioBase;
-
-    return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
-  }
-
-  String _formatearEdadTexto(Map<String, dynamic> perro) {
-    if (perro['edad_indeterminada'] == true) {
-      return 'Edad: Indeterminada';
-    }
-
-    final edadValor = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
-    if (edadValor == 0) {
-      return 'Edad: ${perro['meses'] ?? 0} meses';
-    }
-
-    return 'Edad estimada: ${_calcularEdadEstimada(perro)} años';
   }
 
   @override
@@ -175,54 +125,43 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             ),
           ),
           Expanded(
-            child: StreamBuilder(
-        stream: FirebaseFirestore.instance.collection('perros').snapshots(),
-        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+            child: StreamBuilder<List<PerroModel>>(
+        stream: _perroController.observarPerros(),
+        builder: (context, AsyncSnapshot<List<PerroModel>> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(child: Text(widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
           }
 
-          final perrosPorEstado = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final estado = data['estado'] as String?;
+          final perrosPorEstado = snapshot.data!.where((perro) {
             if (widget.soloInactivos) {
-              return estado == 'inactivo';
+              return perro.estado == 'inactivo';
             } else {
-              return estado == null || estado == 'activo';
+              return perro.estado == 'activo';
             }
           }).toList();
 
-          final totalEnCasa = perrosPorEstado.where((p) => (p.data() as Map<String, dynamic>)['en_casa'] == true).length;
+          final totalEnCasa = perrosPorEstado.where((p) => p.enCasa).length;
           final totalRefugio = perrosPorEstado.length - totalEnCasa;
 
-          final perros = perrosPorEstado.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final enCasa = data['en_casa'] == true;
-
+          final perros = perrosPorEstado.where((perro) {
             if (_filtroUbicacion == 'En casa') {
-              return enCasa;
+              return perro.enCasa;
             }
             if (_filtroUbicacion == 'Refugio') {
-              return !enCasa;
+              return !perro.enCasa;
             }
             return true;
-          }).where((doc) {
+          }).where((perro) {
             if (_textoBusqueda.isEmpty) return true;
-            final data = doc.data() as Map<String, dynamic>;
-            final nombre = (data['nombre'] as String? ?? '').toLowerCase();
-            return nombre.contains(_textoBusqueda.toLowerCase());
+            return perro.nombre.toLowerCase().contains(_textoBusqueda.toLowerCase());
           }).toList();
 
           perros.sort((a, b) {
-            final dataA = a.data() as Map<String, dynamic>;
-            final dataB = b.data() as Map<String, dynamic>;
-            final fechaA = dataA['fecha_ingreso'];
-            final fechaB = dataB['fecha_ingreso'];
-            DateTime? dtA = fechaA is Timestamp ? fechaA.toDate() : null;
-            DateTime? dtB = fechaB is Timestamp ? fechaB.toDate() : null;
+            final dtA = a.fechaIngreso;
+            final dtB = b.fechaIngreso;
             if (dtA == null && dtB == null) return 0;
             if (dtA == null) return 1;
             if (dtB == null) return -1;
@@ -263,7 +202,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                       itemCount: perros.length,
                       itemBuilder: (context, index) {
                         final idDocumento = perros[index].id;
-                        final perro = perros[index].data() as Map<String, dynamic>;
+                        final perro = perros[index];
 
                         return GestureDetector(
                           onTap: () {
@@ -282,9 +221,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                               fit: StackFit.expand,
                               children: [
                                 Positioned.fill(
-                                  child: perro['foto_perfil'] != null && perro['foto_perfil'].toString().isNotEmpty
+                                  child: perro.fotoPerfil != null && perro.fotoPerfil!.isNotEmpty
                                       ? Image.network(
-                                          perro['foto_perfil'],
+                                          perro.fotoPerfil!,
                                           fit: BoxFit.cover,
                                           errorBuilder: (_, _, _) => Container(
                                             color: Theme.of(context).colorScheme.primary,
@@ -326,7 +265,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        perro['nombre'] ?? 'Sin nombre',
+                                        perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 26,
@@ -335,24 +274,24 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
-                                        'Fecha de ingreso: ${_formatearFecha(perro['fecha_ingreso'])}',
+                                        'Fecha de ingreso: ${_perroController.formatearFecha(perro.fechaIngreso)}',
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
                                       Text(
-                                        perro['sexo'] == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
+                                        perro.sexo == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
                                       Text(
-                                        _formatearEdadTexto(perro),
+                                        _perroController.formatearEdadTexto(perro),
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
                                       Text(
-                                        perro['castrado'] == true ? 'Castrado: Sí' : 'Castrado: No',
+                                        perro.castrado ? 'Castrado: Sí' : 'Castrado: No',
                                         style: const TextStyle(fontSize: 15, color: Colors.white70),
                                       ),
-                                      if (widget.soloInactivos && perro['fecha_fallecimiento'] != null)
+                                      if (widget.soloInactivos && perro.fechaFallecimiento != null)
                                         Text(
-                                          'Fallecimiento: ${_formatearFecha(perro['fecha_fallecimiento'])}',
+                                          'Fallecimiento: ${_perroController.formatearFecha(perro.fechaFallecimiento)}',
                                           style: const TextStyle(fontSize: 15, color: Colors.white70),
                                         ),
                                     ],
@@ -371,7 +310,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro),
+                                            builder: (context) => FormularioPerro(idDocumento: idDocumento, datosActuales: perro.toMap()),
                                           ),
                                         );
                                       },

@@ -11,7 +11,8 @@ class NotificacionesService {
   NotificacionesService._();
   static final NotificacionesService instance = NotificacionesService._();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _inicializado = false;
   bool _inicializando = false;
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -34,21 +35,36 @@ class NotificacionesService {
       final String timeZoneName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
 
-      const configuracionAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const configuracionInicializacion = InitializationSettings(android: configuracionAndroid);
+      const configuracionAndroid = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
+      const configuracionWindows = WindowsInitializationSettings(
+        appName: 'Fichas Refugio',
+        appUserModelId: 'com.fichasrefugio.app',
+        guid: '10de3825-9a9f-4245-8e9e-7d6eb8a601fb',
+      );
+      const configuracionInicializacion = InitializationSettings(
+        android: configuracionAndroid,
+        windows: configuracionWindows,
+      );
 
       await _plugin.initialize(
         configuracionInicializacion,
         onDidReceiveNotificationResponse: _alRecibirRespuestaNotificacion,
       );
 
-      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       // Se crea explícitamente con importancia alta para que Samsung/Android 13+
       // no lo hereden con una importancia distinta si ya existía de una versión previa.
       await androidPlugin?.createNotificationChannel(_canalTratamientos);
 
-      final permisoNotificaciones = await androidPlugin?.requestNotificationsPermission();
-      final permisoAlarmasExactas = await androidPlugin?.requestExactAlarmsPermission();
+      final permisoNotificaciones = await androidPlugin
+          ?.requestNotificationsPermission();
+      final permisoAlarmasExactas = await androidPlugin
+          ?.requestExactAlarmsPermission();
       if (permisoNotificaciones == false || permisoAlarmasExactas == false) {
         // El usuario denegó el permiso: sin esto, las notificaciones fallan
         // en silencio (no lanza excepción) en Android 13+ y en Samsung.
@@ -69,7 +85,9 @@ class NotificacionesService {
     final idPerro = respuesta.payload;
     if (idPerro == null || idPerro.isEmpty) return;
     _navigatorKey?.currentState?.push(
-      MaterialPageRoute(builder: (_) => FichaDetallePerro(idDocumento: idPerro)),
+      MaterialPageRoute(
+        builder: (_) => FichaDetallePerro(idDocumento: idPerro),
+      ),
     );
   }
 
@@ -82,7 +100,9 @@ class NotificacionesService {
 
   /// Cancela todas las notificaciones y reprograma una alarma diaria por cada tratamiento activo,
   /// respetando la hora guardada en `hora_recordatorio` (formato 'HH:mm').
-  Future<void> programarRecordatorios(List<Map<String, dynamic>> perrosConTratamiento) async {
+  Future<void> programarRecordatorios(
+    List<Map<String, dynamic>> perrosConTratamiento,
+  ) async {
     await inicializar();
     await _plugin.cancelAll();
 
@@ -91,7 +111,8 @@ class NotificacionesService {
     for (final perro in perrosConTratamiento) {
       if (perro['estado'] == 'inactivo') continue;
 
-      final idPerro = perro['id']?.toString() ?? perro['id_documento']?.toString() ?? '';
+      final idPerro =
+          perro['id']?.toString() ?? perro['id_documento']?.toString() ?? '';
       final nombrePerro = perro['nombre']?.toString() ?? 'tu perrito';
       final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
 
@@ -106,18 +127,27 @@ class NotificacionesService {
           if (tratamiento['activo'] == false) continue;
           if (medicacion.isEmpty) continue;
 
-          final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+          final diasDuracion =
+              int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
           final fechaInicio = _leerFecha(tratamiento['fecha_inicio']) ?? ahora;
 
-          final partesHora = (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(':');
-          final hora = partesHora.isNotEmpty ? int.tryParse(partesHora[0]) ?? 9 : 9;
-          final minuto = partesHora.length > 1 ? int.tryParse(partesHora[1]) ?? 0 : 0;
+          final partesHora =
+              (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(
+                ':',
+              );
+          final hora = partesHora.isNotEmpty
+              ? int.tryParse(partesHora[0]) ?? 9
+              : 9;
+          final minuto = partesHora.length > 1
+              ? int.tryParse(partesHora[1]) ?? 0
+              : 0;
 
           const detallesNotificacion = NotificationDetails(
             android: AndroidNotificationDetails(
               'tratamientos_diarios',
               'Recordatorios de tratamientos',
-              channelDescription: 'Recordatorio diario para administrar medicación a los perros',
+              channelDescription:
+                  'Recordatorio diario para administrar medicación a los perros',
               importance: Importance.high,
               priority: Priority.high,
             ),
@@ -144,13 +174,24 @@ class NotificacionesService {
           if (ahora.isAfter(fechaFin)) continue;
 
           final inicioBucle = ahora.isAfter(fechaInicio) ? ahora : fechaInicio;
-          var fechaCursor = DateTime(inicioBucle.year, inicioBucle.month, inicioBucle.day);
+          var fechaCursor = DateTime(
+            inicioBucle.year,
+            inicioBucle.month,
+            inicioBucle.day,
+          );
           var indiceDia = 0;
 
           while (!fechaCursor.isAfter(fechaFin)) {
-            final horarioDelDia = DateTime(fechaCursor.year, fechaCursor.month, fechaCursor.day, hora, minuto);
+            final horarioDelDia = DateTime(
+              fechaCursor.year,
+              fechaCursor.month,
+              fechaCursor.day,
+              hora,
+              minuto,
+            );
             if (horarioDelDia.isAfter(ahora)) {
-              final idNotificacionDia = '$idPerro-$idTratamiento-$indiceDia'.hashCode & 0x7fffffff;
+              final idNotificacionDia =
+                  '$idPerro-$idTratamiento-$indiceDia'.hashCode & 0x7fffffff;
               await _plugin.zonedSchedule(
                 idNotificacionDia,
                 'Medicación pendiente',
@@ -169,12 +210,16 @@ class NotificacionesService {
         }
 
         // Dosis única / Visita veterinaria: alarma única a futuro (no recurrente).
-        final fechaProximoRecordatorio = _leerFecha(tratamiento['fecha_proximo_recordatorio']);
+        final fechaProximoRecordatorio = _leerFecha(
+          tratamiento['fecha_proximo_recordatorio'],
+        );
         if (fechaProximoRecordatorio == null) continue;
         if (!fechaProximoRecordatorio.isAfter(ahora)) continue;
 
         final esVisitaVet = categoria == 'veterinaria';
-        final titulo = esVisitaVet ? 'Visita veterinaria' : 'Dosis única pendiente';
+        final titulo = esVisitaVet
+            ? 'Visita veterinaria'
+            : 'Dosis única pendiente';
         final cuerpo = esVisitaVet
             ? 'Recordatorio: visita veterinaria para $nombrePerro'
             : 'Recordatorio: aplicar $medicacion a $nombrePerro';
@@ -188,7 +233,8 @@ class NotificacionesService {
             android: AndroidNotificationDetails(
               'tratamientos_diarios',
               'Recordatorios de tratamientos',
-              channelDescription: 'Recordatorio diario para administrar medicación a los perros',
+              channelDescription:
+                  'Recordatorio diario para administrar medicación a los perros',
               importance: Importance.high,
               priority: Priority.high,
             ),
@@ -205,7 +251,13 @@ class NotificacionesService {
   // resultante corresponda a la hora:minuto pedidos en la zona horaria del dispositivo.
   tz.TZDateTime _proximaInstancia(int hora, int minuto) {
     final ahora = DateTime.now();
-    var horarioLocal = DateTime(ahora.year, ahora.month, ahora.day, hora, minuto);
+    var horarioLocal = DateTime(
+      ahora.year,
+      ahora.month,
+      ahora.day,
+      hora,
+      minuto,
+    );
     if (horarioLocal.isBefore(ahora)) {
       horarioLocal = horarioLocal.add(const Duration(days: 1));
     }

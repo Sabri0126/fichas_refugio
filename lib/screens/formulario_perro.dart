@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +8,11 @@ import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../controllers/perro_controller.dart';
+import '../controllers/tratamiento_controller.dart';
+import '../models/perro_model.dart';
+import '../models/tratamiento_model.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -21,6 +25,8 @@ class FormularioPerro extends StatefulWidget {
 }
 
 class _FormularioPerroState extends State<FormularioPerro> {
+  final PerroController _perroController = PerroController();
+  final TratamientoController _tratamientoController = TratamientoController();
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
@@ -39,7 +45,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   String _estado = 'activo';
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
-  List<Map<String, dynamic>> _tratamientos = [];
+  List<TratamientoModel> _tratamientos = [];
 
   bool _hayCambios = false;
 
@@ -50,47 +56,26 @@ class _FormularioPerroState extends State<FormularioPerro> {
   void initState() {
     super.initState();
     if (widget.datosActuales != null) {
-      _nombreController.text = widget.datosActuales!['nombre'] ?? '';
-      _edadController.text = widget.datosActuales!['edad']?.toString() ?? '';
-      _mesesController.text = widget.datosActuales!['meses']?.toString() ?? '';
-      _edadIndeterminada = widget.datosActuales!['edad_indeterminada'] ?? false;
-      _historiaController.text = widget.datosActuales!['historia'] ?? '';
-      _fichaMedicaController.text = widget.datosActuales!['ficha_medica'] ?? '';
+      final perro = PerroModel.fromMap(widget.datosActuales!, widget.idDocumento ?? '');
+      _nombreController.text = perro.nombre;
+      _edadController.text = perro.edad.toString();
+      _mesesController.text = perro.meses.toString();
+      _edadIndeterminada = perro.edadIndeterminada;
+      _historiaController.text = perro.historia;
+      _fichaMedicaController.text = perro.fichaMedica;
 
-      final fecha = widget.datosActuales!['fecha_ingreso'];
-      if (fecha is Timestamp) {
-        _fechaIngreso = fecha.toDate();
-      } else if (fecha is DateTime) {
-        _fechaIngreso = fecha;
-      } else if (fecha is String) {
-        _fechaIngreso = DateTime.tryParse(fecha);
-      }
-
+      _fechaIngreso = perro.fechaIngreso;
       _fechaIngresoController.text = _fechaIngreso != null
           ? '${_fechaIngreso!.day.toString().padLeft(2, '0')}/${_fechaIngreso!.month.toString().padLeft(2, '0')}/${_fechaIngreso!.year}'
           : '';
-      _estaCastrado = widget.datosActuales!['castrado'] ?? false;
-      _enCasa = widget.datosActuales!['en_casa'] ?? false;
-      _estado = widget.datosActuales!['estado'] ?? 'activo';
-      _sexo = widget.datosActuales!['sexo'] ?? 'macho';
-      final parientesRaw = widget.datosActuales!['parientes'];
-      if (parientesRaw is List) {
-        _parientes = parientesRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      }
+      _estaCastrado = perro.castrado;
+      _enCasa = perro.enCasa;
+      _estado = perro.estado;
+      _sexo = perro.sexo;
+      _parientes = perro.parientes;
+      _tratamientos = perro.tratamientos;
 
-      final tratamientosRaw = widget.datosActuales!['tratamientos'];
-      if (tratamientosRaw is List) {
-        _tratamientos = tratamientosRaw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      }
-
-      final fechaFall = widget.datosActuales!['fecha_fallecimiento'];
-      if (fechaFall is Timestamp) {
-        _fechaFallecimiento = fechaFall.toDate();
-      } else if (fechaFall is DateTime) {
-        _fechaFallecimiento = fechaFall;
-      } else if (fechaFall is String) {
-        _fechaFallecimiento = DateTime.tryParse(fechaFall);
-      }
+      _fechaFallecimiento = perro.fechaFallecimiento;
       _fechaFallecimientoController.text = _fechaFallecimiento != null
           ? '${_fechaFallecimiento!.day.toString().padLeft(2, '0')}/${_fechaFallecimiento!.month.toString().padLeft(2, '0')}/${_fechaFallecimiento!.year}'
           : '';
@@ -175,16 +160,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
       text: nuevoTexto,
       selection: TextSelection.collapsed(offset: nuevaPosicion),
     );
-  }
-
-  String _obtenerRelacionInversa(String relacion, String sexoOriginal) {
-    if (relacion == 'Madre' || relacion == 'Padre') {
-      return sexoOriginal == 'hembra' ? 'Hija' : 'Hijo';
-    }
-    if (relacion == 'Hijo/a') {
-      return sexoOriginal == 'hembra' ? 'Madre' : 'Padre';
-    }
-    return 'Hermano/a';
   }
 
   void _abrirOpcionesFotoPerfil() {
@@ -322,57 +297,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
     }
   }
 
-  DateTime? _leerFecha(dynamic valor) {
-    if (valor is Timestamp) return valor.toDate();
-    if (valor is DateTime) return valor;
-    if (valor is String) return DateTime.tryParse(valor);
-    return null;
-  }
-
-  Future<void> _actualizarEdadesCachorros(
-    WriteBatch batch,
-    CollectionReference<Map<String, dynamic>> perrosRef,
-    String idExcluir,
-  ) async {
-    final ahora = DateTime.now();
-    final cachorrosSnapshot = await perrosRef.where('edad', isEqualTo: 0).get();
-
-    for (final doc in cachorrosSnapshot.docs) {
-      if (doc.id == idExcluir) continue;
-
-      final datos = doc.data();
-
-      // Los perros fallecidos quedan congelados: nunca deben envejecer.
-      final fechaFallecimiento = datos['fecha_fallecimiento'];
-      final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
-      if (tieneFechaFallecimiento || datos['estado']?.toString() == 'inactivo') continue;
-
-      if (datos['edad_indeterminada'] == true) continue;
-
-      final ultimaActualizacion = _leerFecha(datos['ultima_actualizacion_edad']) ?? _leerFecha(datos['fecha_ingreso']);
-      if (ultimaActualizacion == null) continue;
-
-      final mesesPasados = (ahora.year - ultimaActualizacion.year) * 12 + ahora.month - ultimaActualizacion.month;
-      if (mesesPasados <= 0) continue;
-
-      final mesesActuales = int.tryParse(datos['meses']?.toString() ?? '') ?? 0;
-      final nuevoTotalMeses = mesesActuales + mesesPasados;
-
-      if (nuevoTotalMeses >= 12) {
-        batch.update(doc.reference, {
-          'edad': 1,
-          'meses': 0,
-          'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
-        });
-      } else {
-        batch.update(doc.reference, {
-          'meses': nuevoTotalMeses,
-          'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
-        });
-      }
-    }
-  }
-
   void _confirmarEliminarFicha() {
     showDialog(
       context: context,
@@ -386,7 +310,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           ),
           TextButton(
             onPressed: () async {
-              await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).delete();
+              await _perroController.eliminarPerro(widget.idDocumento!);
               Navigator.of(context)..pop()..pop();
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
@@ -401,11 +325,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
       setState(() => _estaGuardando = true);
 
       try {
-        final perrosRef = FirebaseFirestore.instance.collection('perros');
-        final docRef = widget.idDocumento == null ? perrosRef.doc() : perrosRef.doc(widget.idDocumento);
-        final idPerroActual = docRef.id;
-        final nombrePerroActual = _nombreController.text.trim();
-
         String? urlImagen = widget.datosActuales?['foto_perfil'];
 
         if (_imagenSeleccionada != null) {
@@ -428,55 +347,28 @@ class _FormularioPerroState extends State<FormularioPerro> {
             .where((p) => (p['id'] as String).isNotEmpty)
             .toList();
 
-        final datosFicha = {
-          'nombre': _nombreController.text.trim(),
-          if (_fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(_fechaIngreso!),
-          'sexo': _sexo,
-          'edad': int.tryParse(_edadController.text.trim()) ?? 0,
-          'edad_indeterminada': _edadIndeterminada,
-          'meses': int.tryParse(_mesesController.text.trim()) ?? 0,
-          if (_estado != 'inactivo') 'edad_anio_base': DateTime.now().year,
-          'historia': _historiaController.text.trim(),
-          'ficha_medica': _fichaMedicaController.text.trim(),
-          'castrado': _estaCastrado,
-          'en_casa': _enCasa,
-          'estado': _estado,
-          if (_estado == 'inactivo' && _fechaFallecimiento != null)
-            'fecha_fallecimiento': Timestamp.fromDate(_fechaFallecimiento!),
-          'parientes': parientesNormalizados,
-          'tratamientos': _tratamientos,
-          'foto_perfil': urlImagen,
-          'ultima_actualizacion_edad': FieldValue.serverTimestamp(),
-        };
+        final perro = PerroModel(
+          id: widget.idDocumento ?? '',
+          nombre: _nombreController.text.trim(),
+          sexo: _sexo,
+          estado: _estado,
+          edad: int.tryParse(_edadController.text.trim()) ?? 0,
+          meses: int.tryParse(_mesesController.text.trim()) ?? 0,
+          edadIndeterminada: _edadIndeterminada,
+          edadAnioBase: _estado != 'inactivo' ? DateTime.now().year : null,
+          fechaIngreso: _fechaIngreso,
+          fechaFallecimiento: _estado == 'inactivo' ? _fechaFallecimiento : null,
+          ultimaActualizacionEdad: DateTime.now(),
+          historia: _historiaController.text.trim(),
+          fichaMedica: _fichaMedicaController.text.trim(),
+          castrado: _estaCastrado,
+          enCasa: _enCasa,
+          fotoPerfil: urlImagen,
+          parientes: parientesNormalizados,
+          tratamientos: _tratamientos,
+        );
 
-        final batch = FirebaseFirestore.instance.batch();
-        batch.set(docRef, datosFicha, SetOptions(merge: true));
-
-        for (final familiar in parientesNormalizados) {
-          final idFamiliar = familiar['id'] as String;
-          if (idFamiliar.isEmpty || idFamiliar == idPerroActual) continue;
-
-          final relacionInversa = _obtenerRelacionInversa(
-            familiar['relacion']?.toString() ?? 'Hermano/a',
-            _sexo,
-          );
-
-          final refFamiliar = perrosRef.doc(idFamiliar);
-          batch.update(refFamiliar, {
-            'parientes': FieldValue.arrayUnion([
-              {
-                'id': idPerroActual,
-                'id_documento': idPerroActual,
-                'nombre': nombrePerroActual,
-                'relacion': relacionInversa,
-              }
-            ])
-          });
-        }
-
-        await _actualizarEdadesCachorros(batch, perrosRef, idPerroActual);
-
-        await batch.commit();
+        await _perroController.guardarPerro(perro);
 
         if (mounted) {
           Navigator.pop(context);
@@ -499,10 +391,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
     String seleccionadaRelacion = 'Hermano/a';
     const relaciones = ['Hermano/a', 'Padre', 'Madre', 'Hijo/a'];
 
-    final snapshot = await FirebaseFirestore.instance.collection('perros').get();
-    final opciones = snapshot.docs
-        .where((d) => d.id != widget.idDocumento)
-        .map((d) => {'id': d.id, 'nombre': (d.data())['nombre']?.toString() ?? d.id})
+    final listaPerros = await _perroController.obtenerListaPerros();
+    final opciones = listaPerros
+        .where((p) => p.id != widget.idDocumento)
+        .map((p) => {'id': p.id, 'nombre': p.nombre.isNotEmpty ? p.nombre : p.id})
         .toList();
 
     if (!mounted) return;
@@ -563,10 +455,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
         ),
       ),
     );
-  }
-
-  String _formatearFechaISO(DateTime fecha) {
-    return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _mostrarDialogoAgregarTratamiento() async {
@@ -731,35 +619,18 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   final medicacion = medicacionController.text.trim();
                   if (medicacion.isEmpty) return;
 
-                  final nuevoTratamiento = <String, dynamic>{
-                    'id': FirebaseFirestore.instance.collection('perros').doc().id,
-                    'medicacion': medicacion,
-                    'indicaciones': indicacionesController.text.trim(),
-                    'categoria': categoria,
-                    'fecha_inicio': Timestamp.fromDate(fechaInicio),
-                  };
+                  final horaFormateada =
+                      '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
 
-                  if (esEventoUnico) {
-                    nuevoTratamiento.addAll({
-                      'dias_duracion': 0,
-                      // Se registra la fecha elegida en el formulario (no la de hoy) para que el TableCalendar la ubique.
-                      'registro_dosis': [_formatearFechaISO(fechaInicio)],
-                      'activo': false,
-                      'fecha_proximo_recordatorio':
-                          categoria == 'unico' && fechaProximoRecordatorio != null
-                              ? Timestamp.fromDate(fechaProximoRecordatorio!)
-                              : null,
-                    });
-                  } else {
-                    final horaFormateada =
-                        '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
-                    nuevoTratamiento.addAll({
-                      'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
-                      'hora_recordatorio': horaFormateada,
-                      'registro_dosis': <String>[],
-                      'activo': true,
-                    });
-                  }
+                  final nuevoTratamiento = _tratamientoController.crearTratamiento(
+                    categoria: categoria,
+                    medicacion: medicacion,
+                    indicaciones: indicacionesController.text.trim(),
+                    fechaInicio: fechaInicio,
+                    diasDuracion: int.tryParse(diasController.text.trim()) ?? 0,
+                    horaRecordatorio: horaFormateada,
+                    fechaProximoRecordatorio: fechaProximoRecordatorio,
+                  );
 
                   setState(() {
                     _tratamientos.add(nuevoTratamiento);
@@ -778,14 +649,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _mostrarDialogoEditarTratamiento(int indice) async {
     final tratamiento = _tratamientos[indice];
-    final medicacionController = TextEditingController(text: tratamiento['medicacion']?.toString() ?? '');
-    final indicacionesController = TextEditingController(text: tratamiento['indicaciones']?.toString() ?? '');
-    final diasController = TextEditingController(text: tratamiento['dias_duracion']?.toString() ?? '0');
+    final medicacionController = TextEditingController(text: tratamiento.medicacion);
+    final indicacionesController = TextEditingController(text: tratamiento.indicaciones);
+    final diasController = TextEditingController(text: tratamiento.diasDuracion.toString());
 
-    final fechaInicioActual = tratamiento['fecha_inicio'];
-    DateTime fechaInicio = fechaInicioActual is Timestamp ? fechaInicioActual.toDate() : DateTime.now();
+    DateTime fechaInicio = tratamiento.fechaInicio ?? DateTime.now();
 
-    final partesHora = (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(':');
+    final partesHora = (tratamiento.horaRecordatorio ?? '09:00').split(':');
     TimeOfDay horaRecordatorio = TimeOfDay(
       hour: int.tryParse(partesHora.isNotEmpty ? partesHora[0] : '') ?? 9,
       minute: int.tryParse(partesHora.length > 1 ? partesHora[1] : '') ?? 0,
@@ -875,14 +745,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
 
                 setState(() {
-                  _tratamientos[indice] = {
-                    ...tratamiento,
-                    'medicacion': medicacion,
-                    'indicaciones': indicacionesController.text.trim(),
-                    'dias_duracion': int.tryParse(diasController.text.trim()) ?? 0,
-                    'fecha_inicio': Timestamp.fromDate(fechaInicio),
-                    'hora_recordatorio': horaFormateada,
-                  };
+                  _tratamientos[indice] = _tratamientoController.editarTratamiento(
+                    tratamiento,
+                    medicacion: medicacion,
+                    indicaciones: indicacionesController.text.trim(),
+                    diasDuracion: int.tryParse(diasController.text.trim()) ?? 0,
+                    fechaInicio: fechaInicio,
+                    horaRecordatorio: horaFormateada,
+                  );
                   _hayCambios = true;
                 });
                 Navigator.pop(ctx);
@@ -909,7 +779,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           TextButton(
             onPressed: () {
               setState(() {
-                _tratamientos[indice] = {..._tratamientos[indice], 'activo': false};
+                _tratamientos[indice] = _tratamientoController.archivar(_tratamientos[indice]);
                 _hayCambios = true;
               });
               Navigator.pop(ctx);
@@ -1003,7 +873,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 ),
               ),
               const SizedBox(height: 24),
-              TextFormField(controller: _nombreController, decoration: const InputDecoration(labelText: 'Nombre del perrito', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pets)), validator: (value) => value == null || value.trim().isEmpty ? 'Ingresá un nombre' : null),
+              TextFormField(controller: _nombreController, decoration: const InputDecoration(labelText: 'Nombre del perrito', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pets)), validator: _perroController.validarNombre),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _fechaIngresoController,
@@ -1058,12 +928,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   decoration: const InputDecoration(labelText: 'Meses (opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_view_month)),
                   keyboardType: TextInputType.number,
                   inputFormatters: [LengthLimitingTextInputFormatter(2)],
-                  validator: (value) {
-                    if (value != null && (int.tryParse(value) ?? 0) >= 12) {
-                      return 'El valor debe estar entre 0 y 11. A partir de los 12 meses equivale a 1 año.';
-                    }
-                    return null;
-                  },
+                  validator: _perroController.validarMeses,
                 ),
               ],
               const SizedBox(height: 16),
@@ -1222,8 +1087,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
               ),
               Builder(
                 builder: (context) {
-                  final entradasActivas = _tratamientos.asMap().entries.where((e) => e.value['activo'] != false).toList();
-                  final entradasArchivadas = _tratamientos.asMap().entries.where((e) => e.value['activo'] == false).toList();
+                  final entradasActivas = _tratamientos.asMap().entries.where((e) => e.value.activo).toList();
+                  final entradasArchivadas = _tratamientos.asMap().entries.where((e) => !e.value.activo).toList();
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1238,18 +1103,17 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           children: entradasActivas.map((entry) {
                             final i = entry.key;
                             final t = entry.value;
-                            final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
-                            final fechaInicio = t['fecha_inicio'];
-                            final fechaTexto = fechaInicio is Timestamp
-                                ? '${fechaInicio.toDate().day.toString().padLeft(2, '0')}/${fechaInicio.toDate().month.toString().padLeft(2, '0')}/${fechaInicio.toDate().year}'
+                            final dias = t.diasDuracion;
+                            final fechaTexto = t.fechaInicio != null
+                                ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
                                 : '';
-                            final horaRecordatorio = t['hora_recordatorio']?.toString() ?? '';
+                            final horaRecordatorio = t.horaRecordatorio ?? '';
                             return Card(
                               child: ListTile(
                                 onTap: () => _mostrarDialogoEditarTratamiento(i),
-                                title: Text(t['medicacion']?.toString() ?? ''),
+                                title: Text(t.medicacion),
                                 subtitle: Text(
-                                  '${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
+                                  '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
                                   '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
                                 ),
                                 trailing: Row(
@@ -1276,18 +1140,18 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           children: entradasArchivadas.map((entry) {
                             final i = entry.key;
                             final t = entry.value;
-                            final dias = int.tryParse(t['dias_duracion']?.toString() ?? '') ?? 0;
+                            final dias = t.diasDuracion;
 
                             return Card(
                               color: Colors.grey.shade200,
                               child: ListTile(
                                 title: Opacity(
                                   opacity: 0.6,
-                                  child: Text(t['medicacion']?.toString() ?? ''),
+                                  child: Text(t.medicacion),
                                 ),
                                 subtitle: Opacity(
                                   opacity: 0.6,
-                                  child: Text('${t['indicaciones'] ?? ''} · ${dias > 0 ? '$dias días' : 'Indefinido'}'),
+                                  child: Text('${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}'),
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -1296,7 +1160,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                                       icon: const Icon(Icons.restore),
                                       tooltip: 'Restaurar tratamiento',
                                       onPressed: () => setState(() {
-                                        _tratamientos[i] = {..._tratamientos[i], 'activo': true};
+                                        _tratamientos[i] = _tratamientoController.restaurar(_tratamientos[i]);
                                         _hayCambios = true;
                                       }),
                                     ),

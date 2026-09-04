@@ -14,6 +14,11 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
+import '../controllers/perro_controller.dart';
+import '../controllers/tratamiento_controller.dart';
+import '../models/perro_model.dart';
+import '../models/tratamiento_model.dart';
+
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
 
@@ -24,6 +29,8 @@ class FichaDetallePerro extends StatefulWidget {
 }
 
 class _FichaDetallePerroState extends State<FichaDetallePerro> {
+  final PerroController _perroController = PerroController();
+  final TratamientoController _tratamientoController = TratamientoController();
   final PageController _controladorCarrusel = PageController();
   final ImagePicker _picker = ImagePicker();
   bool _subiendoFoto = false;
@@ -53,10 +60,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return '${fechaDate.day.toString().padLeft(2, '0')}/${fechaDate.month.toString().padLeft(2, '0')}/${fechaDate.year}';
   }
 
-  String _fechaHoyISO() {
-    final hoy = DateTime.now();
-    return '${hoy.year.toString().padLeft(4, '0')}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-  }
+  String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
   Future<void> _actualizarDosisTratamiento(
     Map<String, dynamic> perro,
@@ -64,27 +68,19 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     String fechaHoy,
     bool marcar,
   ) async {
-    final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
-    final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
-    final indice = tratamientos.indexWhere(
-      (t) => t is Map && t['id']?.toString() == tratamiento['id']?.toString(),
-    );
+    final tratamientosRaw = List<dynamic>.from(perro['tratamientos'] ?? []);
+    final tratamientos = tratamientosRaw
+        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
+        .toList();
+
+    final indice = tratamientos.indexWhere((t) => t.id == tratamiento['id']?.toString());
     if (indice == -1) return;
 
-    final tratamientoActualizado = Map<String, dynamic>.from(tratamientos[indice] as Map);
-    final registroDosis = List<String>.from(tratamientoActualizado['registro_dosis'] ?? []);
-
-    if (marcar) {
-      if (!registroDosis.contains(fechaHoy)) registroDosis.add(fechaHoy);
-    } else {
-      registroDosis.remove(fechaHoy);
-    }
-
-    tratamientoActualizado['registro_dosis'] = registroDosis;
-    tratamientos[indice] = tratamientoActualizado;
+    final fecha = DateTime.tryParse(fechaHoy) ?? DateTime.now();
+    tratamientos[indice] = _tratamientoController.alternarDosis(tratamientos[indice], fecha, marcar);
 
     try {
-      await docRef.update({'tratamientos': tratamientos});
+      await _tratamientoController.guardarTratamientos(widget.idDocumento, tratamientos);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar el tratamiento')));
@@ -92,32 +88,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  int _calcularEdadEstimada(Map<String, dynamic> perro) {
-    final edadBase = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
-
-    // Para difuntos/inactivos, la edad queda congelada en el valor guardado.
-    if ((perro['estado']?.toString() ?? '') == 'inactivo') {
-      return edadBase;
-    }
-
-    final anioBase = int.tryParse(perro['edad_anio_base']?.toString() ?? '') ?? DateTime.now().year;
-    final aniosTranscurridos = DateTime.now().year - anioBase;
-
-    return edadBase + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
-  }
-
-  String _formatearEdadTexto(Map<String, dynamic> perro) {
-    if (perro['edad_indeterminada'] == true) {
-      return 'Edad: Indeterminada';
-    }
-
-    final edadValor = int.tryParse(perro['edad']?.toString() ?? '') ?? 0;
-    if (edadValor == 0) {
-      return 'Edad: ${perro['meses'] ?? 0} meses';
-    }
-
-    return 'Edad estimada: ${_calcularEdadEstimada(perro)} años';
-  }
+  String _formatearEdadTexto(Map<String, dynamic> perro) =>
+      _perroController.formatearEdadTexto(PerroModel.fromMap(perro, widget.idDocumento));
 
   Widget _construirTextoFormateado(String texto, double escala) {
     final textoLimpio = texto.trim();
@@ -234,22 +206,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       await refStorage.putFile(File(croppedFile.path));
       final nuevaUrl = await refStorage.getDownloadURL();
 
-      final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
-      final snapshot = await docRef.get();
-      final data = snapshot.data() as Map<String, dynamic>;
-
-      if (data['foto_perfil']?.toString() == url) {
-        await docRef.update({'foto_perfil': nuevaUrl});
-      } else {
-        final galeria = List<dynamic>.from(data['galeria'] ?? []);
-        final indice = galeria.indexWhere((foto) => (foto is Map ? foto['url']?.toString() : foto?.toString()) == url);
-        if (indice != -1) {
-          final item = Map<String, dynamic>.from(galeria[indice] as Map);
-          item['url'] = nuevaUrl;
-          galeria[indice] = item;
-          await docRef.update({'galeria': galeria});
-        }
-      }
+      await _perroController.actualizarUrlDeFoto(widget.idDocumento, url, nuevaUrl);
 
       if (context.mounted) Navigator.pop(context);
     } catch (_) {
@@ -313,10 +270,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).update({
-        'foto_perfil': perfilUrl.isNotEmpty ? perfilUrl : null,
-        'galeria': galeriaOrdenada,
-      });
+      await _perroController.reordenarFotos(
+        widget.idDocumento,
+        perfilUrl.isNotEmpty ? perfilUrl : null,
+        galeriaOrdenada,
+      );
 
       if (mounted) {
         setState(() {
@@ -364,13 +322,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
-      final snapshot = await docRef.get();
-      final data = snapshot.data() as Map<String, dynamic>;
-      final galeria = List<dynamic>.from(data['galeria'] ?? []);
-      galeria[index] = {'url': foto['url'], 'texto': textoDescriptivo};
-
-      await docRef.update({'galeria': galeria});
+      await _perroController.editarFotoDeGaleria(widget.idDocumento, index, textoDescriptivo);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar la foto')));
@@ -401,17 +353,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      final docRef = FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento);
-      final snapshot = await docRef.get();
-      final data = snapshot.data() as Map<String, dynamic>;
-      final galeria = List<dynamic>.from(data['galeria'] ?? []);
-      final fotoAEliminar = galeria[index];
-      galeria.removeAt(index);
+      final urlFoto = await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
 
-      await docRef.update({'galeria': galeria});
-
-      final urlFoto = fotoAEliminar['url']?.toString();
-      if (urlFoto != null && urlFoto.isNotEmpty) {
+      if (urlFoto != null) {
         try {
           final refStorage = FirebaseStorage.instance.refFromURL(urlFoto);
           await refStorage.delete();
@@ -495,14 +439,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           await refStorage.putFile(archivoParaSubir);
           final urlDescarga = await refStorage.getDownloadURL();
 
-          final nuevoItemGaleria = {
-            'url': urlDescarga,
-            'texto': textoDescriptivo,
-          };
-
-          await FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).update({
-            'galeria': FieldValue.arrayUnion([nuevoItemGaleria])
-          });
+          await _perroController.agregarFotoAGaleria(widget.idDocumento, urlDescarga, textoDescriptivo);
         } catch (e) {
           if (mounted && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al subir la foto')));
@@ -575,37 +512,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     final tratamientosRaw = List<dynamic>.from(perro['tratamientos'] ?? []);
     if (tratamientosRaw.isEmpty) return perro;
 
-    final ahora = DateTime.now();
-    var huboCambios = false;
+    final tratamientos = tratamientosRaw
+        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
+        .toList();
 
-    final tratamientosActualizados = tratamientosRaw.map((t) {
-      final tratamiento = Map<String, dynamic>.from(t as Map);
-      final categoria = tratamiento['categoria']?.toString() ?? 'diario';
+    final actualizados = _tratamientoController.autoArchivarVencidos(tratamientos);
+    if (!_tratamientoController.huboCambiosDeArchivado(tratamientos, actualizados)) return perro;
 
-      if (categoria == 'diario' && tratamiento['activo'] == true) {
-        final fechaInicio = _leerFechaGenerica(tratamiento['fecha_inicio']);
-        final diasDuracion = int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
+    _tratamientoController.guardarTratamientos(widget.idDocumento, actualizados).catchError((_) {});
 
-        if (fechaInicio != null && diasDuracion > 0) {
-          final fechaFin = fechaInicio.add(Duration(days: diasDuracion));
-          if (ahora.isAfter(fechaFin)) {
-            tratamiento['activo'] = false;
-            huboCambios = true;
-          }
-        }
-      }
-      return tratamiento;
-    }).toList();
-
-    if (!huboCambios) return perro;
-
-    FirebaseFirestore.instance
-        .collection('perros')
-        .doc(widget.idDocumento)
-        .update({'tratamientos': tratamientosActualizados})
-        .catchError((_) {});
-
-    return {...perro, 'tratamientos': tratamientosActualizados};
+    return {...perro, 'tratamientos': actualizados.map((t) => t.toMap()).toList()};
   }
 
   List<Widget> _buildTratamientos(Map<String, dynamic> perro, bool esInvitado) {
@@ -670,32 +586,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   void _mostrarHistorialCompleto(List<dynamic> tratamientos) {
-    final Map<DateTime, List<Map<String, dynamic>>> eventosCalendario = {};
-
-    for (final t in tratamientos) {
-      final tratamiento = Map<String, dynamic>.from(t as Map);
-      final medicacion = tratamiento['medicacion']?.toString() ?? '';
-      final indicaciones = tratamiento['indicaciones']?.toString() ?? '';
-      final categoria = tratamiento['categoria']?.toString() ?? 'diario';
-      final registroDosis = List<String>.from(tratamiento['registro_dosis'] ?? []);
-
-      final String detalle;
-      if (categoria == 'veterinaria') {
-        detalle = '🏥 $medicacion - $indicaciones';
-      } else {
-        detalle = '$medicacion - $indicaciones';
-      }
-
-      for (final fechaTexto in registroDosis) {
-        final fecha = DateTime.tryParse(fechaTexto);
-        if (fecha == null) continue;
-        final fechaNormalizada = DateTime.utc(fecha.year, fecha.month, fecha.day);
-
-        eventosCalendario
-            .putIfAbsent(fechaNormalizada, () => [])
-            .add({'medicacion': medicacion, 'indicaciones': indicaciones, 'detalle': detalle, 'categoria': categoria});
-      }
-    }
+    final modelos = tratamientos
+        .map((t) => TratamientoModel.fromMap(Map<String, dynamic>.from(t as Map), (t as Map)['id']?.toString() ?? ''))
+        .toList();
+    final eventosCalendario = _tratamientoController.construirEventosCalendario(modelos);
 
     showModalBottomSheet<void>(
       context: context,
@@ -966,12 +860,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   Widget build(BuildContext context) {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('perros').doc(widget.idDocumento).snapshots(),
+    return StreamBuilder<PerroModel?>(
+      stream: _perroController.observarPerroPorId(widget.idDocumento),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        if (!snapshot.hasData || snapshot.data == null) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
 
-        var perro = snapshot.data!.data() as Map<String, dynamic>;
+        var perro = {...snapshot.data!.toMap(), 'id': snapshot.data!.id};
         perro = _procesarAutoArchivado(perro);
         List<dynamic> galeria = perro['galeria'] ?? [];
 
