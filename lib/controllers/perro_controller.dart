@@ -63,12 +63,12 @@ class PerroController {
 
   /// Calcula la edad estimada actual de un perro a partir de su edad base y
   /// del año en que se registró dicha edad (`edad_anio_base`). Los perros con
-  /// estado `'inactivo'` (fallecidos) quedan con la edad congelada.
+  /// estado `'inactivo'` (fallecidos) o `'egresado'` quedan con la edad congelada.
   ///
   /// @param perro el perro sobre el cual calcular la edad.
   /// @return la edad estimada en años.
   int calcularEdadEstimada(PerroModel perro) {
-    if (perro.estado == 'inactivo') {
+    if (perro.estado == 'inactivo' || perro.estado == 'egresado') {
       return perro.edad;
     }
 
@@ -104,6 +104,16 @@ class PerroController {
     return '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
   }
 
+  /// Texto de UI para el motivo de egreso.
+  ///
+  /// @param motivo `'adopcion'`, `'familia'` o null.
+  /// @return `'Adoptado'`, `'Volvió con su familia'` o `''`.
+  String formatearMotivoEgreso(String? motivo) {
+    if (motivo == 'adopcion') return 'Adoptado';
+    if (motivo == 'familia') return 'Volvió con su familia';
+    return '';
+  }
+
   /// Determina la relación inversa a mostrar en el familiar vinculado (p. ej.
   /// si A es "Madre" de B, B es "Hijo/a" de A, respetando el sexo del perro
   /// original para elegir entre "Hijo" e "Hija").
@@ -133,6 +143,9 @@ class PerroController {
     final idPerroActual = docRef.id;
 
     final datosPerro = perro.toMap();
+    if (perro.motivoEgreso == null) datosPerro['motivo_egreso'] = FieldValue.delete();
+    if (perro.fechaEgreso == null) datosPerro['fecha_egreso'] = FieldValue.delete();
+    if (perro.notaEgreso == null) datosPerro['nota_egreso'] = FieldValue.delete();
 
     // La galería se gestiona exclusivamente desde sus propios métodos
     // (agregarFotoAGaleria, editarFotoDeGaleria, etc.), no desde este
@@ -178,7 +191,7 @@ class PerroController {
   /// cachorros (edad en años igual a `0`) y, si transcurrieron meses
   /// completos desde la última actualización, incrementa sus meses o los
   /// convierte a `1` año al llegar a los `12` meses. No afecta a perros con
-  /// edad indeterminada ni a los fallecidos/inactivos, que quedan congelados.
+  /// edad indeterminada ni a los fallecidos o egresados, que quedan congelados.
   ///
   /// @param batch el lote de escritura de Firestore donde se acumulan las
   /// actualizaciones (se agrega a la misma transacción que guarda la ficha).
@@ -196,10 +209,11 @@ class PerroController {
 
       final datos = doc.data();
 
-      // Los perros fallecidos quedan congelados: nunca deben envejecer.
+      // Los perros fallecidos y los egresados quedan congelados: nunca deben envejecer.
       final fechaFallecimiento = datos['fecha_fallecimiento'];
       final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
-      if (tieneFechaFallecimiento || datos['estado']?.toString() == 'inactivo') continue;
+      final estado = datos['estado']?.toString();
+      if (tieneFechaFallecimiento || estado == 'inactivo' || estado == 'egresado') continue;
 
       if (datos['edad_indeterminada'] == true) continue;
 

@@ -25,8 +25,8 @@ class PerroModel {
   /// Sexo del perro: `'macho'` o `'hembra'`.
   final String sexo;
 
-  /// Estado del perro dentro del refugio: `'activo'` (en el refugio o en
-  /// adopción) o `'inactivo'` (fallecido o dado de baja).
+  /// Estado del perro: `'activo'` (en el refugio), `'inactivo'` (fallecido)
+  /// o `'egresado'` (adoptado o reencontrado con su familia).
   final String estado;
 
   /// Edad del perro en años completos.
@@ -50,6 +50,15 @@ class PerroModel {
   /// Fecha de fallecimiento del perro, si corresponde (solo cuando
   /// `estado == 'inactivo'`).
   final DateTime? fechaFallecimiento;
+
+  /// Motivo de egreso: `'adopcion'` o `'familia'`. Null si el perro no egresó.
+  final String? motivoEgreso;
+
+  /// Fecha en la que el perro egresó del refugio.
+  final DateTime? fechaEgreso;
+
+  /// Nota libre del egreso. La ven también los visitantes.
+  final String? notaEgreso;
 
   /// Marca de tiempo de la última vez que se recalculó automáticamente la
   /// edad del perro (usada para el envejecimiento incremental de cachorros).
@@ -95,6 +104,9 @@ class PerroModel {
     this.edadAnioBase,
     this.fechaIngreso,
     this.fechaFallecimiento,
+    this.motivoEgreso,
+    this.fechaEgreso,
+    this.notaEgreso,
     this.ultimaActualizacionEdad,
     this.historia = '',
     this.fichaMedica = '',
@@ -178,6 +190,9 @@ class PerroModel {
       edadAnioBase: int.tryParse(data['edad_anio_base']?.toString() ?? ''),
       fechaIngreso: _fechaDesdeValor(data['fecha_ingreso']),
       fechaFallecimiento: _fechaDesdeValor(data['fecha_fallecimiento']),
+      motivoEgreso: data['motivo_egreso']?.toString(),
+      fechaEgreso: _fechaDesdeValor(data['fecha_egreso']),
+      notaEgreso: data['nota_egreso']?.toString(),
       ultimaActualizacionEdad: _fechaDesdeValor(data['ultima_actualizacion_edad']),
       historia: data['historia']?.toString() ?? '',
       fichaMedica: data['ficha_medica']?.toString() ?? '',
@@ -203,6 +218,9 @@ class PerroModel {
       if (edadAnioBase != null) 'edad_anio_base': edadAnioBase,
       if (fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(fechaIngreso!),
       if (fechaFallecimiento != null) 'fecha_fallecimiento': Timestamp.fromDate(fechaFallecimiento!),
+      if (motivoEgreso != null) 'motivo_egreso': motivoEgreso,
+      if (fechaEgreso != null) 'fecha_egreso': Timestamp.fromDate(fechaEgreso!),
+      if (notaEgreso != null) 'nota_egreso': notaEgreso,
       if (ultimaActualizacionEdad != null)
         'ultima_actualizacion_edad': Timestamp.fromDate(ultimaActualizacionEdad!),
       'historia': historia,
@@ -236,6 +254,9 @@ class PerroModel {
       edadAnioBase: edadAnioBase,
       fechaIngreso: fechaIngreso,
       fechaFallecimiento: fechaFallecimiento,
+      motivoEgreso: motivoEgreso,
+      fechaEgreso: fechaEgreso,
+      notaEgreso: notaEgreso,
       ultimaActualizacionEdad: ultimaActualizacionEdad,
       historia: historia,
       fichaMedica: fichaMedica,

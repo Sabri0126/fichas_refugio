@@ -802,6 +802,52 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
+  Widget _bannerEgreso(PerroModel perro) {
+    final motivo = _perroController.formatearMotivoEgreso(perro.motivoEgreso);
+    final nota = perro.notaEgreso?.trim();
+    final icono = perro.motivoEgreso == 'familia' ? Icons.home_rounded : Icons.favorite_rounded;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.activoTexto.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.activoTexto.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icono, color: AppColors.activoTexto),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  motivo,
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.activoTexto),
+                ),
+                if (perro.fechaEgreso != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Desde el ${_perroController.formatearFecha(perro.fechaEgreso)}',
+                    textScaler: _escala,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+                if (nota != null && nota.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(nota, textScaler: _escala, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -812,6 +858,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           textScaler: _escala,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
+        if (perro.estado == 'egresado') ...[
+          const SizedBox(height: 12),
+          _bannerEgreso(perro),
+        ],
         const SizedBox(height: 16),
         _buildDatosBasicos(perro),
         const SizedBox(height: 12),

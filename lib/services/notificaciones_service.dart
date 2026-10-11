@@ -109,7 +109,7 @@ class NotificacionesService {
     final ahora = DateTime.now();
 
     for (final perro in perrosConTratamiento) {
-      if (perro['estado'] == 'inactivo') continue;
+      if (perro['estado'] != 'activo') continue;
 
       final idPerro =
           perro['id']?.toString() ?? perro['id_documento']?.toString() ?? '';

@@ -57,7 +57,7 @@ class PantallaMenu extends StatelessWidget {
                   color: AppColors.terracota,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const PantallaPerros(soloInactivos: false)),
+                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.activos)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -67,7 +67,17 @@ class PantallaMenu extends StatelessWidget {
                   color: AppColors.navy,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const PantallaPerros(soloInactivos: true)),
+                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.difuntos)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _MenuButton(
+                  label: 'Adoptados y reencontrados',
+                  icon: Icons.favorite_rounded,
+                  color: AppColors.activoTexto,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.egresados)),
                   ),
                 ),
               ],

@@ -39,14 +39,18 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final TextEditingController _fechaIngresoController = TextEditingController();
   final TextEditingController _fechaFallecimientoController =
       TextEditingController();
+  final TextEditingController _fechaEgresoController = TextEditingController();
+  final TextEditingController _notaEgresoController = TextEditingController();
 
   DateTime? _fechaIngreso;
   DateTime? _fechaFallecimiento;
+  DateTime? _fechaEgreso;
   bool _estaCastrado = false;
   bool _enCasa = false;
   bool _estaGuardando = false;
   bool _edadIndeterminada = false;
   String _estado = 'activo';
+  String? _motivoEgreso;
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
   List<TratamientoModel> _tratamientos = [];
@@ -83,6 +87,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _fechaFallecimientoController.text = _fechaFallecimiento != null
           ? '${_fechaFallecimiento!.day.toString().padLeft(2, '0')}/${_fechaFallecimiento!.month.toString().padLeft(2, '0')}/${_fechaFallecimiento!.year}'
           : '';
+      _motivoEgreso = perro.motivoEgreso;
+      _fechaEgreso = perro.fechaEgreso;
+      _fechaEgresoController.text = _fechaEgreso != null
+          ? '${_fechaEgreso!.day.toString().padLeft(2, '0')}/${_fechaEgreso!.month.toString().padLeft(2, '0')}/${_fechaEgreso!.year}'
+          : '';
+      _notaEgresoController.text = perro.notaEgreso ?? '';
     }
     // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
     for (final c in [
@@ -91,6 +101,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _mesesController,
       _historiaController,
       _fichaMedicaController,
+      _fechaEgresoController,
+      _notaEgresoController,
     ]) {
       c.addListener(() => setState(() => _hayCambios = true));
     }
@@ -105,6 +117,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     _fichaMedicaController.dispose();
     _fechaIngresoController.dispose();
     _fechaFallecimientoController.dispose();
+    _fechaEgresoController.dispose();
+    _notaEgresoController.dispose();
     super.dispose();
   }
 
@@ -138,6 +152,20 @@ class _FormularioPerroState extends State<FormularioPerro> {
         _fechaIngresoController.text =
             '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
       });
+    }
+  }
+
+  Future<void> _seleccionarFechaEgreso() async {
+    final fechaSeleccionada = await showDatePicker(
+      context: context,
+      initialDate: _fechaEgreso ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (fechaSeleccionada != null) {
+      _fechaEgresoController.text =
+          '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
+      setState(() => _fechaEgreso = fechaSeleccionada);
     }
   }
 
@@ -401,10 +429,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
           edad: int.tryParse(_edadController.text.trim()) ?? 0,
           meses: int.tryParse(_mesesController.text.trim()) ?? 0,
           edadIndeterminada: _edadIndeterminada,
-          edadAnioBase: _estado != 'inactivo' ? DateTime.now().year : null,
+          edadAnioBase: _estado == 'activo' ? DateTime.now().year : null,
           fechaIngreso: _fechaIngreso,
           fechaFallecimiento: _estado == 'inactivo'
               ? _fechaFallecimiento
+              : null,
+          motivoEgreso: _estado == 'egresado' ? _motivoEgreso : null,
+          fechaEgreso: _estado == 'egresado' ? _fechaEgreso : null,
+          notaEgreso: _estado == 'egresado' && _notaEgresoController.text.trim().isNotEmpty
+              ? _notaEgresoController.text.trim()
               : null,
           ultimaActualizacionEdad: DateTime.now(),
           historia: _historiaController.text.trim(),
@@ -1490,19 +1523,35 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                   const SizedBox(height: 8),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text('Estado', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(width: 12),
-                      ChoiceChip(
-                        label: const Text('Activo'),
-                        selected: _estado == 'activo',
-                        onSelected: (_) => setState(() => _estado = 'activo'),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('Inactivo'),
-                        selected: _estado == 'inactivo',
-                        onSelected: (_) => setState(() => _estado = 'inactivo'),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Activo'),
+                              selected: _estado == 'activo',
+                              onSelected: (_) => setState(() => _estado = 'activo'),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Inactivo'),
+                              selected: _estado == 'inactivo',
+                              onSelected: (_) => setState(() => _estado = 'inactivo'),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Egresado'),
+                              selected: _estado == 'egresado',
+                              onSelected: (_) => setState(() {
+                                _estado = 'egresado';
+                                _motivoEgreso ??= 'adopcion';
+                              }),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1518,6 +1567,59 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       onTap: _seleccionarFechaFallecimiento,
                     ),
                   ],
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.topCenter,
+                    child: _estado == 'egresado'
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Motivo', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ChoiceChip(
+                                      label: const Text('Adoptado'),
+                                      selected: _motivoEgreso == 'adopcion',
+                                      onSelected: (_) => setState(() => _motivoEgreso = 'adopcion'),
+                                    ),
+                                    ChoiceChip(
+                                      label: const Text('Volvió con su familia'),
+                                      selected: _motivoEgreso == 'familia',
+                                      onSelected: (_) => setState(() => _motivoEgreso = 'familia'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _fechaEgresoController,
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Fecha de egreso (opcional)',
+                                    prefixIcon: Icon(Icons.event_available),
+                                  ),
+                                  onTap: _seleccionarFechaEgreso,
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _notaEgresoController,
+                                  minLines: 3,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nota (opcional)',
+                                    helperText: 'La ven también los visitantes. No cargues datos personales.',
+                                    alignLabelWithHint: true,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox(width: double.infinity),
+                  ),
                     ],
                   ),
                   const SizedBox(height: 16),
