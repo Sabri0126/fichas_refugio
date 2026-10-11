@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import 'pantalla_menu.dart';
 
 class PantallaLogin extends StatefulWidget {
@@ -74,7 +75,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensaje),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -94,7 +95,18 @@ class _PantallaLoginState extends State<PantallaLogin> {
               ),
             ),
           ),
-          Container(color: Colors.black.withValues(alpha: 0.55)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.25),
+                  Colors.black.withValues(alpha: 0.72),
+                ],
+              ),
+            ),
+          ),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -104,60 +116,59 @@ class _PantallaLoginState extends State<PantallaLogin> {
                   children: [
                     const Icon(Icons.pets, size: 72, color: Colors.white),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'Fichas Refugio',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Acceso para administradores',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.7),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                     ),
-                    const SizedBox(height: 40),
-                    _campo(
-                      controller: _emailController,
-                      label: 'Email',
-                      icono: Icons.email_outlined,
-                      teclado: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-                    _campoPassword(),
-                    const SizedBox(height: 28),
-                    SizedBox(
+                    const SizedBox(height: 32),
+                    Container(
                       width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _cargando ? null : _ingresar,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.superficie.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.bordeTarjeta),
+                      ),
+                      child: Column(
+                        children: [
+                          _campo(
+                            controller: _emailController,
+                            label: 'Email',
+                            icono: Icons.email_outlined,
+                            teclado: TextInputType.emailAddress,
                           ),
-                        ),
-                        child: _cargando
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                            : const Text(
-                                'Ingresar',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          const SizedBox(height: 16),
+                          _campoPassword(),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _cargando ? null : _ingresar,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.terracota,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(52),
                               ),
+                              child: _cargando
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                  : const Text('Ingresar'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -168,7 +179,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
                           MaterialPageRoute(builder: (context) => const PantallaMenu()),
                         );
                       },
-                      style: TextButton.styleFrom(foregroundColor: const Color(0xFFECDBBA)),
+                      style: TextButton.styleFrom(foregroundColor: AppColors.arena),
                       child: const Text(
                         'Entrar como visitante',
                         style: TextStyle(
@@ -199,21 +210,9 @@ class _PantallaLoginState extends State<PantallaLogin> {
     return TextField(
       controller: controller,
       keyboardType: teclado,
-      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        prefixIcon: Icon(icono, color: Colors.white70),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white38),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.deepOrange, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.08),
+        prefixIcon: Icon(icono),
       ),
     );
   }
@@ -222,28 +221,13 @@ class _PantallaLoginState extends State<PantallaLogin> {
     return TextField(
       controller: _passwordController,
       obscureText: !_verPassword,
-      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: 'Contraseña',
-        labelStyle: const TextStyle(color: Colors.white70),
-        prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
+        prefixIcon: const Icon(Icons.lock_outline),
         suffixIcon: IconButton(
-          icon: Icon(
-            _verPassword ? Icons.visibility_off : Icons.visibility,
-            color: Colors.white70,
-          ),
+          icon: Icon(_verPassword ? Icons.visibility_off : Icons.visibility),
           onPressed: () => setState(() => _verPassword = !_verPassword),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white38),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.deepOrange, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.08),
       ),
     );
   }

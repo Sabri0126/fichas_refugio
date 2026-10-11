@@ -17,8 +17,11 @@ abstract final class AppColors {
   static const Color dosisDada = Color(0xFF4F9D69);
   static const Color activo = dosisDada;
   static const Color pausado = Color(0xFFD9A441);
-  static const Color dosisOlvidada = Color(0xFFE07A5F);
+  static const Color dosisOlvidada = Color(0xFFD4644A);
   static const Color pendiente = Color(0xFFCFC7B8);
+  static const Color activoTexto = Color(0xFF2E6B44);
+  static const Color pausadoTexto = Color(0xFF8A6414);
 
   static const Color error = Color(0xFFB3261E);
+  static const Color sombra = Color(0x0F000000);
 }

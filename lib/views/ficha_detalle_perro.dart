@@ -1016,20 +1016,24 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     right: 8,
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          child: IconButton(
-                            icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.onPrimary, size: 20),
-                            onPressed: () => _editarFotoAGaleria(foto, index),
+                        IconButton.filled(
+                          tooltip: 'Editar descripción',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black.withValues(alpha: 0.5),
+                            foregroundColor: Colors.white,
                           ),
+                          icon: const Icon(Icons.edit, size: 20),
+                          onPressed: () => _editarFotoAGaleria(foto, index),
                         ),
                         const SizedBox(width: 8),
-                        CircleAvatar(
-                          backgroundColor: Theme.of(context).colorScheme.secondary,
-                          child: IconButton(
-                            icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.onSecondary, size: 20),
-                            onPressed: () => _eliminarFotoAGaleria(foto, index),
+                        IconButton.filled(
+                          tooltip: 'Eliminar foto',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black.withValues(alpha: 0.5),
+                            foregroundColor: Colors.white,
                           ),
+                          icon: const Icon(Icons.delete, size: 20),
+                          onPressed: () => _eliminarFotoAGaleria(foto, index),
                         ),
                       ],
                     ),
@@ -1041,25 +1045,25 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         if (_paginaActual > 0)
           Positioned(
             left: 8,
-            child: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              radius: 24,
-              child: IconButton(
-                icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onPrimary),
-                onPressed: _moverIzquierda,
+            child: IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.5),
+                foregroundColor: Colors.white,
               ),
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _moverIzquierda,
             ),
           ),
         if (_paginaActual < galeria.length - 1)
           Positioned(
             right: 8,
-            child: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              radius: 24,
-              child: IconButton(
-                icon: Icon(Icons.arrow_forward, color: Theme.of(context).colorScheme.onPrimary),
-                onPressed: _moverDerecha,
+            child: IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.5),
+                foregroundColor: Colors.white,
               ),
+              icon: const Icon(Icons.arrow_forward),
+              onPressed: _moverDerecha,
             ),
           ),
         if (galeria.length > 1)
@@ -1219,7 +1223,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         color: AppColors.superficie,
                         borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
                         boxShadow: [
-                          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+                          BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
                         ],
                       ),
                       clipBehavior: Clip.antiAlias,

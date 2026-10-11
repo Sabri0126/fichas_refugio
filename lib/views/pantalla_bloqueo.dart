@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../main.dart';
+import '../theme/app_colors.dart';
 import 'ficha_detalle_perro.dart';
 import 'pantalla_menu.dart';
 
@@ -80,7 +81,18 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
               ),
             ),
           ),
-          Container(color: Colors.black.withValues(alpha: 0.6)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.25),
+                  Colors.black.withValues(alpha: 0.72),
+                ],
+              ),
+            ),
+          ),
           SafeArea(
             child: Center(
               child: Padding(
@@ -94,11 +106,10 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
                       color: Colors.white.withValues(alpha: 0.9),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
+                    Text(
                       'Pantalla bloqueada',
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
@@ -106,9 +117,8 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
                     Text(
                       'Usá biometría o Windows Hello para acceder',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.7),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                     ),
                     if (_mensajeError != null) ...[
@@ -116,23 +126,30 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                          color: Color.alphaBlend(
+                            AppColors.error.withValues(alpha: 0.12),
+                            AppColors.superficie,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.error),
                         ),
                         child: Text(
                           _mensajeError!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.error),
                         ),
                       ),
                     ],
                     const SizedBox(height: 36),
                     SizedBox(
                       width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
+                      child: FilledButton.icon(
                         onPressed: _autenticando ? null : _desbloquear,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.terracota,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(52),
+                        ),
                         icon: _autenticando
                             ? const SizedBox(
                                 width: 20,
@@ -143,17 +160,7 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
                                 ),
                               )
                             : const Icon(Icons.fingerprint),
-                        label: Text(
-                          _autenticando ? 'Verificando...' : 'Desbloquear',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
+                        label: Text(_autenticando ? 'Verificando...' : 'Desbloquear'),
                       ),
                     ),
                   ],

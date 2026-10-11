@@ -128,6 +128,50 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.terracota,
       foregroundColor: Colors.white,
     ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: AppColors.superficie,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppColors.bordeTarjeta),
+      ),
+      titleTextStyle: textTheme.titleLarge,
+      contentTextStyle: textTheme.bodyMedium,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.navy,
+      contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        elevation: 0,
+        backgroundColor: AppColors.navy,
+        foregroundColor: AppColors.arena,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    ),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: AppColors.superficie,
+      surfaceTintColor: Colors.transparent,
+      headerBackgroundColor: AppColors.navy,
+      headerForegroundColor: AppColors.arena,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: AppColors.superficie,
+      dialBackgroundColor: AppColors.rellenoInput,
+      hourMinuteColor: AppColors.rellenoInput,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    expansionTileTheme: const ExpansionTileThemeData(
+      shape: Border(),
+      collapsedShape: Border(),
+    ),
     dividerTheme: const DividerThemeData(color: AppColors.bordeTarjeta),
   );
 }

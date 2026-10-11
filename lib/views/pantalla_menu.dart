@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import 'pantalla_perros.dart';
 
 class PantallaMenu extends StatelessWidget {
@@ -20,7 +21,18 @@ class PantallaMenu extends StatelessWidget {
               ),
             ),
           ),
-          Container(color: Colors.black.withValues(alpha: 0.4)),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.25),
+                  Colors.black.withValues(alpha: 0.72),
+                ],
+              ),
+            ),
+          ),
           SafeArea(
             child: Center(
               child: Padding(
@@ -30,12 +42,11 @@ class PantallaMenu extends StatelessWidget {
                   children: [
                     const Icon(Icons.pets, size: 72, color: Colors.white),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Refugio Milagros de Amor',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontSize: 32,
-                        fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
@@ -43,7 +54,7 @@ class PantallaMenu extends StatelessWidget {
                 _MenuButton(
                   label: 'Perritos del refugio',
                   icon: Icons.favorite,
-                  color: Colors.deepOrange,
+                  color: AppColors.terracota,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const PantallaPerros(soloInactivos: false)),
@@ -53,7 +64,7 @@ class PantallaMenu extends StatelessWidget {
                 _MenuButton(
                   label: 'Difuntos',
                   icon: Icons.local_florist,
-                  color: Colors.blueGrey,
+                  color: AppColors.navy,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const PantallaPerros(soloInactivos: true)),
@@ -88,15 +99,34 @@ class _MenuButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 64,
-      child: ElevatedButton.icon(
+      child: ElevatedButton(
         onPressed: onTap,
-        icon: Icon(icon, size: 28),
-        label: Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 4,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
         ),
       ),
     );

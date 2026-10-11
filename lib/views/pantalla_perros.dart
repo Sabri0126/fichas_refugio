@@ -258,12 +258,16 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                               ),
                             );
                           },
-                          child: Card(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: const [
+                                BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
+                              ],
+                            ),
+                            child: Card(
                             margin: EdgeInsets.zero,
                             clipBehavior: Clip.antiAlias,
-                            elevation: 3,
-                            shadowColor: Colors.black.withValues(alpha: 0.35),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
@@ -321,7 +325,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                           fontSize: 26,
                                           color: Colors.white,
-                                          shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+                                          shadows: [Shadow(color: Colors.black.withValues(alpha: 0.55), blurRadius: 6)],
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -356,7 +360,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                     child: IconButton(
                                       icon: const Icon(Icons.edit, color: Colors.white),
                                       style: IconButton.styleFrom(
-                                        backgroundColor: Colors.black54,
+                                        backgroundColor: Colors.black.withValues(alpha: 0.55),
                                       ),
                                       onPressed: () {
                                         Navigator.push(
@@ -370,6 +374,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                   ),
                               ],
                             ),
+                          ),
                           ),
                         ),
                         );

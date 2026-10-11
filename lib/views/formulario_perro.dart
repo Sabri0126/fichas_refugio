@@ -685,7 +685,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
       child: Text(
         activo ? 'Activo' : 'Pausado',
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: activo ? const Color(0xFF2E6B44) : const Color(0xFF8A6414),
+          color: activo ? AppColors.activoTexto : AppColors.pausadoTexto,
         ),
       ),
     );
