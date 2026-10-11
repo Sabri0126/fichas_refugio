@@ -1,13 +1,61 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../controllers/historial_notificaciones_controller.dart';
 import '../theme/app_colors.dart';
+import 'pantalla_notificaciones.dart';
 import 'pantalla_perros.dart';
 
-class PantallaMenu extends StatelessWidget {
+class PantallaMenu extends StatefulWidget {
   const PantallaMenu({super.key});
 
   @override
+  State<PantallaMenu> createState() => _PantallaMenuState();
+}
+
+class _PantallaMenuState extends State<PantallaMenu> with WidgetsBindingObserver {
+  final HistorialNotificacionesController _historial = HistorialNotificacionesController();
+  int _noLeidas = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refrescarBadge();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refrescarBadge();
+    }
+  }
+
+  Future<void> _refrescarBadge() async {
+    await _historial.reconciliar();
+    final cantidad = await _historial.contarNoLeidas();
+    if (!mounted) return;
+    setState(() => _noLeidas = cantidad);
+  }
+
+  Future<void> _abrirNotificaciones() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PantallaNotificaciones()),
+    );
+    if (!mounted) return;
+    await _refrescarBadge();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -34,7 +82,9 @@ class PantallaMenu extends StatelessWidget {
             ),
           ),
           SafeArea(
-            child: Center(
+            child: Stack(
+              children: [
+                Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
@@ -84,7 +134,33 @@ class PantallaMenu extends StatelessWidget {
             ),
           ),
         ),
-      ),
+                if (!esInvitado)
+                  Positioned(
+                    top: 0,
+                    right: 8,
+                    child: Badge(
+                      isLabelVisible: _noLeidas > 0,
+                      label: Text(_noLeidas > 9 ? '9+' : '$_noLeidas'),
+                      child: IconButton(
+                        tooltip: 'Notificaciones',
+                        onPressed: _abrirNotificaciones,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withValues(alpha: 0.4),
+                          foregroundColor: Colors.white,
+                          fixedSize: const Size(44, 44),
+                          shape: const CircleBorder(),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: const Icon(Icons.notifications_rounded),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

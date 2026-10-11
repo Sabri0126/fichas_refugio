@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import '../controllers/historial_notificaciones_controller.dart';
 import '../views/ficha_detalle_perro.dart';
 
 /// Programa recordatorios diarios de medicación usando notificaciones locales.
@@ -104,9 +105,13 @@ class NotificacionesService {
     List<Map<String, dynamic>> perrosConTratamiento,
   ) async {
     await inicializar();
+    try {
+      await HistorialNotificacionesController().reconciliar();
+    } catch (_) {}
     await _plugin.cancelAll();
 
     final ahora = DateTime.now();
+    final alarmas = <Map<String, dynamic>>[];
 
     for (final perro in perrosConTratamiento) {
       if (perro['estado'] != 'activo') continue;
@@ -153,18 +158,34 @@ class NotificacionesService {
             ),
           );
 
+          const tituloDiario = 'Medicación pendiente';
+          final cuerpoDiario = 'Toca darle $medicacion a $nombrePerro';
+          final horaTexto = '${hora.toString().padLeft(2, '0')}:${minuto.toString().padLeft(2, '0')}';
+
           if (diasDuracion == 0) {
             // Sin fecha de finalización (indefinido): se mantiene la alarma diaria recurrente.
+            final proxima = _proximaInstancia(hora, minuto);
             await _plugin.zonedSchedule(
               idNotificacion,
-              'Medicación pendiente',
-              'Toca darle $medicacion a $nombrePerro',
-              _proximaInstancia(hora, minuto),
+              tituloDiario,
+              cuerpoDiario,
+              proxima,
               detallesNotificacion,
               androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
               matchDateTimeComponents: DateTimeComponents.time,
               payload: idPerro,
             );
+            alarmas.add({
+              'id': idNotificacion,
+              'titulo': tituloDiario,
+              'cuerpo': cuerpoDiario,
+              'idPerro': idPerro,
+              'categoria': 'diario',
+              'fecha': _isoLocal(proxima),
+              'repite': true,
+              'hora': horaTexto,
+              'desde': _isoLocal(fechaInicio),
+            });
             continue;
           }
 
@@ -194,14 +215,22 @@ class NotificacionesService {
                   '$idPerro-$idTratamiento-$indiceDia'.hashCode & 0x7fffffff;
               await _plugin.zonedSchedule(
                 idNotificacionDia,
-                'Medicación pendiente',
-                'Toca darle $medicacion a $nombrePerro',
+                tituloDiario,
+                cuerpoDiario,
                 tz.TZDateTime.from(horarioDelDia, tz.local),
                 detallesNotificacion,
                 androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
                 matchDateTimeComponents: null,
                 payload: idPerro,
               );
+              alarmas.add({
+                'id': idNotificacionDia,
+                'titulo': tituloDiario,
+                'cuerpo': cuerpoDiario,
+                'idPerro': idPerro,
+                'categoria': 'diario',
+                'fecha': _isoLocal(horarioDelDia),
+              });
             }
             fechaCursor = fechaCursor.add(const Duration(days: 1));
             indiceDia++;
@@ -243,8 +272,24 @@ class NotificacionesService {
           matchDateTimeComponents: null,
           payload: idPerro,
         );
+        alarmas.add({
+          'id': idNotificacion,
+          'titulo': titulo,
+          'cuerpo': cuerpo,
+          'idPerro': idPerro,
+          'categoria': esVisitaVet ? 'veterinaria' : 'unico',
+          'fecha': _isoLocal(fechaProximoRecordatorio),
+        });
       }
     }
+
+    try {
+      await HistorialNotificacionesController().guardarSnapshot(alarmas);
+    } catch (_) {}
+  }
+
+  String _isoLocal(DateTime fecha) {
+    return DateTime(fecha.year, fecha.month, fecha.day, fecha.hour, fecha.minute).toIso8601String();
   }
 
   // Usa un DateTime local (constructor de Dart) para que la instancia absoluta
