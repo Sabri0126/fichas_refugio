@@ -18,9 +18,9 @@ class TratamientoModel {
   /// `FirebaseFirestore.instance.collection('perros').doc().id` al crearlo.
   final String id;
 
-  /// Tipo de tratamiento. Valores usados actualmente: `'diario'` (medicación
-  /// recurrente), `'unico'` (evento puntual, p. ej. una vacuna) y
-  /// `'veterinaria'` (visita o diagnóstico veterinario).
+  /// Tipo de tratamiento. Valores usados: `'diario'`, `'unico'`, `'higiene'`,
+  /// `'evento'` y `'veterinaria'`. Los registros anteriores solo con
+  /// `'diario'` / `'unico'` / `'veterinaria'` siguen siendo válidos.
   final String categoria;
 
   /// Nombre de la medicación o del procedimiento aplicado.
@@ -80,25 +80,57 @@ class TratamientoModel {
       horaRecordatorio: data['hora_recordatorio']?.toString(),
       registroDosis: List<String>.from(data['registro_dosis'] ?? const []),
       activo: data['activo'] == true,
-      fechaProximoRecordatorio: _fechaDesdeValor(data['fecha_proximo_recordatorio']),
+      fechaProximoRecordatorio: _fechaDesdeValor(
+        data['fecha_proximo_recordatorio'],
+      ),
     );
   }
 
   /// Convierte esta instancia en un mapa listo para guardarse en Firestore
   /// dentro del campo `tratamientos` del documento del perro.
+  /// Se escriben todas las claves conocidas para no borrar recordatorios ni
+  /// fechas al reemplazar el array `tratamientos`.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'categoria': categoria,
       'medicacion': medicacion,
       'indicaciones': indicaciones,
-      if (fechaInicio != null) 'fecha_inicio': Timestamp.fromDate(fechaInicio!),
+      'fecha_inicio': fechaInicio != null ? Timestamp.fromDate(fechaInicio!) : null,
       'dias_duracion': diasDuracion,
-      if (horaRecordatorio != null) 'hora_recordatorio': horaRecordatorio,
+      'hora_recordatorio': horaRecordatorio,
       'registro_dosis': registroDosis,
       'activo': activo,
-      if (fechaProximoRecordatorio != null)
-        'fecha_proximo_recordatorio': Timestamp.fromDate(fechaProximoRecordatorio!),
+      'fecha_proximo_recordatorio': fechaProximoRecordatorio != null
+          ? Timestamp.fromDate(fechaProximoRecordatorio!)
+          : null,
     };
+  }
+
+  /// Copia el tratamiento cambiando solo los campos indicados.
+  TratamientoModel copyWith({
+    String? id,
+    String? categoria,
+    String? medicacion,
+    String? indicaciones,
+    DateTime? fechaInicio,
+    int? diasDuracion,
+    String? horaRecordatorio,
+    List<String>? registroDosis,
+    bool? activo,
+    DateTime? fechaProximoRecordatorio,
+  }) {
+    return TratamientoModel(
+      id: id ?? this.id,
+      categoria: categoria ?? this.categoria,
+      medicacion: medicacion ?? this.medicacion,
+      indicaciones: indicaciones ?? this.indicaciones,
+      fechaInicio: fechaInicio ?? this.fechaInicio,
+      diasDuracion: diasDuracion ?? this.diasDuracion,
+      horaRecordatorio: horaRecordatorio ?? this.horaRecordatorio,
+      registroDosis: registroDosis ?? this.registroDosis,
+      activo: activo ?? this.activo,
+      fechaProximoRecordatorio: fechaProximoRecordatorio ?? this.fechaProximoRecordatorio,
+    );
   }
 }

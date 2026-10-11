@@ -6,8 +6,9 @@ import '../models/tratamiento_model.dart';
 /// de un perro: creación, edición, archivado, registro de dosis y el cálculo
 /// de auto-archivado por vencimiento de fechas. No contiene código de UI.
 class TratamientoController {
-  final CollectionReference<Map<String, dynamic>> _perrosRef =
-      FirebaseFirestore.instance.collection('perros');
+  final CollectionReference<Map<String, dynamic>> _perrosRef = FirebaseFirestore
+      .instance
+      .collection('perros');
 
   /// Genera un identificador único para un nuevo tratamiento.
   ///
@@ -28,17 +29,18 @@ class TratamientoController {
   /// su categoría:
   /// - `'diario'`: queda `activo = true`, sin registro de dosis inicial y con
   ///   hora de recordatorio.
-  /// - `'unico'` / `'veterinaria'`: se considera un evento puntual, por lo
-  ///   que queda `activo = false` y se registra la propia `fechaInicio` como
-  ///   primera dosis (para que se vea en el calendario histórico).
+  /// - `'unico'` / `'higiene'` / `'evento'` / `'veterinaria'`: se considera un
+  ///   evento puntual. Queda `activo = true` (no se pausa al crearlo) y se
+  ///   registra la propia `fechaInicio` como primera dosis (para el calendario).
   ///
-  /// @param categoria tipo de tratamiento (`'diario'`, `'unico'`, `'veterinaria'`).
+  /// @param categoria tipo de tratamiento (`'diario'`, `'unico'`, `'higiene'`,
+  ///   `'evento'`, `'veterinaria'`).
   /// @param medicacion nombre de la medicación o procedimiento.
   /// @param indicaciones indicaciones, dosis o diagnóstico.
   /// @param fechaInicio fecha de inicio o de aplicación del evento.
   /// @param diasDuracion días de duración (solo aplica a categoría `'diario'`).
   /// @param horaRecordatorio hora `HH:mm` del recordatorio diario (solo `'diario'`).
-  /// @param fechaProximoRecordatorio próximo recordatorio opcional (solo `'unico'`).
+  /// @param fechaProximoRecordatorio próximo recordatorio opcional (`'unico'` y `'higiene'`).
   /// @return el [TratamientoModel] recién creado, listo para agregarse a la
   /// lista de tratamientos del perro.
   TratamientoModel crearTratamiento({
@@ -62,8 +64,11 @@ class TratamientoController {
         diasDuracion: 0,
         // Se registra la fecha elegida en el formulario (no la de hoy) para que el TableCalendar la ubique.
         registroDosis: [formatearFechaISO(fechaInicio)],
-        activo: false,
-        fechaProximoRecordatorio: categoria == 'unico' ? fechaProximoRecordatorio : null,
+        activo: true,
+        fechaProximoRecordatorio:
+            (categoria == 'unico' || categoria == 'higiene')
+            ? fechaProximoRecordatorio
+            : null,
       );
     }
 
@@ -99,55 +104,54 @@ class TratamientoController {
     required DateTime fechaInicio,
     required String horaRecordatorio,
   }) {
-    return TratamientoModel(
-      id: actual.id,
-      categoria: actual.categoria,
+    return actual.copyWith(
       medicacion: medicacion,
       indicaciones: indicaciones,
-      fechaInicio: fechaInicio,
       diasDuracion: diasDuracion,
+      fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,
-      registroDosis: actual.registroDosis,
-      activo: actual.activo,
-      fechaProximoRecordatorio: actual.fechaProximoRecordatorio,
     );
   }
 
-  /// Marca un tratamiento como archivado (deja de listarse como activo) sin
-  /// eliminarlo del historial.
-  ///
-  /// @param tratamiento el tratamiento a archivar.
-  /// @return una copia del tratamiento con `activo = false`.
-  TratamientoModel archivar(TratamientoModel tratamiento) => TratamientoModel(
-        id: tratamiento.id,
-        categoria: tratamiento.categoria,
-        medicacion: tratamiento.medicacion,
-        indicaciones: tratamiento.indicaciones,
-        fechaInicio: tratamiento.fechaInicio,
-        diasDuracion: tratamiento.diasDuracion,
-        horaRecordatorio: tratamiento.horaRecordatorio,
-        registroDosis: tratamiento.registroDosis,
-        activo: false,
-        fechaProximoRecordatorio: tratamiento.fechaProximoRecordatorio,
-      );
+  /// Pausa o reanuda un tratamiento diario. Solo altera [TratamientoModel.activo];
+  /// categoría, fechas y recordatorios se conservan intactos.
+  /// No aplica a eventos puntuales (`categoria != 'diario'`): se devuelve igual.
+  TratamientoModel alternarPausa(TratamientoModel tratamiento) {
+    if (tratamiento.categoria != 'diario') return tratamiento;
+    return tratamiento.copyWith(activo: !tratamiento.activo);
+  }
 
-  /// Restaura un tratamiento previamente archivado, volviéndolo a marcar
-  /// como activo.
-  ///
-  /// @param tratamiento el tratamiento a restaurar.
-  /// @return una copia del tratamiento con `activo = true`.
-  TratamientoModel restaurar(TratamientoModel tratamiento) => TratamientoModel(
-        id: tratamiento.id,
-        categoria: tratamiento.categoria,
-        medicacion: tratamiento.medicacion,
-        indicaciones: tratamiento.indicaciones,
-        fechaInicio: tratamiento.fechaInicio,
-        diasDuracion: tratamiento.diasDuracion,
-        horaRecordatorio: tratamiento.horaRecordatorio,
-        registroDosis: tratamiento.registroDosis,
-        activo: true,
-        fechaProximoRecordatorio: tratamiento.fechaProximoRecordatorio,
-      );
+  /// Pausa un tratamiento (`activo = false`) sin tocar el resto de campos.
+  TratamientoModel archivar(TratamientoModel tratamiento) =>
+      tratamiento.copyWith(activo: false);
+
+  /// Reanuda un tratamiento (`activo = true`) sin tocar el resto de campos.
+  TratamientoModel restaurar(TratamientoModel tratamiento) =>
+      tratamiento.copyWith(activo: true);
+
+  /// Alterna `activo` de un tratamiento diario en Firestore tocando únicamente
+  /// esa clave del mapa, para no resetear categoría, fechas ni recordatorios.
+  /// Ignora ids que no sean de categoría `'diario'`.
+  Future<void> persistirAlternarPausa(String idPerro, String idTratamiento) async {
+    final snapshot = await _perrosRef.doc(idPerro).get();
+    final data = snapshot.data();
+    if (data == null) return;
+
+    final crudos = List<dynamic>.from(data['tratamientos'] ?? const []);
+    var huboCambio = false;
+    final actualizados = crudos.map((item) {
+      final mapa = Map<String, dynamic>.from(item as Map);
+      if (mapa['id']?.toString() == idTratamiento &&
+          mapa['categoria']?.toString() == 'diario') {
+        mapa['activo'] = mapa['activo'] != true;
+        huboCambio = true;
+      }
+      return mapa;
+    }).toList();
+
+    if (!huboCambio) return;
+    await _perrosRef.doc(idPerro).update({'tratamientos': actualizados});
+  }
 
   /// Marca o desmarca la dosis de un tratamiento para una fecha determinada
   /// (usado por el checkbox diario de "dosis tomada hoy").
@@ -156,7 +160,11 @@ class TratamientoController {
   /// @param fecha la fecha de la dosis a marcar/desmarcar.
   /// @param marcar `true` para registrar la dosis, `false` para quitarla.
   /// @return una copia del tratamiento con `registroDosis` actualizado.
-  TratamientoModel alternarDosis(TratamientoModel tratamiento, DateTime fecha, bool marcar) {
+  TratamientoModel alternarDosis(
+    TratamientoModel tratamiento,
+    DateTime fecha,
+    bool marcar,
+  ) {
     final fechaIso = formatearFechaISO(fecha);
     final registroDosis = List<String>.from(tratamiento.registroDosis);
 
@@ -166,42 +174,45 @@ class TratamientoController {
       registroDosis.remove(fechaIso);
     }
 
-    return TratamientoModel(
-      id: tratamiento.id,
-      categoria: tratamiento.categoria,
-      medicacion: tratamiento.medicacion,
-      indicaciones: tratamiento.indicaciones,
-      fechaInicio: tratamiento.fechaInicio,
-      diasDuracion: tratamiento.diasDuracion,
-      horaRecordatorio: tratamiento.horaRecordatorio,
-      registroDosis: registroDosis,
-      activo: tratamiento.activo,
-      fechaProximoRecordatorio: tratamiento.fechaProximoRecordatorio,
-    );
+    return tratamiento.copyWith(registroDosis: registroDosis);
   }
 
-  /// Filtra los tratamientos que se consideran activos (no archivados).
-  ///
-  /// @param tratamientos la lista completa de tratamientos del perro.
-  /// @return la sublista de tratamientos con `activo == true`.
+  /// Filtra los tratamientos que se consideran activos (no pausados).
   List<TratamientoModel> obtenerActivos(List<TratamientoModel> tratamientos) =>
       tratamientos.where((t) => t.activo).toList();
 
-  /// Filtra los tratamientos archivados (histórico, ya no vigentes).
-  ///
-  /// @param tratamientos la lista completa de tratamientos del perro.
-  /// @return la sublista de tratamientos con `activo == false`.
-  List<TratamientoModel> obtenerArchivados(List<TratamientoModel> tratamientos) =>
-      tratamientos.where((t) => !t.activo).toList();
+  /// Filtra los tratamientos pausados (`activo == false`).
+  List<TratamientoModel> obtenerArchivados(
+    List<TratamientoModel> tratamientos,
+  ) => tratamientos.where((t) => !t.activo).toList();
 
-  /// Filtra los tratamientos diarios activos, que son los únicos que se
-  /// controlan con el checkbox de "dosis tomada hoy" (las dosis únicas y
-  /// visitas veterinarias no requieren seguimiento diario).
-  ///
-  /// @param tratamientos la lista completa de tratamientos del perro.
-  /// @return la sublista de tratamientos con `categoria == 'diario'` y `activo == true`.
-  List<TratamientoModel> obtenerActivosDiarios(List<TratamientoModel> tratamientos) =>
-      tratamientos.where((t) => t.activo && t.categoria == 'diario').toList();
+  /// Todos los tratamientos de categoría `'diario'`.
+  List<TratamientoModel> obtenerDiarios(List<TratamientoModel> tratamientos) =>
+      tratamientos.where((t) => t.categoria == 'diario').toList();
+
+  /// Tratamientos diarios activos (checkbox de dosis del día).
+  List<TratamientoModel> obtenerActivosDiarios(
+    List<TratamientoModel> tratamientos,
+  ) => tratamientos.where((t) => t.activo && t.categoria == 'diario').toList();
+
+  /// Tratamientos diarios pausados.
+  List<TratamientoModel> obtenerDiariosPausados(
+    List<TratamientoModel> tratamientos,
+  ) => tratamientos.where((t) => !t.activo && t.categoria == 'diario').toList();
+
+  /// Eventos puntuales (dosis única, higiene, evento médico, veterinaria),
+  /// ordenados por fecha de inicio descendente (más recientes o futuros primero).
+  List<TratamientoModel> obtenerEventosYVisitas(
+    List<TratamientoModel> tratamientos,
+  ) {
+    final eventos = tratamientos.where((t) => t.categoria != 'diario').toList();
+    eventos.sort((a, b) {
+      final fechaA = a.fechaInicio ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final fechaB = b.fechaInicio ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return fechaB.compareTo(fechaA);
+    });
+    return eventos;
+  }
 
   /// Regla de negocio de auto-archivado: un tratamiento diario se considera
   /// vencido cuando han transcurrido más de `diasDuracion` días desde su
@@ -236,7 +247,10 @@ class TratamientoController {
   /// @param original la lista antes de aplicar [autoArchivarVencidos].
   /// @param actualizada la lista devuelta por [autoArchivarVencidos].
   /// @return `true` si al menos un tratamiento cambió su estado `activo`.
-  bool huboCambiosDeArchivado(List<TratamientoModel> original, List<TratamientoModel> actualizada) {
+  bool huboCambiosDeArchivado(
+    List<TratamientoModel> original,
+    List<TratamientoModel> actualizada,
+  ) {
     for (var i = 0; i < original.length && i < actualizada.length; i++) {
       if (original[i].activo != actualizada[i].activo) return true;
     }
@@ -249,7 +263,10 @@ class TratamientoController {
   /// @param idPerro id del documento del perro en la colección `perros`.
   /// @param tratamientos la lista de tratamientos a guardar.
   /// @return un `Future` que se completa cuando la escritura finaliza.
-  Future<void> guardarTratamientos(String idPerro, List<TratamientoModel> tratamientos) {
+  Future<void> guardarTratamientos(
+    String idPerro,
+    List<TratamientoModel> tratamientos,
+  ) {
     return _perrosRef.doc(idPerro).update({
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
     });
@@ -294,7 +311,11 @@ class TratamientoController {
       for (final fechaTexto in tratamiento.registroDosis) {
         final fecha = DateTime.tryParse(fechaTexto);
         if (fecha == null) continue;
-        final fechaNormalizada = DateTime.utc(fecha.year, fecha.month, fecha.day);
+        final fechaNormalizada = DateTime.utc(
+          fecha.year,
+          fecha.month,
+          fecha.day,
+        );
 
         eventosCalendario.putIfAbsent(fechaNormalizada, () => []).add({
           'medicacion': tratamiento.medicacion,

@@ -34,7 +34,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final TextEditingController _historiaController = TextEditingController();
   final TextEditingController _fichaMedicaController = TextEditingController();
   final TextEditingController _fechaIngresoController = TextEditingController();
-  final TextEditingController _fechaFallecimientoController = TextEditingController();
+  final TextEditingController _fechaFallecimientoController =
+      TextEditingController();
 
   DateTime? _fechaIngreso;
   DateTime? _fechaFallecimiento;
@@ -81,7 +82,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
           : '';
     }
     // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
-    for (final c in [_nombreController, _edadController, _mesesController, _historiaController, _fichaMedicaController]) {
+    for (final c in [
+      _nombreController,
+      _edadController,
+      _mesesController,
+      _historiaController,
+      _fichaMedicaController,
+    ]) {
       c.addListener(() => setState(() => _hayCambios = true));
     }
   }
@@ -125,7 +132,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     if (fechaSeleccionada != null) {
       setState(() {
         _fechaIngreso = fechaSeleccionada;
-        _fechaIngresoController.text = '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
+        _fechaIngresoController.text =
+            '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
       });
     }
   }
@@ -144,7 +152,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
-  void _insertarFormatoTexto(TextEditingController controller, String delimitadorInicio, String delimitadorFin) {
+  void _insertarFormatoTexto(
+    TextEditingController controller,
+    String delimitadorInicio,
+    String delimitadorFin,
+  ) {
     final selection = controller.selection;
     final start = selection.isValid ? selection.start : controller.text.length;
     final end = selection.isValid ? selection.end : controller.text.length;
@@ -153,8 +165,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final prefix = text.substring(0, start);
     final suffix = text.substring(end);
 
-    final nuevoTexto = '$prefix$delimitadorInicio$selectedText$delimitadorFin$suffix';
-    final nuevaPosicion = start + delimitadorInicio.length + selectedText.length + delimitadorFin.length;
+    final nuevoTexto =
+        '$prefix$delimitadorInicio$selectedText$delimitadorFin$suffix';
+    final nuevaPosicion =
+        start +
+        delimitadorInicio.length +
+        selectedText.length +
+        delimitadorFin.length;
 
     controller.value = TextEditingValue(
       text: nuevoTexto,
@@ -164,7 +181,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   void _abrirOpcionesFotoPerfil() {
     final urlActual = widget.perroActual?.fotoPerfil;
-    final hayFotoActual = _imagenSeleccionada != null || (urlActual != null && urlActual.isNotEmpty);
+    final hayFotoActual =
+        _imagenSeleccionada != null ||
+        (urlActual != null && urlActual.isNotEmpty);
 
     showModalBottomSheet(
       context: context,
@@ -207,7 +226,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
         final urlActual = widget.perroActual!.fotoPerfil!;
         final respuesta = await http.get(Uri.parse(urlActual));
         final directorioTemporal = await getTemporaryDirectory();
-        archivoOrigen = File('${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        archivoOrigen = File(
+          '${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
         await archivoOrigen.writeAsBytes(respuesta.bodyBytes);
       }
 
@@ -236,7 +257,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo recortar la foto actual.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo recortar la foto actual.')),
+        );
       }
     } finally {
       if (mounted) {
@@ -256,7 +279,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
         setState(() => _imagenSeleccionada = File(imagen.path));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Se usará la imagen original porque el recorte no está disponible en esta plataforma.')),
+            const SnackBar(
+              content: Text(
+                'Se usará la imagen original porque el recorte no está disponible en esta plataforma.',
+              ),
+            ),
           );
         }
         return;
@@ -289,12 +316,18 @@ class _FormularioPerroState extends State<FormularioPerro> {
       setState(() => _imagenSeleccionada = File(imagen.path));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El recorte de imagen no está disponible aquí. Se usará la imagen original.')),
+          const SnackBar(
+            content: Text(
+              'El recorte de imagen no está disponible aquí. Se usará la imagen original.',
+            ),
+          ),
         );
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo procesar la imagen.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo procesar la imagen.')),
+        );
       }
     }
   }
@@ -304,7 +337,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('¿Eliminar ficha?'),
-        content: const Text('Esta acción es irreversible y borrará todos los datos del perro.'),
+        content: const Text(
+          'Esta acción es irreversible y borrará todos los datos del perro.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -314,7 +349,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
             onPressed: () async {
               await _perroController.eliminarPerro(widget.idDocumento!);
               if (!context.mounted) return;
-              Navigator.of(context)..pop()..pop();
+              Navigator.of(context)
+                ..pop()
+                ..pop();
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
           ),
@@ -332,7 +369,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
         if (_imagenSeleccionada != null) {
           final nombreArchivo = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final ref = FirebaseStorage.instance.ref().child('fotos_perfil').child(nombreArchivo);
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('fotos_perfil')
+              .child(nombreArchivo);
           await ref.putFile(_imagenSeleccionada!);
           urlImagen = await ref.getDownloadURL();
         }
@@ -360,7 +400,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
           edadIndeterminada: _edadIndeterminada,
           edadAnioBase: _estado != 'inactivo' ? DateTime.now().year : null,
           fechaIngreso: _fechaIngreso,
-          fechaFallecimiento: _estado == 'inactivo' ? _fechaFallecimiento : null,
+          fechaFallecimiento: _estado == 'inactivo'
+              ? _fechaFallecimiento
+              : null,
           ultimaActualizacionEdad: DateTime.now(),
           historia: _historiaController.text.trim(),
           fichaMedica: _fichaMedicaController.text.trim(),
@@ -378,7 +420,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al procesar la información')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al procesar la información')),
+          );
         }
       } finally {
         if (mounted) {
@@ -397,7 +441,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final listaPerros = await _perroController.obtenerListaPerros();
     final opciones = listaPerros
         .where((p) => p.id != widget.idDocumento)
-        .map((p) => {'id': p.id, 'nombre': p.nombre.isNotEmpty ? p.nombre : p.id})
+        .map(
+          (p) => {'id': p.id, 'nombre': p.nombre.isNotEmpty ? p.nombre : p.id},
+        )
         .toList();
 
     if (!mounted) return;
@@ -411,24 +457,38 @@ class _FormularioPerroState extends State<FormularioPerro> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Perro', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Perro',
+                  border: OutlineInputBorder(),
+                ),
                 initialValue: seleccionadoId,
                 items: opciones
-                    .map((o) => DropdownMenuItem(value: o['id'], child: Text(o['nombre']!)))
+                    .map(
+                      (o) => DropdownMenuItem(
+                        value: o['id'],
+                        child: Text(o['nombre']!),
+                      ),
+                    )
                     .toList(),
                 onChanged: (val) => setDialogState(() {
                   seleccionadoId = val;
-                  seleccionadoNombre = opciones.firstWhere((o) => o['id'] == val)['nombre'];
+                  seleccionadoNombre = opciones.firstWhere(
+                    (o) => o['id'] == val,
+                  )['nombre'];
                 }),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Relación', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Relación',
+                  border: OutlineInputBorder(),
+                ),
                 initialValue: seleccionadaRelacion,
                 items: relaciones
                     .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                     .toList(),
-                onChanged: (val) => setDialogState(() => seleccionadaRelacion = val!),
+                onChanged: (val) =>
+                    setDialogState(() => seleccionadaRelacion = val!),
               ),
             ],
           ),
@@ -460,13 +520,111 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
-  Future<void> _mostrarDialogoAgregarTratamiento() async {
+  String _tituloDialogoAgregar(String categoria) {
+    switch (categoria) {
+      case 'unico':
+        return 'Agregar dosis única';
+      case 'higiene':
+        return 'Agregar higiene';
+      case 'evento':
+        return 'Agregar evento médico';
+      case 'veterinaria':
+        return 'Agregar visita veterinaria';
+      default:
+        return 'Agregar tratamiento diario';
+    }
+  }
+
+  Widget _botonCategoriaSalud({
+    required String etiqueta,
+    required IconData icono,
+    required Color color,
+    required String categoria,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _mostrarDialogoAgregarTratamiento(categoria: categoria),
+        icon: Icon(icono, color: color),
+        label: Text(etiqueta, style: TextStyle(color: color)),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: color,
+          side: BorderSide(color: color),
+          minimumSize: const Size.fromHeight(48),
+          alignment: Alignment.centerLeft,
+        ),
+      ),
+    );
+  }
+
+  String _capitalizarPrimera(String texto) {
+    final limpio = texto.trim();
+    if (limpio.isEmpty) return limpio;
+    return limpio[0].toUpperCase() + limpio.substring(1);
+  }
+
+  String _etiquetaCategoria(String categoria) {
+    return switch (categoria) {
+      'unico' => 'Dosis única',
+      'higiene' => 'Higiene',
+      'evento' => 'Evento médico',
+      'veterinaria' => 'Veterinaria',
+      _ => 'Tratamiento diario',
+    };
+  }
+
+  IconData _iconoCategoria(String categoria) {
+    return switch (categoria) {
+      'unico' => Icons.vaccines,
+      'higiene' => Icons.shower,
+      'evento' => Icons.monitor_heart,
+      'veterinaria' => Icons.local_hospital,
+      _ => Icons.medication,
+    };
+  }
+
+  Color _colorCategoria(String categoria) {
+    return switch (categoria) {
+      'unico' => const Color(0xFF64B5F6),
+      'higiene' => const Color(0xFF4DD0E1),
+      'evento' => const Color(0xFFBA68C8),
+      'veterinaria' => const Color(0xFFFFB74D),
+      _ => const Color(0xFF81C784),
+    };
+  }
+
+  Future<void> _alternarPausaTratamiento(int indice) async {
+    final actual = _tratamientos[indice];
+    if (actual.categoria != 'diario') return;
+
+    setState(() {
+      _tratamientos[indice] = _tratamientoController.alternarPausa(actual);
+      _hayCambios = true;
+    });
+
+    final idDocumento = widget.idDocumento;
+    if (idDocumento == null || idDocumento.isEmpty) return;
+
+    try {
+      await _tratamientoController.persistirAlternarPausa(idDocumento, actual.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _tratamientos[indice] = actual);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo actualizar el estado del tratamiento')),
+      );
+    }
+  }
+
+  Future<void> _mostrarDialogoAgregarTratamiento({
+    required String categoria,
+  }) async {
     final medicacionController = TextEditingController();
     final indicacionesController = TextEditingController();
     final diasController = TextEditingController(text: '0');
     DateTime fechaInicio = DateTime.now();
     TimeOfDay horaRecordatorio = const TimeOfDay(hour: 9, minute: 0);
-    String categoria = 'diario';
     DateTime? fechaProximoRecordatorio;
 
     await showDialog<void>(
@@ -474,50 +632,58 @@ class _FormularioPerroState extends State<FormularioPerro> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final esEventoUnico = categoria != 'diario';
-          final labelPrimerCampo = categoria == 'veterinaria'
-              ? 'Motivo de la visita'
-              : categoria == 'unico'
-                  ? 'Medicación / Aplicación'
-                  : 'Medicación';
-          final labelSegundoCampo = categoria == 'veterinaria' ? 'Diagnóstico / Indicaciones' : 'Indicaciones';
-          final labelFecha = categoria == 'veterinaria'
-              ? 'Fecha de visita'
-              : categoria == 'unico'
-                  ? 'Fecha de aplicación'
-                  : 'Fecha de inicio';
+          final permiteProximoRecordatorio =
+              categoria == 'unico' || categoria == 'higiene';
+          final labelPrimerCampo = switch (categoria) {
+            'veterinaria' => 'Motivo de la visita',
+            'unico' => 'Medicación / Aplicación',
+            'higiene' => 'Procedimiento / Cuidado',
+            'evento' => 'Evento / Motivo',
+            _ => 'Medicación',
+          };
+          final labelSegundoCampo = switch (categoria) {
+            'veterinaria' => 'Diagnóstico / Indicaciones',
+            'evento' => 'Notas / Indicaciones',
+            _ => 'Indicaciones',
+          };
+          final labelFecha = switch (categoria) {
+            'veterinaria' => 'Fecha de visita',
+            'unico' => 'Fecha de aplicación',
+            'higiene' => 'Fecha',
+            'evento' => 'Fecha del evento',
+            _ => 'Fecha de inicio',
+          };
 
           return AlertDialog(
-            title: const Text('Agregar tratamiento'),
+            title: Text(_tituloDialogoAgregar(categoria)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: categoria,
-                    decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'diario', child: Text('Tratamiento Diario')),
-                      DropdownMenuItem(value: 'unico', child: Text('Dosis Única / Higiene')),
-                      DropdownMenuItem(value: 'veterinaria', child: Text('Visita Veterinaria')),
-                    ],
-                    onChanged: (nuevaCategoria) => setDialogState(() => categoria = nuevaCategoria ?? 'diario'),
-                  ),
-                  const SizedBox(height: 16),
                   TextField(
                     controller: medicacionController,
-                    decoration: InputDecoration(labelText: labelPrimerCampo, border: const OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: labelPrimerCampo,
+                      border: const OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: indicacionesController,
-                    decoration: InputDecoration(labelText: labelSegundoCampo, border: const OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: labelSegundoCampo,
+                      border: const OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (!esEventoUnico)
                     TextField(
                       controller: diasController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                        labelText: 'Días de duración (0 = indefinido)',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   if (!esEventoUnico) const SizedBox(height: 16),
                   ListTile(
@@ -546,7 +712,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           initialTime: horaRecordatorio,
                           builder: (BuildContext context, Widget? child) {
                             return MediaQuery(
-                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              data: MediaQuery.of(
+                                context,
+                              ).copyWith(alwaysUse24HourFormat: true),
                               child: child!,
                             );
                           },
@@ -563,7 +731,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         trailing: const Icon(Icons.access_time),
                       ),
                     ),
-                  if (categoria == 'unico')
+                  if (permiteProximoRecordatorio)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
@@ -574,13 +742,16 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       trailing: fechaProximoRecordatorio != null
                           ? IconButton(
                               icon: const Icon(Icons.clear),
-                              onPressed: () => setDialogState(() => fechaProximoRecordatorio = null),
+                              onPressed: () => setDialogState(
+                                () => fechaProximoRecordatorio = null,
+                              ),
                             )
                           : const Icon(Icons.event),
                       onTap: () async {
                         final fechaSeleccionada = await showDatePicker(
                           context: ctx,
-                          initialDate: fechaProximoRecordatorio ?? DateTime.now(),
+                          initialDate:
+                              fechaProximoRecordatorio ?? DateTime.now(),
                           firstDate: DateTime.now(),
                           lastDate: DateTime(2100),
                         );
@@ -589,10 +760,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
                         final horaSeleccionada = await showTimePicker(
                           context: ctx,
-                          initialTime: TimeOfDay.fromDateTime(fechaProximoRecordatorio ?? DateTime.now()),
+                          initialTime: TimeOfDay.fromDateTime(
+                            fechaProximoRecordatorio ?? DateTime.now(),
+                          ),
                           builder: (BuildContext context, Widget? child) {
                             return MediaQuery(
-                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              data: MediaQuery.of(
+                                context,
+                              ).copyWith(alwaysUse24HourFormat: true),
                               child: child!,
                             );
                           },
@@ -626,15 +801,17 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   final horaFormateada =
                       '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
 
-                  final nuevoTratamiento = _tratamientoController.crearTratamiento(
-                    categoria: categoria,
-                    medicacion: medicacion,
-                    indicaciones: indicacionesController.text.trim(),
-                    fechaInicio: fechaInicio,
-                    diasDuracion: int.tryParse(diasController.text.trim()) ?? 0,
-                    horaRecordatorio: horaFormateada,
-                    fechaProximoRecordatorio: fechaProximoRecordatorio,
-                  );
+                  final nuevoTratamiento = _tratamientoController
+                      .crearTratamiento(
+                        categoria: categoria,
+                        medicacion: medicacion,
+                        indicaciones: indicacionesController.text.trim(),
+                        fechaInicio: fechaInicio,
+                        diasDuracion:
+                            int.tryParse(diasController.text.trim()) ?? 0,
+                        horaRecordatorio: horaFormateada,
+                        fechaProximoRecordatorio: fechaProximoRecordatorio,
+                      );
 
                   setState(() {
                     _tratamientos.add(nuevoTratamiento);
@@ -653,9 +830,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _mostrarDialogoEditarTratamiento(int indice) async {
     final tratamiento = _tratamientos[indice];
-    final medicacionController = TextEditingController(text: tratamiento.medicacion);
-    final indicacionesController = TextEditingController(text: tratamiento.indicaciones);
-    final diasController = TextEditingController(text: tratamiento.diasDuracion.toString());
+    final medicacionController = TextEditingController(
+      text: tratamiento.medicacion,
+    );
+    final indicacionesController = TextEditingController(
+      text: tratamiento.indicaciones,
+    );
+    final diasController = TextEditingController(
+      text: tratamiento.diasDuracion.toString(),
+    );
 
     DateTime fechaInicio = tratamiento.fechaInicio ?? DateTime.now();
 
@@ -676,18 +859,27 @@ class _FormularioPerroState extends State<FormularioPerro> {
               children: [
                 TextField(
                   controller: medicacionController,
-                  decoration: const InputDecoration(labelText: 'Medicación', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Medicación',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: indicacionesController,
-                  decoration: const InputDecoration(labelText: 'Indicaciones', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Indicaciones',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: diasController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Días de duración (0 = indefinido)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Días de duración (0 = indefinido)',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 ListTile(
@@ -715,7 +907,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       initialTime: horaRecordatorio,
                       builder: (BuildContext context, Widget? child) {
                         return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                          data: MediaQuery.of(
+                            context,
+                          ).copyWith(alwaysUse24HourFormat: true),
                           child: child!,
                         );
                       },
@@ -749,14 +943,16 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
 
                 setState(() {
-                  _tratamientos[indice] = _tratamientoController.editarTratamiento(
-                    tratamiento,
-                    medicacion: medicacion,
-                    indicaciones: indicacionesController.text.trim(),
-                    diasDuracion: int.tryParse(diasController.text.trim()) ?? 0,
-                    fechaInicio: fechaInicio,
-                    horaRecordatorio: horaFormateada,
-                  );
+                  _tratamientos[indice] = _tratamientoController
+                      .editarTratamiento(
+                        tratamiento,
+                        medicacion: medicacion,
+                        indicaciones: indicacionesController.text.trim(),
+                        diasDuracion:
+                            int.tryParse(diasController.text.trim()) ?? 0,
+                        fechaInicio: fechaInicio,
+                        horaRecordatorio: horaFormateada,
+                      );
                   _hayCambios = true;
                 });
                 Navigator.pop(ctx);
@@ -770,26 +966,30 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   Future<void> _mostrarDialogoEliminarTratamiento(int indice) async {
+    final esDiario = _tratamientos[indice].categoria == 'diario';
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar tratamiento'),
-        content: const Text('¿Qué querés hacer con este tratamiento?'),
+        title: Text(esDiario ? 'Eliminar tratamiento' : 'Eliminar registro'),
+        content: Text(
+          esDiario
+              ? '¿Qué querés hacer con este tratamiento?'
+              : '¿Querés eliminar este registro médico? Esta acción no se puede deshacer.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancelar'),
           ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _tratamientos[indice] = _tratamientoController.archivar(_tratamientos[indice]);
-                _hayCambios = true;
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text('Archivar historial'),
-          ),
+          if (esDiario)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _alternarPausaTratamiento(indice);
+              },
+              child: const Text('Pausar'),
+            ),
           TextButton(
             onPressed: () {
               setState(() {
@@ -798,7 +998,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
               });
               Navigator.pop(ctx);
             },
-            child: const Text('Eliminar definitivamente', style: TextStyle(color: Colors.redAccent)),
+            child: Text(
+              esDiario ? 'Eliminar definitivamente' : 'Eliminar',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -849,383 +1052,693 @@ class _FormularioPerroState extends State<FormularioPerro> {
         if (!didPop) _confirmarSalida();
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(esEdicion ? 'Editar Ficha' : 'Nuevo Ingreso', style: const TextStyle(color: Colors.white)),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-            child: Column(
-              children: [
-              // --- SECCIÓN: Foto de perfil ---
-              Center(
-                child: GestureDetector(
-                  onTap: _abrirOpcionesFotoPerfil,
-                  child: CircleAvatar(
-                    radius: 60,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    backgroundImage: _imagenSeleccionada != null
-                        ? FileImage(_imagenSeleccionada!) as ImageProvider
-                        : (widget.perroActual?.fotoPerfil != null ? NetworkImage(widget.perroActual!.fotoPerfil!) : null),
-                    child: _imagenSeleccionada == null && widget.perroActual?.fotoPerfil == null
-                        ? Icon(Icons.add_a_photo, size: 40, color: Theme.of(context).colorScheme.primary)
-                        : null,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              // --- SECCIÓN: Datos básicos (nombre, ingreso, sexo, edad, castración, estado) ---
-              TextFormField(controller: _nombreController, decoration: const InputDecoration(labelText: 'Nombre del perrito', border: OutlineInputBorder(), prefixIcon: Icon(Icons.pets)), validator: _perroController.validarNombre),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _fechaIngresoController,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: 'Fecha de ingreso (opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_today)),
-                onTap: _seleccionarFechaIngreso,
-              ),
-              const SizedBox(height: 16),
-              Row(
+        appBar: AppBar(
+          title: Text(
+            esEdicion ? 'Editar Ficha' : 'Nuevo Ingreso',
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+              child: Column(
                 children: [
-                  const Text('Sexo: ', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 12),
-                  ChoiceChip(
-                    label: const Text('Macho'),
-                    selected: _sexo == 'macho',
-                    selectedColor: Colors.blue.shade200,
-                    onSelected: (_) => setState(() => _sexo = 'macho'),
+                  // --- SECCIÓN: Foto de perfil ---
+                  Center(
+                    child: GestureDetector(
+                      onTap: _abrirOpcionesFotoPerfil,
+                      child: CircleAvatar(
+                        radius: 60,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
+                        backgroundImage: _imagenSeleccionada != null
+                            ? FileImage(_imagenSeleccionada!) as ImageProvider
+                            : (widget.perroActual?.fotoPerfil != null
+                                  ? NetworkImage(
+                                      widget.perroActual!.fotoPerfil!,
+                                    )
+                                  : null),
+                        child:
+                            _imagenSeleccionada == null &&
+                                widget.perroActual?.fotoPerfil == null
+                            ? Icon(
+                                Icons.add_a_photo,
+                                size: 40,
+                                color: Theme.of(context).colorScheme.primary,
+                              )
+                            : null,
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Hembra'),
-                    selected: _sexo == 'hembra',
-                    selectedColor: Colors.pink.shade200,
-                    onSelected: (_) => setState(() => _sexo = 'hembra'),
+                  const SizedBox(height: 24),
+                  // --- SECCIÓN: Datos básicos (nombre, ingreso, sexo, edad, castración, estado) ---
+                  TextFormField(
+                    controller: _nombreController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre del perrito',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.pets),
+                    ),
+                    validator: _perroController.validarNombre,
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Edad indeterminada'),
-                value: _edadIndeterminada,
-                onChanged: (valor) => setState(() {
-                  _edadIndeterminada = valor ?? false;
-                  if (_edadIndeterminada) {
-                    _edadController.clear();
-                    _mesesController.clear();
-                  }
-                }),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _edadController,
-                enabled: !_edadIndeterminada,
-                decoration: const InputDecoration(labelText: 'Edad estimada (años, opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.cake)),
-                keyboardType: TextInputType.number,
-              ),
-              if (!_edadIndeterminada && _edadController.text.trim() == '0') ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _mesesController,
-                  decoration: const InputDecoration(labelText: 'Meses (opcional)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.calendar_view_month)),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [LengthLimitingTextInputFormatter(2)],
-                  validator: _perroController.validarMeses,
-                ),
-              ],
-              const SizedBox(height: 16),
-              SwitchListTile(title: const Text('¿Ya está castrado?'), value: _estaCastrado, activeThumbColor: Colors.deepOrange, onChanged: (valor) => setState(() => _estaCastrado = valor)),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Estado: ', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 12),
-                  ChoiceChip(
-                    label: const Text('Activo'),
-                    selected: _estado == 'activo',
-                    selectedColor: Colors.green.shade200,
-                    onSelected: (_) => setState(() => _estado = 'activo'),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Inactivo'),
-                    selected: _estado == 'inactivo',
-                    selectedColor: Colors.blueGrey.shade200,
-                    onSelected: (_) => setState(() => _estado = 'inactivo'),
-                  ),
-                ],
-              ),
-              if (_estado == 'inactivo') ...
-                [
                   const SizedBox(height: 16),
                   TextFormField(
-                    controller: _fechaFallecimientoController,
+                    controller: _fechaIngresoController,
                     readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: 'Fecha de fallecimiento (opcional)',
+                      labelText: 'Fecha de ingreso (opcional)',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.sentiment_very_dissatisfied),
+                      prefixIcon: Icon(Icons.calendar_today),
                     ),
-                    onTap: _seleccionarFechaFallecimiento,
+                    onTap: _seleccionarFechaIngreso,
                   ),
-                ],
-              const SizedBox(height: 16),
-              // --- SECCIÓN: Familiares vinculados ---
-              Row(
-                children: [
-                  Text('Familiares', style: Theme.of(context).textTheme.titleMedium),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Añadir familiar'),
-                    style: ElevatedButton.styleFrom(elevation: 2),
-                    onPressed: _mostrarDialogoAgregarFamiliar,
-                  ),
-                ],
-              ),
-              if (_parientes.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Sin familiares registrados.'),
-                )
-              else
-                Column(
-                  children: _parientes.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final p = entry.value;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.people),
-                      title: Text(p['nombre']?.toString() ?? ''),
-                      subtitle: Text(p['relacion']?.toString() ?? ''),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        onPressed: () => setState(() {
-                          _parientes.removeAt(i);
-                          _hayCambios = true;
-                        }),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              const SizedBox(height: 16),
-              // --- SECCIÓN: Historia / observaciones ---
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Historia', style: Theme.of(context).textTheme.titleMedium),
-                  ),
-                  Wrap(
-                    spacing: 4,
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Negrita',
-                        onPressed: () => _insertarFormatoTexto(_historiaController, '**', '**'),
-                        icon: const Icon(Icons.format_bold),
+                      const Text('Sexo: ', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: const Text('Macho'),
+                        selected: _sexo == 'macho',
+                        selectedColor: Colors.blue.shade200,
+                        onSelected: (_) => setState(() => _sexo = 'macho'),
                       ),
-                      IconButton(
-                        tooltip: 'Cursiva',
-                        onPressed: () => _insertarFormatoTexto(_historiaController, '*', '*'),
-                        icon: const Icon(Icons.format_italic),
-                      ),
-                      IconButton(
-                        tooltip: 'Agregar viñeta',
-                        onPressed: () => _insertarBulletTexto(_historiaController),
-                        icon: const Icon(Icons.format_list_bulleted),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Hembra'),
+                        selected: _sexo == 'hembra',
+                        selectedColor: Colors.pink.shade200,
+                        onSelected: (_) => setState(() => _sexo = 'hembra'),
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _historiaController,
-                decoration: const InputDecoration(labelText: 'Descripción de la historia', border: OutlineInputBorder()),
-                maxLines: 6,
-              ),
-              const SizedBox(height: 16),
-              // --- SECCIÓN: Ficha médica ---
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Ficha médica', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Edad indeterminada'),
+                    value: _edadIndeterminada,
+                    onChanged: (valor) => setState(() {
+                      _edadIndeterminada = valor ?? false;
+                      if (_edadIndeterminada) {
+                        _edadController.clear();
+                        _mesesController.clear();
+                      }
+                    }),
                   ),
-                  Wrap(
-                    spacing: 4,
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _edadController,
+                    enabled: !_edadIndeterminada,
+                    decoration: const InputDecoration(
+                      labelText: 'Edad estimada (años, opcional)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.cake),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  if (!_edadIndeterminada &&
+                      _edadController.text.trim() == '0') ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _mesesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Meses (opcional)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_view_month),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [LengthLimitingTextInputFormatter(2)],
+                      validator: _perroController.validarMeses,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: const Text('¿Ya está castrado?'),
+                    value: _estaCastrado,
+                    activeThumbColor: Colors.deepOrange,
+                    onChanged: (valor) => setState(() => _estaCastrado = valor),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Negrita',
-                        onPressed: () => _insertarFormatoTexto(_fichaMedicaController, '**', '**'),
-                        icon: const Icon(Icons.format_bold),
+                      const Text('Estado: ', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: const Text('Activo'),
+                        selected: _estado == 'activo',
+                        selectedColor: Colors.green.shade200,
+                        onSelected: (_) => setState(() => _estado = 'activo'),
                       ),
-                      IconButton(
-                        tooltip: 'Cursiva',
-                        onPressed: () => _insertarFormatoTexto(_fichaMedicaController, '*', '*'),
-                        icon: const Icon(Icons.format_italic),
-                      ),
-                      IconButton(
-                        tooltip: 'Agregar viñeta',
-                        onPressed: () => _insertarBulletTexto(_fichaMedicaController),
-                        icon: const Icon(Icons.format_list_bulleted),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Inactivo'),
+                        selected: _estado == 'inactivo',
+                        selectedColor: Colors.blueGrey.shade200,
+                        onSelected: (_) => setState(() => _estado = 'inactivo'),
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _fichaMedicaController,
-                decoration: const InputDecoration(labelText: 'Detalles médicos', border: OutlineInputBorder()),
-                maxLines: 6,
-              ),
-              const SizedBox(height: 24),
-              // --- SECCIÓN: Tratamientos (activos y archivados) ---
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Tratamientos Activos', style: Theme.of(context).textTheme.titleMedium),
+                  if (_estado == 'inactivo') ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _fechaFallecimientoController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Fecha de fallecimiento (opcional)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.sentiment_very_dissatisfied),
+                      ),
+                      onTap: _seleccionarFechaFallecimiento,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  // --- SECCIÓN: Familiares vinculados ---
+                  Row(
+                    children: [
+                      Text(
+                        'Familiares',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('Añadir familiar'),
+                        style: ElevatedButton.styleFrom(elevation: 2),
+                        onPressed: _mostrarDialogoAgregarFamiliar,
+                      ),
+                    ],
                   ),
-                  ElevatedButton(
-                    onPressed: _mostrarDialogoAgregarTratamiento,
-                    child: const Text('+ Agregar tratamiento'),
+                  if (_parientes.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Sin familiares registrados.'),
+                    )
+                  else
+                    Column(
+                      children: _parientes.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final p = entry.value;
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.people),
+                          title: Text(p['nombre']?.toString() ?? ''),
+                          subtitle: Text(p['relacion']?.toString() ?? ''),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                            ),
+                            onPressed: () => setState(() {
+                              _parientes.removeAt(i);
+                              _hayCambios = true;
+                            }),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 16),
+                  // --- SECCIÓN: Historia / observaciones ---
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Historia',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Negrita',
+                            onPressed: () => _insertarFormatoTexto(
+                              _historiaController,
+                              '**',
+                              '**',
+                            ),
+                            icon: const Icon(Icons.format_bold),
+                          ),
+                          IconButton(
+                            tooltip: 'Cursiva',
+                            onPressed: () => _insertarFormatoTexto(
+                              _historiaController,
+                              '*',
+                              '*',
+                            ),
+                            icon: const Icon(Icons.format_italic),
+                          ),
+                          IconButton(
+                            tooltip: 'Agregar viñeta',
+                            onPressed: () =>
+                                _insertarBulletTexto(_historiaController),
+                            icon: const Icon(Icons.format_list_bulleted),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              Builder(
-                builder: (context) {
-                  final entradasActivas = _tratamientos.asMap().entries.where((e) => e.value.activo).toList();
-                  final entradasArchivadas = _tratamientos.asMap().entries.where((e) => !e.value.activo).toList();
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _historiaController,
+                    decoration: const InputDecoration(
+                      labelText: 'Descripción de la historia',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 6,
+                  ),
+                  const SizedBox(height: 24),
+                  // --- SECCIÓN: Gestión de salud ---
+                  const Divider(thickness: 3, height: 32),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Gestión de Salud',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Ficha médica',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            tooltip: 'Negrita',
+                            onPressed: () => _insertarFormatoTexto(
+                              _fichaMedicaController,
+                              '**',
+                              '**',
+                            ),
+                            icon: const Icon(Icons.format_bold),
+                          ),
+                          IconButton(
+                            tooltip: 'Cursiva',
+                            onPressed: () => _insertarFormatoTexto(
+                              _fichaMedicaController,
+                              '*',
+                              '*',
+                            ),
+                            icon: const Icon(Icons.format_italic),
+                          ),
+                          IconButton(
+                            tooltip: 'Agregar viñeta',
+                            onPressed: () =>
+                                _insertarBulletTexto(_fichaMedicaController),
+                            icon: const Icon(Icons.format_list_bulleted),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _fichaMedicaController,
+                    decoration: const InputDecoration(
+                      labelText: 'Detalles médicos',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 6,
+                  ),
+                  const SizedBox(height: 24),
+                  // --- SECCIÓN: Tratamientos (activos y pausados) ---
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Agregar registro médico',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Column(
+                    children: [
+                      _botonCategoriaSalud(
+                        etiqueta: 'Tratamiento Diario',
+                        icono: Icons.medication,
+                        color: const Color(0xFF81C784),
+                        categoria: 'diario',
+                      ),
+                      const SizedBox(height: 12),
+                      _botonCategoriaSalud(
+                        etiqueta: 'Dosis Única',
+                        icono: Icons.vaccines,
+                        color: const Color(0xFF64B5F6),
+                        categoria: 'unico',
+                      ),
+                      const SizedBox(height: 12),
+                      _botonCategoriaSalud(
+                        etiqueta: 'Higiene',
+                        icono: Icons.shower,
+                        color: const Color(0xFF4DD0E1),
+                        categoria: 'higiene',
+                      ),
+                      const SizedBox(height: 12),
+                      _botonCategoriaSalud(
+                        etiqueta: 'Evento Médico',
+                        icono: Icons.monitor_heart,
+                        color: const Color(0xFFBA68C8),
+                        categoria: 'evento',
+                      ),
+                      const SizedBox(height: 12),
+                      _botonCategoriaSalud(
+                        etiqueta: 'Veterinaria',
+                        icono: Icons.local_hospital,
+                        color: const Color(0xFFFFB74D),
+                        categoria: 'veterinaria',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // --- SECCIÓN 1: Tratamientos Diarios (solo categoría diario) ---
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Tratamientos Diarios',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final diariosActivos = _tratamientos
+                          .asMap()
+                          .entries
+                          .where(
+                            (e) =>
+                                e.value.categoria == 'diario' && e.value.activo,
+                          )
+                          .toList();
+                      final diariosPausados = _tratamientos
+                          .asMap()
+                          .entries
+                          .where(
+                            (e) =>
+                                e.value.categoria == 'diario' &&
+                                !e.value.activo,
+                          )
+                          .toList();
+                      final colorScheme = Theme.of(context).colorScheme;
+                      final textoPausado = TextStyle(
+                        color: colorScheme.onSurface.withValues(alpha: 0.45),
+                      );
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (entradasActivas.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text('Sin tratamientos registrados.'),
-                        )
-                      else
-                        Column(
-                          children: entradasActivas.map((entry) {
-                            final i = entry.key;
-                            final t = entry.value;
-                            final dias = t.diasDuracion;
-                            final fechaTexto = t.fechaInicio != null
-                                ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
-                                : '';
-                            final horaRecordatorio = t.horaRecordatorio ?? '';
-                            return Card(
-                              child: ListTile(
-                                onTap: () => _mostrarDialogoEditarTratamiento(i),
-                                title: Text(t.medicacion),
-                                subtitle: Text(
-                                  '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
-                                  '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined),
-                                      onPressed: () => _mostrarDialogoEditarTratamiento(i),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                      onPressed: () => _mostrarDialogoEliminarTratamiento(i),
-                                    ),
-                                  ],
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (diariosActivos.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Text(
+                                'Sin tratamientos diarios activos.',
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      if (entradasArchivadas.isNotEmpty)
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          title: const Text('Tratamientos Archivados'),
-                          children: entradasArchivadas.map((entry) {
-                            final i = entry.key;
-                            final t = entry.value;
-                            final dias = t.diasDuracion;
+                            )
+                          else
+                            Column(
+                              children: diariosActivos.map((entry) {
+                                final i = entry.key;
+                                final t = entry.value;
+                                final dias = t.diasDuracion;
+                                final fechaTexto = t.fechaInicio != null
+                                    ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
+                                    : '';
+                                final horaRecordatorio =
+                                    t.horaRecordatorio ?? '';
+                                return Card(
+                                  elevation: 2,
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    onTap: () =>
+                                        _mostrarDialogoEditarTratamiento(i),
+                                    title: Text(
+                                      _capitalizarPrimera(t.medicacion),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
+                                      '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.pause),
+                                          tooltip: 'Pausar tratamiento',
+                                          onPressed: () =>
+                                              _alternarPausaTratamiento(i),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined),
+                                          onPressed: () =>
+                                              _mostrarDialogoEditarTratamiento(
+                                                i,
+                                              ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.redAccent,
+                                          ),
+                                          onPressed: () =>
+                                              _mostrarDialogoEliminarTratamiento(
+                                                i,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          if (diariosPausados.isNotEmpty)
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              collapsedIconColor: colorScheme.onSurface
+                                  .withValues(alpha: 0.45),
+                              iconColor: colorScheme.onSurface.withValues(
+                                alpha: 0.45,
+                              ),
+                              title: Text(
+                                'Pausados',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                              children: diariosPausados.map((entry) {
+                                final i = entry.key;
+                                final t = entry.value;
+                                final dias = t.diasDuracion;
 
-                            return Card(
-                              color: Colors.grey.shade200,
-                              child: ListTile(
-                                title: Opacity(
-                                  opacity: 0.6,
-                                  child: Text(t.medicacion),
-                                ),
-                                subtitle: Opacity(
-                                  opacity: 0.6,
-                                  child: Text('${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}'),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.restore),
-                                      tooltip: 'Restaurar tratamiento',
-                                      onPressed: () => setState(() {
-                                        _tratamientos[i] = _tratamientoController.restaurar(_tratamientos[i]);
-                                        _hayCambios = true;
-                                      }),
+                                return Card(
+                                  elevation: 0,
+                                  color: Colors.grey.shade300,
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: Icon(
+                                      Icons.pause_circle_outline,
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.4,
+                                      ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-                                      tooltip: 'Eliminar definitivamente',
-                                      onPressed: () => setState(() {
-                                        _tratamientos.removeAt(i);
-                                        _hayCambios = true;
-                                      }),
+                                    title: Text(
+                                      _capitalizarPrimera(t.medicacion),
+                                      style: textoPausado,
                                     ),
-                                  ],
+                                    subtitle: Text(
+                                      '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}',
+                                      style: textoPausado,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.play_arrow,
+                                            color: colorScheme.onSurface
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                          tooltip: 'Reanudar tratamiento',
+                                          onPressed: () =>
+                                              _alternarPausaTratamiento(i),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.delete_forever,
+                                            color: Colors.redAccent,
+                                          ),
+                                          tooltip: 'Eliminar definitivamente',
+                                          onPressed: () => setState(() {
+                                            _tratamientos.removeAt(i);
+                                            _hayCambios = true;
+                                          }),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  // --- SECCIÓN 2: Eventos y Visitas (categoría != diario) ---
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Eventos y Visitas',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final eventos = _tratamientos
+                          .asMap()
+                          .entries
+                          .where((e) => e.value.categoria != 'diario')
+                          .toList()
+                        ..sort((a, b) {
+                          final fechaA = a.value.fechaInicio ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
+                          final fechaB = b.value.fechaInicio ??
+                              DateTime.fromMillisecondsSinceEpoch(0);
+                          return fechaB.compareTo(fechaA);
+                        });
+                      final colorScheme = Theme.of(context).colorScheme;
+
+                      if (eventos.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'Sin eventos ni visitas registrados.',
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+
+                      return Column(
+                        children: eventos.map((entry) {
+                          final i = entry.key;
+                          final t = entry.value;
+                          final fechaTexto = t.fechaInicio != null
+                              ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
+                              : 'Sin fecha';
+                          final color = _colorCategoria(t.categoria);
+
+                          return Card(
+                            elevation: 1,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              onTap: () => _mostrarDialogoEditarTratamiento(i),
+                              leading: Icon(
+                                _iconoCategoria(t.categoria),
+                                color: color,
+                              ),
+                              title: Text(
+                                _capitalizarPrimera(t.medicacion),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            );
-                          }).toList(),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              // --- SECCIÓN: Ubicación (en casa / refugio) ---
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Este perrito/a está en casa'),
-                value: _enCasa,
-                onChanged: (valor) => setState(() => _enCasa = valor ?? false),
-              ),
-              const SizedBox(height: 32),
-              // --- SECCIÓN: Acciones de guardado y eliminación ---
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _estaGuardando ? null : _guardarDatos,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                              subtitle: Text(
+                                '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
+                                '${t.indicaciones.isNotEmpty ? ' · ${t.indicaciones}' : ''}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: () =>
+                                        _mostrarDialogoEditarTratamiento(i),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.redAccent,
+                                    ),
+                                    onPressed: () =>
+                                        _mostrarDialogoEliminarTratamiento(i),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
-                  child: _estaGuardando
-                      ? CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary)
-                      : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
+                  const SizedBox(height: 16),
+                  // --- SECCIÓN: Ubicación (en casa / refugio) ---
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Este perrito/a está en casa'),
+                    value: _enCasa,
+                    onChanged: (valor) =>
+                        setState(() => _enCasa = valor ?? false),
+                  ),
+                  const SizedBox(height: 32),
+                  // --- SECCIÓN: Acciones de guardado y eliminación ---
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _estaGuardando ? null : _guardarDatos,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
+                      ),
+                      child: _estaGuardando
+                          ? CircularProgressIndicator(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            )
+                          : Text(
+                              esEdicion ? 'Guardar Cambios' : 'Crear Ficha',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
+                  if (widget.idDocumento != null)
+                    TextButton(
+                      onPressed: _confirmarEliminarFicha,
+                      child: const Text(
+                        'Eliminar ficha',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                ],
               ),
-              if (widget.idDocumento != null)
-                TextButton(
-                  onPressed: _confirmarEliminarFicha,
-                  child: const Text('Eliminar ficha', style: TextStyle(color: Colors.red)),
-                ),
-              ],
             ),
           ),
         ),
-      ),
-    ),   // cierra Scaffold
-  );     // cierra PopScope
+      ), // cierra Scaffold
+    ); // cierra PopScope
   }
 }

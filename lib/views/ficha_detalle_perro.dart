@@ -462,11 +462,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         color = Colors.red;
       }
 
-      if (circulos.isNotEmpty) circulos.add(const SizedBox(width: 4));
+      if (circulos.isNotEmpty) circulos.add(const SizedBox(width: 3));
       circulos.add(
         Container(
-          width: 15,
-          height: 15,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
       );
@@ -488,62 +488,86 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return perro.copyWith(tratamientos: actualizados);
   }
 
-  List<Widget> _buildTratamientos(PerroModel perro, bool esInvitado) {
+  Widget _buildSeccionSalud(PerroModel perro, bool esInvitado) {
     final tratamientos = perro.tratamientos;
-    if (tratamientos.isEmpty) return [];
-
     final fechaHoy = _fechaHoyISO();
     // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
     final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
+    final tieneHistorial = tratamientos.isNotEmpty;
 
-    return [
-      const SizedBox(height: 24),
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Tratamientos activos:',
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ficha médica:',
               textScaler: TextScaler.linear(_escalaTexto),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.calendar_month_outlined),
-            tooltip: 'Ver historial médico completo',
-            onPressed: () => _mostrarHistorialCompleto(tratamientos),
-          ),
-        ],
-      ),
-      const SizedBox(height: 10),
-      ...tratamientosActivos.map((t) {
-        final registroDosis = t.registroDosis;
-        final marcadoHoy = registroDosis.contains(fechaHoy);
-        final diasDuracion = t.diasDuracion;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: CheckboxListTile(
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(t.medicacion, textScaler: TextScaler.linear(_escalaTexto)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
-                  textScaler: TextScaler.linear(_escalaTexto),
-                ),
-                const SizedBox(height: 6),
-                _buildHistorialDosis(t),
-              ],
+            const SizedBox(height: 8),
+            _construirTextoFormateado(
+              perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.',
+              _escalaTexto,
             ),
-            value: marcadoHoy,
-            onChanged: esInvitado
-                ? null
-                : (valor) => _actualizarDosisTratamiento(perro, t, fechaHoy, valor ?? false),
-          ),
-        );
-      }),
-    ];
+            if (tieneHistorial) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Tratamientos activos:',
+                textScaler: TextScaler.linear(_escalaTexto),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              ...tratamientosActivos.map((t) {
+                final registroDosis = t.registroDosis;
+                final marcadoHoy = registroDosis.contains(fechaHoy);
+                final diasDuracion = t.diasDuracion;
+
+                return Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: CheckboxListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(t.medicacion, textScaler: TextScaler.linear(_escalaTexto)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
+                          textScaler: TextScaler.linear(_escalaTexto),
+                        ),
+                        const SizedBox(height: 6),
+                        _buildHistorialDosis(t),
+                      ],
+                    ),
+                    value: marcadoHoy,
+                    onChanged: esInvitado
+                        ? null
+                        : (valor) => _actualizarDosisTratamiento(perro, t, fechaHoy, valor ?? false),
+                  ),
+                );
+              }),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(
+                    'Ver Historial Médico',
+                    textScaler: TextScaler.linear(_escalaTexto),
+                  ),
+                  onPressed: () => _mostrarHistorialCompleto(tratamientos),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   void _mostrarHistorialCompleto(List<TratamientoModel> tratamientos) {
@@ -589,10 +613,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 8),
         _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
         const SizedBox(height: 20),
-        Text('Ficha médica:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        _construirTextoFormateado(perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.', _escalaTexto),
-        ..._buildTratamientos(perro, esInvitado),
+        _buildSeccionSalud(perro, esInvitado),
         if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('Familiares en el refugio:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -952,9 +973,18 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   }
 
   Color obtenerColorCategoria(String? categoria) {
-    if (categoria == 'unico') return Colors.blue;
-    if (categoria == 'veterinaria') return Colors.orange;
-    return Colors.green; // Por defecto (Tratamiento Diario)
+    switch (categoria) {
+      case 'unico':
+        return Colors.blue;
+      case 'higiene':
+        return Colors.cyan;
+      case 'evento':
+        return Colors.purple;
+      case 'veterinaria':
+        return Colors.orange;
+      default:
+        return Colors.green;
+    }
   }
 
   @override
@@ -1048,11 +1078,13 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                       itemBuilder: (context, index) {
                         final evento = eventosSeleccionados[index];
                         final categoriaEvento = evento['categoria']?.toString();
-                        final icono = categoriaEvento == 'unico'
-                            ? Icons.medication
-                            : categoriaEvento == 'veterinaria'
-                                ? Icons.local_hospital
-                                : Icons.check_circle;
+                        final icono = switch (categoriaEvento) {
+                          'unico' => Icons.vaccines,
+                          'higiene' => Icons.shower,
+                          'evento' => Icons.monitor_heart,
+                          'veterinaria' => Icons.local_hospital,
+                          _ => Icons.medication,
+                        };
                         return Card(
                           child: ListTile(
                             leading: Icon(icono, color: obtenerColorCategoria(categoriaEvento)),
