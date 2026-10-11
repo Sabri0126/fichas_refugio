@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 
 /// Controlador encargado de la lógica de negocio y de acceso a Firestore de
@@ -114,6 +115,34 @@ class PerroController {
     return '';
   }
 
+  /// Archiva el egreso vigente cuando el perro deja de estar egresado.
+  /// No toca Firebase. No muta [original.historialEgresos].
+  static List<EgresoModel> calcularHistorialEgresos({
+    required PerroModel? original,
+    required String estadoNuevo,
+    String? motivo,
+    DateTime? fechaEgreso,
+    String? nota,
+    DateTime? fechaRegreso,
+    List<EgresoModel>? historialBase,
+  }) {
+    if (original == null) return const [];
+    final base = historialBase ?? original.historialEgresos;
+    if (original.estado == 'egresado' && estadoNuevo != 'egresado') {
+      final notaLimpia = nota?.trim();
+      return [
+        ...base,
+        EgresoModel(
+          motivo: motivo,
+          fechaEgreso: fechaEgreso,
+          nota: notaLimpia == null || notaLimpia.isEmpty ? null : notaLimpia,
+          fechaRegreso: estadoNuevo == 'activo' ? fechaRegreso : null,
+        ),
+      ];
+    }
+    return List<EgresoModel>.from(base);
+  }
+
   /// Determina la relación inversa a mostrar en el familiar vinculado (p. ej.
   /// si A es "Madre" de B, B es "Hijo/a" de A, respetando el sexo del perro
   /// original para elegir entre "Hijo" e "Hija").
@@ -146,6 +175,7 @@ class PerroController {
     if (perro.motivoEgreso == null) datosPerro['motivo_egreso'] = FieldValue.delete();
     if (perro.fechaEgreso == null) datosPerro['fecha_egreso'] = FieldValue.delete();
     if (perro.notaEgreso == null) datosPerro['nota_egreso'] = FieldValue.delete();
+    if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
 
     // La galería se gestiona exclusivamente desde sus propios métodos
     // (agregarFotoAGaleria, editarFotoDeGaleria, etc.), no desde este

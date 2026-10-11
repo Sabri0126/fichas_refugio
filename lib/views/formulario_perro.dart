@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/tratamiento_controller.dart';
+import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
@@ -41,16 +42,19 @@ class _FormularioPerroState extends State<FormularioPerro> {
       TextEditingController();
   final TextEditingController _fechaEgresoController = TextEditingController();
   final TextEditingController _notaEgresoController = TextEditingController();
+  final TextEditingController _fechaRegresoController = TextEditingController();
 
   DateTime? _fechaIngreso;
   DateTime? _fechaFallecimiento;
   DateTime? _fechaEgreso;
+  DateTime? _fechaRegreso;
   bool _estaCastrado = false;
   bool _enCasa = false;
   bool _estaGuardando = false;
   bool _edadIndeterminada = false;
   String _estado = 'activo';
   String? _motivoEgreso;
+  List<EgresoModel> _historialEgresos = [];
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
   List<TratamientoModel> _tratamientos = [];
@@ -82,17 +86,24 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _sexo = perro.sexo;
       _parientes = perro.parientes;
       _tratamientos = perro.tratamientos;
+      _historialEgresos = List<EgresoModel>.from(perro.historialEgresos);
 
       _fechaFallecimiento = perro.fechaFallecimiento;
       _fechaFallecimientoController.text = _fechaFallecimiento != null
           ? '${_fechaFallecimiento!.day.toString().padLeft(2, '0')}/${_fechaFallecimiento!.month.toString().padLeft(2, '0')}/${_fechaFallecimiento!.year}'
           : '';
-      _motivoEgreso = perro.motivoEgreso;
-      _fechaEgreso = perro.fechaEgreso;
+      _motivoEgreso = perro.estado == 'egresado' ? perro.motivoEgreso : null;
+      _fechaEgreso = perro.estado == 'egresado' ? perro.fechaEgreso : null;
       _fechaEgresoController.text = _fechaEgreso != null
           ? '${_fechaEgreso!.day.toString().padLeft(2, '0')}/${_fechaEgreso!.month.toString().padLeft(2, '0')}/${_fechaEgreso!.year}'
           : '';
-      _notaEgresoController.text = perro.notaEgreso ?? '';
+      _notaEgresoController.text = perro.estado == 'egresado' ? (perro.notaEgreso ?? '') : '';
+      if (perro.estado == 'egresado') {
+        final hoy = DateTime.now();
+        _fechaRegreso = DateTime(hoy.year, hoy.month, hoy.day);
+        _fechaRegresoController.text =
+            '${_fechaRegreso!.day.toString().padLeft(2, '0')}/${_fechaRegreso!.month.toString().padLeft(2, '0')}/${_fechaRegreso!.year}';
+      }
     }
     // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
     for (final c in [
@@ -103,6 +114,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _fichaMedicaController,
       _fechaEgresoController,
       _notaEgresoController,
+      _fechaRegresoController,
     ]) {
       c.addListener(() => setState(() => _hayCambios = true));
     }
@@ -119,6 +131,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
     _fechaFallecimientoController.dispose();
     _fechaEgresoController.dispose();
     _notaEgresoController.dispose();
+    _fechaRegresoController.dispose();
     super.dispose();
   }
 
@@ -167,6 +180,47 @@ class _FormularioPerroState extends State<FormularioPerro> {
           '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
       setState(() => _fechaEgreso = fechaSeleccionada);
     }
+  }
+
+  Future<void> _seleccionarFechaRegreso() async {
+    final fechaSeleccionada = await showDatePicker(
+      context: context,
+      initialDate: _fechaRegreso ?? DateTime.now(),
+      firstDate: _fechaEgreso ?? DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (fechaSeleccionada != null) {
+      _fechaRegresoController.text =
+          '${fechaSeleccionada.day.toString().padLeft(2, '0')}/${fechaSeleccionada.month.toString().padLeft(2, '0')}/${fechaSeleccionada.year}';
+      setState(() => _fechaRegreso = fechaSeleccionada);
+    }
+  }
+
+  String _lineaEgresoAnterior(EgresoModel egreso) {
+    final motivo = _perroController.formatearMotivoEgreso(egreso.motivo);
+    final fecha = _perroController.formatearFecha(egreso.fechaEgreso);
+    final base = motivo.isEmpty ? fecha : '$motivo · $fecha';
+    if (egreso.fechaRegreso == null) return base;
+    return '$base → regresó ${_perroController.formatearFecha(egreso.fechaRegreso)}';
+  }
+
+  Future<void> _quitarEgresoAnterior(int indice) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Borrar este egreso?'),
+        content: const Text('Se quita del historial cuando guardes la ficha.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Borrar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    setState(() {
+      _historialEgresos.removeAt(indice);
+      _hayCambios = true;
+    });
   }
 
   void _insertarBulletTexto(TextEditingController controller) {
@@ -439,6 +493,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
           notaEgreso: _estado == 'egresado' && _notaEgresoController.text.trim().isNotEmpty
               ? _notaEgresoController.text.trim()
               : null,
+          historialEgresos: PerroController.calcularHistorialEgresos(
+            original: widget.perroActual,
+            estadoNuevo: _estado,
+            motivo: _motivoEgreso,
+            fechaEgreso: _fechaEgreso,
+            nota: _notaEgresoController.text,
+            fechaRegreso: _fechaRegreso,
+            historialBase: _historialEgresos,
+          ),
           ultimaActualizacionEdad: DateTime.now(),
           historia: _historiaController.text.trim(),
           fichaMedica: _fichaMedicaController.text.trim(),
@@ -1522,36 +1585,34 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     onChanged: (valor) => setState(() => _estaCastrado = valor),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Estado', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Activo'),
-                              selected: _estado == 'activo',
-                              onSelected: (_) => setState(() => _estado = 'activo'),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Inactivo'),
-                              selected: _estado == 'inactivo',
-                              onSelected: (_) => setState(() => _estado = 'inactivo'),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Egresado'),
-                              selected: _estado == 'egresado',
-                              onSelected: (_) => setState(() {
-                                _estado = 'egresado';
-                                _motivoEgreso ??= 'adopcion';
-                              }),
-                            ),
-                          ],
-                        ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Activo'),
+                            selected: _estado == 'activo',
+                            onSelected: (_) => setState(() => _estado = 'activo'),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Inactivo'),
+                            selected: _estado == 'inactivo',
+                            onSelected: (_) => setState(() => _estado = 'inactivo'),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Egresado'),
+                            selected: _estado == 'egresado',
+                            onSelected: (_) => setState(() {
+                              _estado = 'egresado';
+                              _motivoEgreso ??= 'adopcion';
+                            }),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1612,6 +1673,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                                   decoration: const InputDecoration(
                                     labelText: 'Nota (opcional)',
                                     helperText: 'La ven también los visitantes. No cargues datos personales.',
+                                    helperMaxLines: 3,
                                     alignLabelWithHint: true,
                                   ),
                                 ),
@@ -1620,6 +1682,61 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           )
                         : const SizedBox(width: double.infinity),
                   ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.topCenter,
+                    child: widget.perroActual?.estado == 'egresado' && _estado == 'activo'
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _fechaRegresoController,
+                                  readOnly: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Fecha de regreso al refugio',
+                                    prefixIcon: Icon(Icons.login_rounded),
+                                  ),
+                                  onTap: _seleccionarFechaRegreso,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Los datos del egreso quedan guardados en el historial de la ficha.',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.textoSecundario,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox(width: double.infinity),
+                  ),
+                  if (_historialEgresos.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Egresos anteriores (${_historialEgresos.length})',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    for (var i = 0; i < _historialEgresos.length; i++)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _lineaEgresoAnterior(_historialEgresos[i]),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Borrar egreso',
+                            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                            onPressed: () => _quitarEgresoAnterior(i),
+                          ),
+                        ],
+                      ),
+                  ],
                     ],
                   ),
                   const SizedBox(height: 16),

@@ -2,10 +2,23 @@ import 'dart:developer' as developer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'egreso_model.dart';
 import 'tratamiento_model.dart';
 
 /// Convierte un valor proveniente de Firestore (Timestamp, DateTime o String)
 /// en un [DateTime], devolviendo `null` si no se puede interpretar.
+List<EgresoModel> _historialEgresosDesdeValor(dynamic valor) {
+  if (valor is! List) return const [];
+  final historial = <EgresoModel>[];
+  for (final item in valor) {
+    if (item is! Map) continue;
+    try {
+      historial.add(EgresoModel.fromMap(Map<String, dynamic>.from(item)));
+    } catch (_) {}
+  }
+  return historial;
+}
+
 DateTime? _fechaDesdeValor(dynamic valor) {
   if (valor is Timestamp) return valor.toDate();
   if (valor is DateTime) return valor;
@@ -60,6 +73,9 @@ class PerroModel {
   /// Nota libre del egreso. La ven también los visitantes.
   final String? notaEgreso;
 
+  /// Egresos ya cerrados. Vacío si el perro nunca volvió de un egreso.
+  final List<EgresoModel> historialEgresos;
+
   /// Marca de tiempo de la última vez que se recalculó automáticamente la
   /// edad del perro (usada para el envejecimiento incremental de cachorros).
   final DateTime? ultimaActualizacionEdad;
@@ -107,6 +123,7 @@ class PerroModel {
     this.motivoEgreso,
     this.fechaEgreso,
     this.notaEgreso,
+    this.historialEgresos = const [],
     this.ultimaActualizacionEdad,
     this.historia = '',
     this.fichaMedica = '',
@@ -193,6 +210,7 @@ class PerroModel {
       motivoEgreso: data['motivo_egreso']?.toString(),
       fechaEgreso: _fechaDesdeValor(data['fecha_egreso']),
       notaEgreso: data['nota_egreso']?.toString(),
+      historialEgresos: _historialEgresosDesdeValor(data['historial_egresos']),
       ultimaActualizacionEdad: _fechaDesdeValor(data['ultima_actualizacion_edad']),
       historia: data['historia']?.toString() ?? '',
       fichaMedica: data['ficha_medica']?.toString() ?? '',
@@ -221,6 +239,7 @@ class PerroModel {
       if (motivoEgreso != null) 'motivo_egreso': motivoEgreso,
       if (fechaEgreso != null) 'fecha_egreso': Timestamp.fromDate(fechaEgreso!),
       if (notaEgreso != null) 'nota_egreso': notaEgreso,
+      if (historialEgresos.isNotEmpty) 'historial_egresos': historialEgresos.map((egreso) => egreso.toMap()).toList(),
       if (ultimaActualizacionEdad != null)
         'ultima_actualizacion_edad': Timestamp.fromDate(ultimaActualizacionEdad!),
       'historia': historia,
@@ -257,6 +276,7 @@ class PerroModel {
       motivoEgreso: motivoEgreso,
       fechaEgreso: fechaEgreso,
       notaEgreso: notaEgreso,
+      historialEgresos: historialEgresos,
       ultimaActualizacionEdad: ultimaActualizacionEdad,
       historia: historia,
       fichaMedica: fichaMedica,

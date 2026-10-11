@@ -695,6 +695,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: widget.seccion == SeccionPerros.egresados
                 ? Wrap(
+                    alignment: WrapAlignment.start,
                     spacing: 8,
                     runSpacing: 8,
                     children: [
@@ -709,9 +710,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                         onSelected: (_) => setState(() => _filtroEgreso = 'Adoptados'),
                       ),
                       ChoiceChip(
-                        label: const Text('Con su familia'),
-                        selected: _filtroEgreso == 'Con su familia',
-                        onSelected: (_) => setState(() => _filtroEgreso = 'Con su familia'),
+                        label: const Text('Reencontrados'),
+                        selected: _filtroEgreso == 'Reencontrados',
+                        onSelected: (_) => setState(() => _filtroEgreso = 'Reencontrados'),
                       ),
                     ],
                   )
@@ -768,7 +769,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           final perros = perrosPorEstado.where((perro) {
             if (widget.seccion == SeccionPerros.egresados) {
               if (_filtroEgreso == 'Adoptados') return perro.motivoEgreso == 'adopcion';
-              if (_filtroEgreso == 'Con su familia') return perro.motivoEgreso == 'familia';
+              if (_filtroEgreso == 'Reencontrados') return perro.motivoEgreso == 'familia';
               return true;
             }
             if (_filtroUbicacion == 'En casa') {
@@ -813,7 +814,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                     child: Text(
                       widget.seccion == SeccionPerros.egresados
-                          ? 'Adoptados ($totalAdoptados) | Con su familia ($totalFamilia)'
+                          ? 'Adoptados ($totalAdoptados) | Reencontrados ($totalFamilia)'
                           : 'Perritos del refugio ($totalRefugio) | En casa ($totalEnCasa)',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.navy),
                     ),

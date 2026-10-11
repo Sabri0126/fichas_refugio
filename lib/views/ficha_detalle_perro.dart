@@ -16,6 +16,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/tratamiento_controller.dart';
+import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
@@ -848,6 +849,94 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
+  Widget _historialEgresos(PerroModel perro) {
+    final ordenados = [...perro.historialEgresos]..sort((a, b) {
+      if (a.fechaEgreso == null && b.fechaEgreso == null) return 0;
+      if (a.fechaEgreso == null) return 1;
+      if (b.fechaEgreso == null) return -1;
+      return b.fechaEgreso!.compareTo(a.fechaEgreso!);
+    });
+    final filas = <Widget>[];
+    for (var i = 0; i < ordenados.length; i++) {
+      if (i > 0) filas.add(const Divider());
+      filas.add(_filaEgreso(ordenados[i]));
+    }
+    return _tarjetaSeccion(
+      titulo: 'Historial de egresos',
+      icono: Icons.history_rounded,
+      children: filas,
+    );
+  }
+
+  Widget _filaEgreso(EgresoModel egreso) {
+    final motivo = _perroController.formatearMotivoEgreso(egreso.motivo);
+    final icono = switch (egreso.motivo) {
+      'adopcion' => Icons.favorite_rounded,
+      'familia' => Icons.home_rounded,
+      _ => Icons.logout_rounded,
+    };
+    final nota = egreso.nota?.trim();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.activoTexto.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icono, size: 20, color: AppColors.activoTexto),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                motivo.isEmpty ? 'Egreso' : motivo,
+                textScaler: _escala,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              if (egreso.fechaEgreso == null)
+                Text(
+                  'Egreso: sin fecha',
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textoSecundario,
+                    fontStyle: FontStyle.italic,
+                  ),
+                )
+              else
+                Text(
+                  'Egreso: ${_perroController.formatearFecha(egreso.fechaEgreso)}',
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                ),
+              if (egreso.fechaRegreso != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Regreso: ${_perroController.formatearFecha(egreso.fechaRegreso)}',
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                ),
+              ],
+              if (nota != null && nota.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  nota,
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -864,6 +953,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         ],
         const SizedBox(height: 16),
         _buildDatosBasicos(perro),
+        if (perro.historialEgresos.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _historialEgresos(perro),
+        ],
         const SizedBox(height: 12),
         _tarjetaSeccion(
           titulo: 'Historia y observaciones',
