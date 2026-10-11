@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -17,6 +18,9 @@ import '../controllers/perro_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
+import '../theme/app_colors.dart';
+import '../theme/category_colors.dart';
+import '../theme/entrada_escalonada.dart';
 
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
@@ -42,24 +46,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
-  Future<void> _actualizarDosisTratamiento(
-    PerroModel perro,
-    TratamientoModel tratamiento,
-    String fechaHoy,
-    bool marcar,
-  ) async {
-    final tratamientos = List<TratamientoModel>.from(perro.tratamientos);
-    final indice = tratamientos.indexWhere((t) => t.id == tratamiento.id);
-    if (indice == -1) return;
-
-    final fecha = DateTime.tryParse(fechaHoy) ?? DateTime.now();
-    tratamientos[indice] = _tratamientoController.alternarDosis(tratamientos[indice], fecha, marcar);
-
+  Future<void> _toggleDosis(TratamientoModel tratamiento, DateTime fecha) async {
     try {
-      await _tratamientoController.guardarTratamientos(widget.idDocumento, tratamientos);
+      await _tratamientoController.toggleDosis(widget.idDocumento, tratamiento, fecha);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar el tratamiento')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar el tratamiento')),
+        );
       }
     }
   }
@@ -79,7 +73,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       data: textoMarkdown,
       selectable: true,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        p: TextStyle(fontSize: 16 * escala, height: 1.4),
+        p: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16 * escala, height: 1.45),
         strong: const TextStyle(fontWeight: FontWeight.bold),
         em: const TextStyle(fontStyle: FontStyle.italic),
         listBullet: TextStyle(fontSize: 16 * escala),
@@ -441,38 +435,278 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildHistorialDosis(TratamientoModel tratamiento) {
+  TextScaler get _escala => TextScaler.linear(_escalaTexto);
+
+  static const _inicialesDia = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  static const _nombresDia = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+  Widget _buildHistorialDosis(TratamientoModel tratamiento, bool esInvitado) {
     final registroDosis = tratamiento.registroDosis;
     final fechaInicio = tratamiento.fechaInicio;
+    final inicioDia = fechaInicio == null
+        ? null
+        : DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day);
+    final textTheme = Theme.of(context).textTheme;
 
     final circulos = <Widget>[];
     for (int i = 4; i >= 0; i--) {
       final dia = DateTime.now().subtract(Duration(days: i));
       final diaSoloFecha = DateTime(dia.year, dia.month, dia.day);
+      final antesDeInicio = inicioDia != null && diaSoloFecha.isBefore(inicioDia);
+      final esHoy = i == 0;
 
-      Color color;
-      if (fechaInicio != null &&
-          diaSoloFecha.isBefore(DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day))) {
-        color = Colors.grey.shade200;
-      } else if (registroDosis.contains(_fechaISO(dia))) {
-        color = Colors.green;
-      } else if (i == 0) {
-        color = Colors.grey;
+      Color fondo;
+      IconData? icono;
+      String estado;
+      if (antesDeInicio) {
+        fondo = AppColors.pendiente.withValues(alpha: 0.35);
+        estado = 'antes del inicio del tratamiento';
+      } else if (registroDosis.contains(_fechaISO(diaSoloFecha))) {
+        fondo = AppColors.dosisDada;
+        icono = Icons.check;
+        estado = 'dosis dada';
+      } else if (esHoy) {
+        fondo = AppColors.pendiente;
+        estado = 'dosis pendiente';
       } else {
-        color = Colors.red;
+        fondo = AppColors.dosisOlvidada;
+        icono = Icons.close;
+        estado = 'dosis olvidada';
       }
 
-      if (circulos.isNotEmpty) circulos.add(const SizedBox(width: 3));
+      final habilitado = !(esInvitado || antesDeInicio);
+
       circulos.add(
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        Semantics(
+          button: habilitado,
+          label: '${esHoy ? 'Hoy' : _nombresDia[diaSoloFecha.weekday - 1]} ${diaSoloFecha.day}: $estado',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: habilitado
+                ? () {
+                    HapticFeedback.selectionClick();
+                    _toggleDosis(tratamiento, diaSoloFecha);
+                  }
+                : null,
+            child: SizedBox(
+              width: 40,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 40,
+                    child: Center(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: fondo,
+                          shape: BoxShape.circle,
+                          border: esHoy ? Border.all(color: AppColors.navy, width: 2) : null,
+                        ),
+                        child: icono == null ? null : Icon(icono, size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _inicialesDia[diaSoloFecha.weekday - 1],
+                    style: textTheme.labelMedium?.copyWith(
+                      color: esHoy ? AppColors.navy : AppColors.textoSecundario,
+                      fontWeight: esHoy ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
 
     return Row(mainAxisAlignment: MainAxisAlignment.start, children: circulos);
+  }
+
+  Widget _tarjetaSeccion({required String titulo, required IconData icono, required List<Widget> children}) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icono, size: 22, color: AppColors.navy),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(titulo, textScaler: _escala, style: Theme.of(context).textTheme.titleLarge),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chipDato(IconData icono, String texto) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.rellenoInput,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.bordeTarjeta),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icono, size: 18, color: AppColors.navy),
+          const SizedBox(width: 6),
+          Text(
+            texto,
+            textScaler: _escala,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filaDato(String etiqueta, String valor) {
+    final textTheme = Theme.of(context).textTheme;
+    final sinDato = valor == 'No registrada';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(etiqueta, textScaler: _escala, style: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario)),
+        const SizedBox(height: 2),
+        Text(
+          valor,
+          textScaler: _escala,
+          style: sinDato
+              ? textTheme.bodyLarge?.copyWith(color: AppColors.textoSecundario, fontStyle: FontStyle.italic)
+              : textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDatosBasicos(PerroModel perro) {
+    final esHembra = perro.sexo == 'hembra';
+    final edadTexto = _formatearEdadTexto(perro);
+    final partesEdad = edadTexto.split(':');
+    final edadValor = partesEdad.length > 1 ? partesEdad.sublist(1).join(':').trim() : edadTexto;
+    final edadChip = edadTexto.startsWith('Edad estimada') ? '$edadValor aprox.' : edadValor;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _chipDato(esHembra ? Icons.female : Icons.male, esHembra ? 'Hembra' : 'Macho'),
+                _chipDato(Icons.cake_outlined, edadChip),
+                _chipDato(
+                  perro.castrado ? Icons.check_circle_outline : Icons.remove_circle_outline,
+                  perro.castrado ? 'Castrado' : 'No castrado',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _filaDato('Fecha de ingreso', _formatearFecha(perro.fechaIngreso)),
+            if (perro.fechaFallecimiento != null) ...[
+              const SizedBox(height: 12),
+              _filaDato('Fecha de fallecimiento', _formatearFecha(perro.fechaFallecimiento)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTarjetaTratamiento(TratamientoModel t, String fechaHoy, bool esInvitado) {
+    final textTheme = Theme.of(context).textTheme;
+    final marcadoHoy = t.registroDosis.contains(fechaHoy);
+    final diasDuracion = t.diasDuracion;
+    final ValueChanged<bool?>? alCambiar = esInvitado ? null : (_) => _toggleDosis(t, DateTime.now());
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.08) : AppColors.rellenoInput,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.4) : AppColors.bordeTarjeta,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: alCambiar == null ? null : () => alCambiar(!marcadoHoy),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(value: marcadoHoy, onChanged: alCambiar),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10, bottom: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
+                                color: marcadoHoy ? AppColors.textoSecundario : AppColors.texto,
+                                decoration: marcadoHoy ? TextDecoration.lineThrough : TextDecoration.none,
+                                decorationColor: AppColors.textoSecundario,
+                              ),
+                              child: Text(
+                                t.medicacion,
+                                textScaler: _escala,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
+                              textScaler: _escala,
+                              style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _buildHistorialDosis(t, esInvitado),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Marca como inactivos los tratamientos diarios cuyo ciclo (fecha_inicio + dias_duracion) ya venció,
@@ -494,79 +728,58 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
     final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
     final tieneHistorial = tratamientos.isNotEmpty;
+    final textTheme = Theme.of(context).textTheme;
 
-    return Card(
-      elevation: 2,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Ficha médica:',
-              textScaler: TextScaler.linear(_escalaTexto),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            _construirTextoFormateado(
-              perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.',
-              _escalaTexto,
-            ),
-            if (tieneHistorial) ...[
-              const SizedBox(height: 20),
-              Text(
-                'Tratamientos activos:',
-                textScaler: TextScaler.linear(_escalaTexto),
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              ...tratamientosActivos.map((t) {
-                final registroDosis = t.registroDosis;
-                final marcadoHoy = registroDosis.contains(fechaHoy);
-                final diasDuracion = t.diasDuracion;
-
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: CheckboxListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(t.medicacion, textScaler: TextScaler.linear(_escalaTexto)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
-                          textScaler: TextScaler.linear(_escalaTexto),
-                        ),
-                        const SizedBox(height: 6),
-                        _buildHistorialDosis(t),
-                      ],
-                    ),
-                    value: marcadoHoy,
-                    onChanged: esInvitado
-                        ? null
-                        : (valor) => _actualizarDosisTratamiento(perro, t, fechaHoy, valor ?? false),
-                  ),
-                );
-              }),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  label: Text(
-                    'Ver Historial Médico',
-                    textScaler: TextScaler.linear(_escalaTexto),
-                  ),
-                  onPressed: () => _mostrarHistorialCompleto(tratamientos),
-                ),
-              ),
-            ],
-          ],
+    return _tarjetaSeccion(
+      titulo: 'Ficha médica',
+      icono: Icons.favorite_outline,
+      children: [
+        _construirTextoFormateado(
+          perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.',
+          _escalaTexto,
         ),
-      ),
+        if (tieneHistorial) ...[
+          const SizedBox(height: 24),
+          Text('Tratamientos activos', textScaler: _escala, style: textTheme.titleLarge),
+          const SizedBox(height: 12),
+          if (tratamientosActivos.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'No hay tratamientos diarios activos.',
+                textScaler: _escala,
+                style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+              ),
+            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            clipBehavior: Clip.none,
+            child: Column(
+              children: [
+                for (var n = 0; n < tratamientosActivos.length; n++)
+                  EntradaEscalonada(
+                    indice: n,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildTarjetaTratamiento(tratamientosActivos[n], fechaHoy, esInvitado),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text('Ver Historial Médico', textScaler: _escala),
+              onPressed: () => _mostrarHistorialCompleto(tratamientos),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -576,70 +789,70 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => CalendarioHistorialWidget(eventosCalendario: eventosCalendario),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (ctx, controladorScroll) => PrimaryScrollController(
+          controller: controladorScroll,
+          child: CalendarioHistorialWidget(eventosCalendario: eventosCalendario),
+        ),
+      ),
     );
   }
 
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
-    final tieneFechaFallecimiento = perro.fechaFallecimiento != null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
         Text(
           perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
-          textScaler: TextScaler.linear(_escalaTexto),
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          textScaler: _escala,
+          style: Theme.of(context).textTheme.headlineMedium,
         ),
-        const SizedBox(height: 14),
-        Text('Fecha de ingreso: ${_formatearFecha(perro.fechaIngreso)}', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
-        const SizedBox(height: 8),
-        Text(perro.sexo == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
-        const SizedBox(height: 8),
-        Text(_formatearEdadTexto(perro), textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
-        const SizedBox(height: 8),
-        Text(perro.castrado ? 'Castrado: Sí' : 'Castrado: No', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 16)),
-        if (tieneFechaFallecimiento) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Fecha de fallecimiento: ${_formatearFecha(perro.fechaFallecimiento)}',
-            textScaler: TextScaler.linear(_escalaTexto),
-            style: const TextStyle(fontSize: 16),
-          ),
-        ],
-        const SizedBox(height: 22),
-        Text('Historia/Observaciones:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
+        _buildDatosBasicos(perro),
+        const SizedBox(height: 12),
+        _tarjetaSeccion(
+          titulo: 'Historia y observaciones',
+          icono: Icons.menu_book_outlined,
+          children: [
+            _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
+          ],
+        ),
+        const SizedBox(height: 12),
         _buildSeccionSalud(perro, esInvitado),
         if (perro.parientes.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Text('Familiares en el refugio:', textScaler: TextScaler.linear(_escalaTexto), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: perro.parientes.map((familiar) {
-              final nombre = familiar['nombre']?.toString() ?? '';
-              final relacion = familiar['relacion']?.toString() ?? '';
-              final idDoc = familiar['id_documento']?.toString() ?? '';
-              return ActionChip(
-                elevation: 3,
-                shadowColor: const Color.fromARGB(202, 0, 0, 0),
-                avatar: const Icon(Icons.people, size: 18),
-                label: Text('$nombre ($relacion)', textScaler: TextScaler.linear(_escalaTexto)),
-                onPressed: idDoc.isEmpty
-                    ? null
-                    : () => Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => FichaDetallePerro(idDocumento: idDoc),
-                          ),
-                        ),
-              );
-            }).toList(),
+          const SizedBox(height: 12),
+          _tarjetaSeccion(
+            titulo: 'Familiares en el refugio',
+            icono: Icons.people_outline,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: perro.parientes.map((familiar) {
+                  final nombre = familiar['nombre']?.toString() ?? '';
+                  final relacion = familiar['relacion']?.toString() ?? '';
+                  final idDoc = familiar['id_documento']?.toString() ?? '';
+                  return ActionChip(
+                    backgroundColor: AppColors.rellenoInput,
+                    avatar: const Icon(Icons.pets, size: 18, color: AppColors.navy),
+                    label: Text('$nombre ($relacion)', textScaler: _escala),
+                    onPressed: idDoc.isEmpty
+                        ? null
+                        : () => Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FichaDetallePerro(idDocumento: idDoc),
+                              ),
+                            ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
         ],
         const SizedBox(height: 24),
@@ -724,13 +937,33 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
 
     if (galeria.isEmpty) {
-      return const Center(
+      final textTheme = Theme.of(context).textTheme;
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Aún no hay fotos en la galería.\n¡Tocá la cámara arriba!',
-            style: TextStyle(fontSize: 16),
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.navy.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.photo_camera_outlined, size: 30, color: AppColors.navy),
+              ),
+              const SizedBox(height: 12),
+              Text('Aún no hay fotos en la galería', style: textTheme.titleMedium, textAlign: TextAlign.center),
+              if (!esInvitado) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Tocá el ícono de cámara arriba para agregar una.',
+                  style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -774,7 +1007,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: galeria.length > 1 ? 20 : 8),
                   ],
                 ),
                 if (!esInvitado)
@@ -829,6 +1062,29 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               ),
             ),
           ),
+        if (galeria.length > 1)
+          Positioned(
+            bottom: 8,
+            child: IgnorePointer(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(galeria.length, (index) {
+                  final activa = index == _paginaActual;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: activa ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: activa ? AppColors.navy : AppColors.navy.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -851,42 +1107,75 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         return Scaffold(
           // --- SECCIÓN: AppBar (título y acciones de galería/accesibilidad) ---
           appBar: AppBar(
-            title: Text('Ficha de ${perro.nombre}'),
+            title: Text('Ficha de ${perro.nombre}', overflow: TextOverflow.ellipsis),
             actions: [
               if (_subiendoFoto)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: Theme.of(context).colorScheme.onPrimary),
+                  ),
                 )
               else ...[
-                IconButton(
-                  icon: const Icon(Icons.zoom_out),
-                  tooltip: 'Achicar texto',
-                  onPressed: _escalaTexto <= 1.0 ? null : () => setState(() => _escalaTexto -= 0.15),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.zoom_in),
-                  tooltip: 'Agrandar texto',
-                  onPressed: () => setState(() => _escalaTexto += 0.15),
-                ),
                 if (!esInvitado) ...[
-                  IconButton(
-                    icon: Icon(_modoReordenar ? Icons.check : Icons.reorder),
-                    tooltip: _modoReordenar ? 'Guardar orden de fotos' : 'Reordenar fotos',
-                    onPressed: () async {
-                      if (_modoReordenar) {
-                        await _confirmarOrdenFotos();
-                      } else {
-                        _activarModoReordenar(perro);
-                      }
-                    },
-                  ),
+                  if (_modoReordenar)
+                    IconButton(
+                      icon: const Icon(Icons.check),
+                      tooltip: 'Guardar orden de fotos',
+                      onPressed: () async {
+                        if (_modoReordenar) {
+                          await _confirmarOrdenFotos();
+                        } else {
+                          _activarModoReordenar(perro);
+                        }
+                      },
+                    ),
                   IconButton(
                     icon: const Icon(Icons.add_a_photo),
                     tooltip: 'Agregar foto a la galería',
                     onPressed: _agregarFotoAGaleria,
                   ),
                 ],
+                PopupMenuButton<void>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'Más opciones',
+                  itemBuilder: (context) => [
+                    PopupMenuItem<void>(
+                      enabled: _escalaTexto > 1.0,
+                      onTap: () => setState(() => _escalaTexto -= 0.15),
+                      child: const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.zoom_out),
+                        title: Text('Achicar texto'),
+                      ),
+                    ),
+                    PopupMenuItem<void>(
+                      onTap: () => setState(() => _escalaTexto += 0.15),
+                      child: const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.zoom_in),
+                        title: Text('Agrandar texto'),
+                      ),
+                    ),
+                    if (!esInvitado && !_modoReordenar)
+                      PopupMenuItem<void>(
+                        onTap: () async {
+                          if (_modoReordenar) {
+                            await _confirmarOrdenFotos();
+                          } else {
+                            _activarModoReordenar(perro);
+                          }
+                        },
+                        child: const ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.reorder),
+                          title: Text('Reordenar fotos'),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ],
           ),
@@ -905,10 +1194,6 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                       Center(
                         child: Container(
                           margin: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 450),
                             child: SingleChildScrollView(
@@ -923,16 +1208,27 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   );
                 }
                 // --- SECCIÓN: Panel de información (layout angosto, apilado bajo la galería) ---
+                final galeriaVacia = galeria.isEmpty && !_modoReordenar;
                 return Column(
                   children: [
-                    SizedBox(height: 300, child: galeriaWidget),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      height: galeriaVacia ? 200 : 300,
+                      decoration: const BoxDecoration(
+                        color: AppColors.superficie,
+                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+                        boxShadow: [
+                          BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: galeriaWidget,
+                    ),
                     Expanded(
-                      child: Container(
-                        color: Theme.of(context).colorScheme.surface,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                          child: _buildInfoContenido(perro, esInvitado),
-                        ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                        child: _buildInfoContenido(perro, esInvitado),
                       ),
                     ),
                   ],
@@ -960,8 +1256,6 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   DateTime _focusedDay = DateTime.now();
   late final Future<void> _localeListo;
 
-  static const _azulMarino = Color.fromARGB(255, 47, 67, 99);
-
   @override
   void initState() {
     super.initState();
@@ -972,130 +1266,186 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     return widget.eventosCalendario[DateTime.utc(dia.year, dia.month, dia.day)] ?? [];
   }
 
-  Color obtenerColorCategoria(String? categoria) {
-    switch (categoria) {
-      case 'unico':
-        return Colors.blue;
-      case 'higiene':
-        return Colors.cyan;
-      case 'evento':
-        return Colors.purple;
-      case 'veterinaria':
-        return Colors.orange;
-      default:
-        return Colors.green;
-    }
+  Color obtenerColorCategoria(String? categoria) => CategoryColors.base(categoria);
+
+  Widget _filaEvento(Map<String, dynamic> evento) {
+    final textTheme = Theme.of(context).textTheme;
+    final categoriaEvento = evento['categoria']?.toString();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.rellenoInput,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.bordeTarjeta),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: CategoryColors.tinte(categoriaEvento), shape: BoxShape.circle),
+              child: Icon(CategoryColors.icono(categoriaEvento), size: 20, color: obtenerColorCategoria(categoriaEvento)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    evento['detalle']?.toString() ?? '${evento['medicacion']} - ${evento['indicaciones']}',
+                    style: textTheme.titleMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    CategoryColors.etiqueta(categoriaEvento),
+                    style: textTheme.labelMedium?.copyWith(color: CategoryColors.texto(categoriaEvento)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final eventosSeleccionados = _eventosDelDia(_selectedDay);
+    final textTheme = Theme.of(context).textTheme;
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Historial médico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            // --- SECCIÓN: Calendario Histórico ---
-            FutureBuilder<void>(
-              future: _localeListo,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return TableCalendar<Map<String, dynamic>>(
-                  locale: 'es_ES',
-                  firstDay: DateTime.utc(_focusedDay.year - 2, _focusedDay.month, _focusedDay.day),
-                  lastDay: DateTime.utc(_focusedDay.year + 1, _focusedDay.month, _focusedDay.day),
-                  focusedDay: _focusedDay,
-                  selectedDayPredicate: (dia) => isSameDay(dia, _selectedDay),
-                  eventLoader: _eventosDelDia,
-                  headerStyle: const HeaderStyle(
-                    formatButtonVisible: false,
-                    titleCentered: true,
-                  ),
-                  calendarStyle: CalendarStyle(
-                    selectedDecoration: const BoxDecoration(
-                      color: _azulMarino,
-                      shape: BoxShape.circle,
-                    ),
-                    todayDecoration: BoxDecoration(
-                      color: _azulMarino.withValues(alpha: 0.25),
-                      shape: BoxShape.circle,
-                    ),
-                    markerDecoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                    markerMargin: const EdgeInsets.only(top: 6),
-                  ),
-                  calendarBuilders: CalendarBuilders(
-                    markerBuilder: (context, date, events) {
-                      if (events.isEmpty) return null;
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: events.take(4).map((evento) {
-                          return Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                            decoration: BoxDecoration(
-                              color: obtenerColorCategoria(evento['categoria']?.toString()),
-                              shape: BoxShape.circle,
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
-                  onDaySelected: (diaSeleccionado, diaEnfocado) {
-                    setState(() {
-                      _selectedDay = diaSeleccionado;
-                      _focusedDay = diaEnfocado;
-                    });
-                  },
+      top: false,
+      child: ListView(
+        primary: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          Text('Historial médico', style: textTheme.titleLarge),
+          const SizedBox(height: 12),
+          // --- SECCIÓN: Calendario Histórico ---
+          FutureBuilder<void>(
+            future: _localeListo,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
                 );
-              },
-            ),
-            const SizedBox(height: 12),
-            // --- SECCIÓN: Detalle de eventos del día seleccionado ---
-            Expanded(
-              child: eventosSeleccionados.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No hay registros médicos para este día',
-                        style: TextStyle(color: Colors.grey),
+              }
+              final fechaLegible = DateFormat("EEEE d 'de' MMMM", 'es_ES').format(_selectedDay);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TableCalendar<Map<String, dynamic>>(
+                    locale: 'es_ES',
+                    firstDay: DateTime.utc(_focusedDay.year - 2, _focusedDay.month, _focusedDay.day),
+                    lastDay: DateTime.utc(_focusedDay.year + 1, _focusedDay.month, _focusedDay.day),
+                    focusedDay: _focusedDay,
+                    selectedDayPredicate: (dia) => isSameDay(dia, _selectedDay),
+                    eventLoader: _eventosDelDia,
+                    availableGestures: AvailableGestures.horizontalSwipe,
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: false,
+                      titleCentered: true,
+                      titleTextStyle: textTheme.titleMedium ?? const TextStyle(),
+                      leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.navy),
+                      rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.navy),
+                    ),
+                    daysOfWeekStyle: DaysOfWeekStyle(
+                      weekdayStyle: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ?? const TextStyle(),
+                      weekendStyle: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ?? const TextStyle(),
+                    ),
+                    calendarStyle: CalendarStyle(
+                      selectedDecoration: const BoxDecoration(
+                        color: AppColors.navy,
+                        shape: BoxShape.circle,
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: eventosSeleccionados.length,
-                      itemBuilder: (context, index) {
-                        final evento = eventosSeleccionados[index];
-                        final categoriaEvento = evento['categoria']?.toString();
-                        final icono = switch (categoriaEvento) {
-                          'unico' => Icons.vaccines,
-                          'higiene' => Icons.shower,
-                          'evento' => Icons.monitor_heart,
-                          'veterinaria' => Icons.local_hospital,
-                          _ => Icons.medication,
-                        };
-                        return Card(
-                          child: ListTile(
-                            leading: Icon(icono, color: obtenerColorCategoria(categoriaEvento)),
-                            title: Text(evento['detalle']?.toString() ?? '${evento['medicacion']} - ${evento['indicaciones']}'),
-                          ),
+                      selectedTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      todayDecoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.navy, width: 1.6),
+                      ),
+                      todayTextStyle: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w700),
+                      markerDecoration: BoxDecoration(
+                        color: obtenerColorCategoria('diario'),
+                        shape: BoxShape.circle,
+                      ),
+                      markerMargin: const EdgeInsets.only(top: 6),
+                    ),
+                    calendarBuilders: CalendarBuilders(
+                      markerBuilder: (context, date, events) {
+                        if (events.isEmpty) return null;
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: events.take(4).map((evento) {
+                            return Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.symmetric(horizontal: 1),
+                              decoration: BoxDecoration(
+                                color: obtenerColorCategoria(evento['categoria']?.toString()),
+                                shape: BoxShape.circle,
+                              ),
+                            );
+                          }).toList(),
                         );
                       },
                     ),
+                    onDaySelected: (diaSeleccionado, diaEnfocado) {
+                      setState(() {
+                        _selectedDay = diaSeleccionado;
+                        _focusedDay = diaEnfocado;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    fechaLegible,
+                    style: textTheme.titleMedium?.copyWith(color: AppColors.navy),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          // --- SECCIÓN: Detalle de eventos del día seleccionado ---
+          if (eventosSeleccionados.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  const Icon(Icons.event_available_outlined, size: 32, color: AppColors.pendiente),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No hay registros médicos para este día',
+                    style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              clipBehavior: Clip.none,
+              child: Column(
+                children: [
+                  for (var n = 0; n < eventosSeleccionados.length; n++)
+                    EntradaEscalonada(
+                      indice: n,
+                      child: _filaEvento(eventosSeleccionados[n]),
+                    ),
+                ],
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

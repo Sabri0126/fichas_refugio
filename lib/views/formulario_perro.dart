@@ -13,6 +13,9 @@ import '../controllers/perro_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
+import '../theme/app_colors.dart';
+import '../theme/category_colors.dart';
+import '../theme/entrada_escalonada.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -353,7 +356,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 ..pop()
                 ..pop();
             },
-            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -459,7 +462,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: 'Perro',
-                  border: OutlineInputBorder(),
                 ),
                 initialValue: seleccionadoId,
                 items: opciones
@@ -481,7 +483,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: 'Relación',
-                  border: OutlineInputBorder(),
                 ),
                 initialValue: seleccionadaRelacion,
                 items: relaciones
@@ -541,18 +542,345 @@ class _FormularioPerroState extends State<FormularioPerro> {
     required Color color,
     required String categoria,
   }) {
+    final colorTexto = CategoryColors.texto(categoria);
     return SizedBox(
       width: double.infinity,
-      child: OutlinedButton.icon(
+      child: OutlinedButton(
         onPressed: () => _mostrarDialogoAgregarTratamiento(categoria: categoria),
-        icon: Icon(icono, color: color),
-        label: Text(etiqueta, style: TextStyle(color: color)),
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: color,
-          side: BorderSide(color: color),
-          minimumSize: const Size.fromHeight(48),
+          backgroundColor: AppColors.superficie,
+          foregroundColor: colorTexto,
+          side: const BorderSide(color: AppColors.bordeTarjeta),
+          minimumSize: const Size.fromHeight(56),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           alignment: Alignment.centerLeft,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, size: 20, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                etiqueta,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: colorTexto,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tarjetaFormulario({
+    String? titulo,
+    IconData? icono,
+    Widget? accion,
+    required List<Widget> children,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (titulo != null) ...[
+              Row(
+                children: [
+                  if (icono != null) ...[
+                    Icon(icono, size: 22, color: AppColors.navy),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      titulo,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  ?accion,
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _estadoVacioSalud(IconData icono, String texto) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.rellenoInput,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.bordeTarjeta),
+      ),
+      child: Row(
+        children: [
+          Icon(icono, color: AppColors.pendiente),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              texto,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.textoSecundario,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tituloSeccion(String titulo, int cantidad) {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            titulo,
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.navy.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            '$cantidad',
+            style: textTheme.labelMedium?.copyWith(color: AppColors.navy),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _chipEstado({required bool activo}) {
+    final color = activo ? AppColors.activo : AppColors.pausado;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        activo ? 'Activo' : 'Pausado',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: activo ? const Color(0xFF2E6B44) : const Color(0xFF8A6414),
+        ),
+      ),
+    );
+  }
+
+  Widget _tarjetaTratamientoDiario({
+    required int i,
+    required TratamientoModel t,
+    required bool pausado,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final dias = t.diasDuracion;
+    final fechaTexto = t.fechaInicio != null
+        ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
+        : '';
+    final horaRecordatorio = t.horaRecordatorio ?? '';
+    final subtitulo = pausado
+        ? '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}'
+        : '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
+            '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}';
+    final colorIcono = pausado ? AppColors.pausado : CategoryColors.base('diario');
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      opacity: pausado ? 0.65 : 1,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: pausado ? null : () => _mostrarDialogoEditarTratamiento(i),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colorIcono.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        pausado ? Icons.pause_circle_outline : Icons.medication,
+                        size: 22,
+                        color: colorIcono,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _capitalizarPrimera(t.medicacion),
+                            style: textTheme.titleMedium,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitulo,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: AppColors.textoSecundario,
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _chipEstado(activo: !pausado),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: pausado
+                      ? [
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Reanudar'),
+                            onPressed: () => _alternarPausaTratamiento(i),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_forever,
+                              color: AppColors.error,
+                            ),
+                            tooltip: 'Eliminar definitivamente',
+                            onPressed: () => setState(() {
+                              _tratamientos.removeAt(i);
+                              _hayCambios = true;
+                            }),
+                          ),
+                        ]
+                      : [
+                          FilledButton.tonalIcon(
+                            icon: const Icon(Icons.pause),
+                            label: const Text('Pausar'),
+                            onPressed: () => _alternarPausaTratamiento(i),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton.outlined(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Editar',
+                            onPressed: () =>
+                                _mostrarDialogoEditarTratamiento(i),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: AppColors.error,
+                            ),
+                            tooltip: 'Eliminar',
+                            onPressed: () =>
+                                _mostrarDialogoEliminarTratamiento(i),
+                          ),
+                        ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filaEvento(int i, TratamientoModel t) {
+    final textTheme = Theme.of(context).textTheme;
+    final fechaTexto = t.fechaInicio != null
+        ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
+        : 'Sin fecha';
+    final color = _colorCategoria(t.categoria);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: AppColors.superficie,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.bordeTarjeta),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: () => _mostrarDialogoEditarTratamiento(i),
+          contentPadding: const EdgeInsets.only(left: 12, right: 4),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: CategoryColors.tinte(t.categoria),
+            child: Icon(_iconoCategoria(t.categoria), size: 20, color: color),
+          ),
+          title: Text(
+            _capitalizarPrimera(t.medicacion),
+            style: textTheme.titleMedium?.copyWith(fontSize: 15),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
+            '${t.indicaciones.isNotEmpty ? ' · ${t.indicaciones}' : ''}',
+            style: textTheme.bodyMedium?.copyWith(
+              color: AppColors.textoSecundario,
+              fontSize: 13,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Editar',
+                color: AppColors.textoSecundario,
+                onPressed: () => _mostrarDialogoEditarTratamiento(i),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Eliminar',
+                color: AppColors.error,
+                onPressed: () => _mostrarDialogoEliminarTratamiento(i),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -584,15 +912,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
     };
   }
 
-  Color _colorCategoria(String categoria) {
-    return switch (categoria) {
-      'unico' => const Color(0xFF64B5F6),
-      'higiene' => const Color(0xFF4DD0E1),
-      'evento' => const Color(0xFFBA68C8),
-      'veterinaria' => const Color(0xFFFFB74D),
-      _ => const Color(0xFF81C784),
-    };
-  }
+  Color _colorCategoria(String categoria) => CategoryColors.base(categoria);
 
   Future<void> _alternarPausaTratamiento(int indice) async {
     final actual = _tratamientos[indice];
@@ -664,7 +984,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     controller: medicacionController,
                     decoration: InputDecoration(
                       labelText: labelPrimerCampo,
-                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -672,7 +991,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     controller: indicacionesController,
                     decoration: InputDecoration(
                       labelText: labelSegundoCampo,
-                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -682,7 +1000,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Días de duración (0 = indefinido)',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   if (!esEventoUnico) const SizedBox(height: 16),
@@ -861,7 +1178,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   controller: medicacionController,
                   decoration: const InputDecoration(
                     labelText: 'Medicación',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -869,7 +1185,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   controller: indicacionesController,
                   decoration: const InputDecoration(
                     labelText: 'Indicaciones',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -878,7 +1193,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Días de duración (0 = indefinido)',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -1000,7 +1314,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             },
             child: Text(
               esDiario ? 'Eliminar definitivamente' : 'Eliminar',
-              style: const TextStyle(color: Colors.redAccent),
+              style: const TextStyle(color: AppColors.error),
             ),
           ),
         ],
@@ -1053,12 +1367,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            esEdicion ? 'Editar Ficha' : 'Nuevo Ingreso',
-            style: const TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          iconTheme: const IconThemeData(color: Colors.white),
+          title: Text(esEdicion ? 'Editar Ficha' : 'Nuevo Ingreso'),
         ),
         body: SafeArea(
           child: Form(
@@ -1095,11 +1404,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Datos básicos (nombre, ingreso, sexo, edad, castración, estado) ---
+                  _tarjetaFormulario(
+                    titulo: 'Datos básicos',
+                    icono: Icons.pets,
+                    children: [
                   TextFormField(
                     controller: _nombreController,
                     decoration: const InputDecoration(
                       labelText: 'Nombre del perrito',
-                      border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.pets),
                     ),
                     validator: _perroController.validarNombre,
@@ -1110,7 +1422,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     readOnly: true,
                     decoration: const InputDecoration(
                       labelText: 'Fecha de ingreso (opcional)',
-                      border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.calendar_today),
                     ),
                     onTap: _seleccionarFechaIngreso,
@@ -1118,24 +1429,22 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Text('Sexo: ', style: TextStyle(fontSize: 16)),
+                      Text('Sexo', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(width: 12),
                       ChoiceChip(
                         label: const Text('Macho'),
                         selected: _sexo == 'macho',
-                        selectedColor: Colors.blue.shade200,
                         onSelected: (_) => setState(() => _sexo = 'macho'),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('Hembra'),
                         selected: _sexo == 'hembra',
-                        selectedColor: Colors.pink.shade200,
                         onSelected: (_) => setState(() => _sexo = 'hembra'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Edad indeterminada'),
@@ -1154,7 +1463,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     enabled: !_edadIndeterminada,
                     decoration: const InputDecoration(
                       labelText: 'Edad estimada (años, opcional)',
-                      border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.cake),
                     ),
                     keyboardType: TextInputType.number,
@@ -1166,7 +1474,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       controller: _mesesController,
                       decoration: const InputDecoration(
                         labelText: 'Meses (opcional)',
-                        border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.calendar_view_month),
                       ),
                       keyboardType: TextInputType.number,
@@ -1176,27 +1483,25 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ],
                   const SizedBox(height: 16),
                   SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
                     title: const Text('¿Ya está castrado?'),
                     value: _estaCastrado,
-                    activeThumbColor: Colors.deepOrange,
                     onChanged: (valor) => setState(() => _estaCastrado = valor),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Text('Estado: ', style: TextStyle(fontSize: 16)),
+                      Text('Estado', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(width: 12),
                       ChoiceChip(
                         label: const Text('Activo'),
                         selected: _estado == 'activo',
-                        selectedColor: Colors.green.shade200,
                         onSelected: (_) => setState(() => _estado = 'activo'),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('Inactivo'),
                         selected: _estado == 'inactivo',
-                        selectedColor: Colors.blueGrey.shade200,
                         onSelected: (_) => setState(() => _estado = 'inactivo'),
                       ),
                     ],
@@ -1208,33 +1513,30 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Fecha de fallecimiento (opcional)',
-                        border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.sentiment_very_dissatisfied),
                       ),
                       onTap: _seleccionarFechaFallecimiento,
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  // --- SECCIÓN: Familiares vinculados ---
-                  Row(
-                    children: [
-                      Text(
-                        'Familiares',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const Spacer(),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Añadir familiar'),
-                        style: ElevatedButton.styleFrom(elevation: 2),
-                        onPressed: _mostrarDialogoAgregarFamiliar,
-                      ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  // --- SECCIÓN: Familiares vinculados ---
+                  _tarjetaFormulario(
+                    titulo: 'Familiares',
+                    icono: Icons.people_outline,
+                    accion: FilledButton.tonalIcon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('Añadir'),
+                      onPressed: _mostrarDialogoAgregarFamiliar,
+                    ),
+                    children: [
                   if (_parientes.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Sin familiares registrados.'),
+                    Text(
+                      'Sin familiares registrados.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textoSecundario,
+                      ),
                     )
                   else
                     Column(
@@ -1243,14 +1545,18 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         final p = entry.value;
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.people),
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.navy.withValues(alpha: 0.08),
+                            child: const Icon(Icons.pets, size: 20, color: AppColors.navy),
+                          ),
                           title: Text(p['nombre']?.toString() ?? ''),
                           subtitle: Text(p['relacion']?.toString() ?? ''),
                           trailing: IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
-                              color: Colors.redAccent,
+                              color: AppColors.error,
                             ),
+                            tooltip: 'Quitar familiar',
                             onPressed: () => setState(() {
                               _parientes.removeAt(i);
                               _hayCambios = true;
@@ -1259,8 +1565,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         );
                       }).toList(),
                     ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   // --- SECCIÓN: Historia / observaciones ---
+                  _tarjetaFormulario(
+                    children: [
                   Row(
                     children: [
                       Expanded(
@@ -1305,18 +1615,29 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     controller: _historiaController,
                     decoration: const InputDecoration(
                       labelText: 'Descripción de la historia',
-                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
                     maxLines: 6,
                   ),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Gestión de salud ---
-                  const Divider(thickness: 3, height: 32),
+                  const Divider(height: 32),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Gestión de Salud',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.favorite_outline, color: AppColors.navy),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Gestión de Salud',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1364,7 +1685,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     controller: _fichaMedicaController,
                     decoration: const InputDecoration(
                       labelText: 'Detalles médicos',
-                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
                     maxLines: 6,
                   ),
@@ -1378,53 +1699,73 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Column(
-                    children: [
-                      _botonCategoriaSalud(
-                        etiqueta: 'Tratamiento Diario',
-                        icono: Icons.medication,
-                        color: const Color(0xFF81C784),
-                        categoria: 'diario',
-                      ),
-                      const SizedBox(height: 12),
-                      _botonCategoriaSalud(
-                        etiqueta: 'Dosis Única',
-                        icono: Icons.vaccines,
-                        color: const Color(0xFF64B5F6),
-                        categoria: 'unico',
-                      ),
-                      const SizedBox(height: 12),
-                      _botonCategoriaSalud(
-                        etiqueta: 'Higiene',
-                        icono: Icons.shower,
-                        color: const Color(0xFF4DD0E1),
-                        categoria: 'higiene',
-                      ),
-                      const SizedBox(height: 12),
-                      _botonCategoriaSalud(
-                        etiqueta: 'Evento Médico',
-                        icono: Icons.monitor_heart,
-                        color: const Color(0xFFBA68C8),
-                        categoria: 'evento',
-                      ),
-                      const SizedBox(height: 12),
-                      _botonCategoriaSalud(
-                        etiqueta: 'Veterinaria',
-                        icono: Icons.local_hospital,
-                        color: const Color(0xFFFFB74D),
-                        categoria: 'veterinaria',
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const espacio = 12.0;
+                      final anchoCelda = (constraints.maxWidth - espacio) / 2;
+                      return Wrap(
+                        spacing: espacio,
+                        runSpacing: espacio,
+                        children: [
+                          SizedBox(
+                            width: anchoCelda,
+                            child: _botonCategoriaSalud(
+                              etiqueta: 'Tratamiento Diario',
+                              icono: Icons.medication,
+                              color: CategoryColors.base('diario'),
+                              categoria: 'diario',
+                            ),
+                          ),
+                          SizedBox(
+                            width: anchoCelda,
+                            child: _botonCategoriaSalud(
+                              etiqueta: 'Dosis Única',
+                              icono: Icons.vaccines,
+                              color: CategoryColors.base('unico'),
+                              categoria: 'unico',
+                            ),
+                          ),
+                          SizedBox(
+                            width: anchoCelda,
+                            child: _botonCategoriaSalud(
+                              etiqueta: 'Higiene',
+                              icono: Icons.shower,
+                              color: CategoryColors.base('higiene'),
+                              categoria: 'higiene',
+                            ),
+                          ),
+                          SizedBox(
+                            width: anchoCelda,
+                            child: _botonCategoriaSalud(
+                              etiqueta: 'Evento Médico',
+                              icono: Icons.monitor_heart,
+                              color: CategoryColors.base('evento'),
+                              categoria: 'evento',
+                            ),
+                          ),
+                          SizedBox(
+                            width: anchoCelda,
+                            child: _botonCategoriaSalud(
+                              etiqueta: 'Veterinaria',
+                              icono: Icons.local_hospital,
+                              color: CategoryColors.base('veterinaria'),
+                              categoria: 'veterinaria',
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   // --- SECCIÓN 1: Tratamientos Diarios (solo categoría diario) ---
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
+                    child: _tituloSeccion(
                       'Tratamientos Diarios',
-                      style: Theme.of(context).textTheme.titleLarge,
+                      _tratamientos.where((t) => t.categoria == 'diario').length,
                     ),
                   ),
+                  const SizedBox(height: 12),
                   Builder(
                     builder: (context) {
                       final diariosActivos = _tratamientos
@@ -1444,171 +1785,95 @@ class _FormularioPerroState extends State<FormularioPerro> {
                                 !e.value.activo,
                           )
                           .toList();
-                      final colorScheme = Theme.of(context).colorScheme;
-                      final textoPausado = TextStyle(
-                        color: colorScheme.onSurface.withValues(alpha: 0.45),
-                      );
+                      final textTheme = Theme.of(context).textTheme;
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (diariosActivos.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Text(
-                                'Sin tratamientos diarios activos.',
-                                style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
+                            _estadoVacioSalud(
+                              Icons.medication_outlined,
+                              'Sin tratamientos diarios activos.',
                             )
                           else
-                            Column(
-                              children: diariosActivos.map((entry) {
-                                final i = entry.key;
-                                final t = entry.value;
-                                final dias = t.diasDuracion;
-                                final fechaTexto = t.fechaInicio != null
-                                    ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
-                                    : '';
-                                final horaRecordatorio =
-                                    t.horaRecordatorio ?? '';
-                                return Card(
-                                  elevation: 2,
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    onTap: () =>
-                                        _mostrarDialogoEditarTratamiento(i),
-                                    title: Text(
-                                      _capitalizarPrimera(t.medicacion),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeOutCubic,
+                              alignment: Alignment.topCenter,
+                              clipBehavior: Clip.none,
+                              child: Column(
+                                children: [
+                                  for (var n = 0; n < diariosActivos.length; n++)
+                                    EntradaEscalonada(
+                                      indice: n,
+                                      child: _tarjetaTratamientoDiario(
+                                        i: diariosActivos[n].key,
+                                        t: diariosActivos[n].value,
+                                        pausado: false,
                                       ),
                                     ),
-                                    subtitle: Text(
-                                      '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
-                                      '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.pause),
-                                          tooltip: 'Pausar tratamiento',
-                                          onPressed: () =>
-                                              _alternarPausaTratamiento(i),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.edit_outlined),
-                                          onPressed: () =>
-                                              _mostrarDialogoEditarTratamiento(
-                                                i,
-                                              ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            color: Colors.redAccent,
-                                          ),
-                                          onPressed: () =>
-                                              _mostrarDialogoEliminarTratamiento(
-                                                i,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                                ],
+                              ),
                             ),
                           if (diariosPausados.isNotEmpty)
                             ExpansionTile(
                               tilePadding: EdgeInsets.zero,
-                              collapsedIconColor: colorScheme.onSurface
-                                  .withValues(alpha: 0.45),
-                              iconColor: colorScheme.onSurface.withValues(
-                                alpha: 0.45,
-                              ),
-                              title: Text(
-                                'Pausados',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      color: colorScheme.onSurface.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                    ),
-                              ),
-                              children: diariosPausados.map((entry) {
-                                final i = entry.key;
-                                final t = entry.value;
-                                final dias = t.diasDuracion;
-
-                                return Card(
-                                  elevation: 0,
-                                  color: Colors.grey.shade300,
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    leading: Icon(
-                                      Icons.pause_circle_outline,
-                                      color: colorScheme.onSurface.withValues(
-                                        alpha: 0.4,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      _capitalizarPrimera(t.medicacion),
-                                      style: textoPausado,
-                                    ),
-                                    subtitle: Text(
-                                      '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}',
-                                      style: textoPausado,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: Icon(
-                                            Icons.play_arrow,
-                                            color: colorScheme.onSurface
-                                                .withValues(alpha: 0.55),
-                                          ),
-                                          tooltip: 'Reanudar tratamiento',
-                                          onPressed: () =>
-                                              _alternarPausaTratamiento(i),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_forever,
-                                            color: Colors.redAccent,
-                                          ),
-                                          tooltip: 'Eliminar definitivamente',
-                                          onPressed: () => setState(() {
-                                            _tratamientos.removeAt(i);
-                                            _hayCambios = true;
-                                          }),
-                                        ),
-                                      ],
+                              shape: const Border(),
+                              collapsedShape: const Border(),
+                              collapsedIconColor: AppColors.textoSecundario,
+                              iconColor: AppColors.textoSecundario,
+                              title: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.pause_circle_outline,
+                                    size: 20,
+                                    color: AppColors.pausado,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Pausados (${diariosPausados.length})',
+                                    style: textTheme.titleMedium?.copyWith(
+                                      color: AppColors.textoSecundario,
                                     ),
                                   ),
-                                );
-                              }).toList(),
+                                ],
+                              ),
+                              children: [
+                                AnimatedSize(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  clipBehavior: Clip.none,
+                                  child: Column(
+                                    children: [
+                                      for (var n = 0; n < diariosPausados.length; n++)
+                                        EntradaEscalonada(
+                                          indice: n,
+                                          child: _tarjetaTratamientoDiario(
+                                            i: diariosPausados[n].key,
+                                            t: diariosPausados[n].value,
+                                            pausado: true,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                         ],
                       );
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   // --- SECCIÓN 2: Eventos y Visitas (categoría != diario) ---
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
+                    child: _tituloSeccion(
                       'Eventos y Visitas',
-                      style: Theme.of(context).textTheme.titleLarge,
+                      _tratamientos.where((t) => t.categoria != 'diario').length,
                     ),
                   ),
+                  const SizedBox(height: 12),
                   Builder(
                     builder: (context) {
                       final eventos = _tratamientos
@@ -1623,117 +1888,86 @@ class _FormularioPerroState extends State<FormularioPerro> {
                               DateTime.fromMillisecondsSinceEpoch(0);
                           return fechaB.compareTo(fechaA);
                         });
-                      final colorScheme = Theme.of(context).colorScheme;
-
                       if (eventos.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            'Sin eventos ni visitas registrados.',
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                        return _estadoVacioSalud(
+                          Icons.event_note_outlined,
+                          'Sin eventos ni visitas registrados.',
                         );
                       }
 
-                      return Column(
-                        children: eventos.map((entry) {
-                          final i = entry.key;
-                          final t = entry.value;
-                          final fechaTexto = t.fechaInicio != null
-                              ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
-                              : 'Sin fecha';
-                          final color = _colorCategoria(t.categoria);
-
-                          return Card(
-                            elevation: 1,
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              onTap: () => _mostrarDialogoEditarTratamiento(i),
-                              leading: Icon(
-                                _iconoCategoria(t.categoria),
-                                color: color,
+                      return AnimatedSize(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        clipBehavior: Clip.none,
+                        child: Column(
+                          children: [
+                            for (var n = 0; n < eventos.length; n++)
+                              EntradaEscalonada(
+                                indice: n,
+                                child: _filaEvento(eventos[n].key, eventos[n].value),
                               ),
-                              title: Text(
-                                _capitalizarPrimera(t.medicacion),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
-                                '${t.indicaciones.isNotEmpty ? ' · ${t.indicaciones}' : ''}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined),
-                                    onPressed: () =>
-                                        _mostrarDialogoEditarTratamiento(i),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.redAccent,
-                                    ),
-                                    onPressed: () =>
-                                        _mostrarDialogoEliminarTratamiento(i),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                          ],
+                        ),
                       );
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   // --- SECCIÓN: Ubicación (en casa / refugio) ---
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Este perrito/a está en casa'),
-                    value: _enCasa,
-                    onChanged: (valor) =>
-                        setState(() => _enCasa = valor ?? false),
-                  ),
-                  const SizedBox(height: 32),
-                  // --- SECCIÓN: Acciones de guardado y eliminación ---
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _estaGuardando ? null : _guardarDatos,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onPrimary,
-                      ),
-                      child: _estaGuardando
-                          ? CircularProgressIndicator(
-                              color: Theme.of(context).colorScheme.onPrimary,
-                            )
-                          : Text(
-                              esEdicion ? 'Guardar Cambios' : 'Crear Ficha',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: CheckboxListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      secondary: const Icon(Icons.home_outlined, color: AppColors.navy),
+                      title: const Text('Este perrito/a está en casa'),
+                      value: _enCasa,
+                      onChanged: (valor) =>
+                          setState(() => _enCasa = valor ?? false),
                     ),
                   ),
-                  if (widget.idDocumento != null)
-                    TextButton(
+                  if (widget.idDocumento != null) ...[
+                    const SizedBox(height: 24),
+                    TextButton.icon(
                       onPressed: _confirmarEliminarFicha,
-                      child: const Text(
-                        'Eliminar ficha',
-                        style: TextStyle(color: Colors.red),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Eliminar ficha'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.error,
                       ),
                     ),
+                  ],
                 ],
+              ),
+            ),
+          ),
+        ),
+        // --- SECCIÓN: Acción de guardado (barra inferior fija) ---
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.superficie,
+            border: Border(top: BorderSide(color: AppColors.bordeTarjeta)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: FilledButton(
+                onPressed: _estaGuardando ? null : _guardarDatos,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  textStyle: Theme.of(context).textTheme.titleMedium,
+                ),
+                child: _estaGuardando
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                      )
+                    : Text(esEdicion ? 'Guardar Cambios' : 'Crear Ficha'),
               ),
             ),
           ),

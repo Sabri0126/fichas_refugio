@@ -153,19 +153,83 @@ class TratamientoController {
     await _perrosRef.doc(idPerro).update({'tratamientos': actualizados});
   }
 
-  /// Marca o desmarca la dosis de un tratamiento para una fecha determinada
-  /// (usado por el checkbox diario de "dosis tomada hoy").
+  /// Día calendario sin hora, para que la misma fecha no se duplique.
+  DateTime normalizarDia(DateTime fecha) =>
+      DateTime(fecha.year, fecha.month, fecha.day);
+
+  /// Lee `tratamientos` como lista. Si un update indexado lo dejó como mapa,
+  /// rearma la lista por clave numérica para poder volver a guardarlo como array.
+  List<TratamientoModel> _tratamientosDesdeDocumento(dynamic raw) {
+    final mapas = <Map<String, dynamic>>[];
+
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) mapas.add(Map<String, dynamic>.from(item));
+      }
+    } else if (raw is Map) {
+      final claves = raw.keys.toList()
+        ..sort(
+          (a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(
+            int.tryParse(b.toString()) ?? 0,
+          ),
+        );
+      for (final clave in claves) {
+        final item = raw[clave];
+        if (item is Map) mapas.add(Map<String, dynamic>.from(item));
+      }
+    }
+
+    return mapas
+        .map((mapa) => TratamientoModel.fromMap(mapa, mapa['id']?.toString() ?? ''))
+        .toList();
+  }
+
+  /// Marca o desmarca la dosis de [fechaDosis].
   ///
-  /// @param tratamiento el tratamiento a actualizar.
-  /// @param fecha la fecha de la dosis a marcar/desmarcar.
-  /// @param marcar `true` para registrar la dosis, `false` para quitarla.
-  /// @return una copia del tratamiento con `registroDosis` actualizado.
+  /// Lee el documento, cambia `registroDosis` en Dart y reescribe el array
+  /// `tratamientos` completo. No usa rutas indexadas ni `FieldValue`.
+  Future<void> toggleDosis(
+    String perroId,
+    TratamientoModel tratamiento,
+    DateTime fechaDosis,
+  ) async {
+    final dia = normalizarDia(fechaDosis);
+    final inicio = tratamiento.fechaInicio;
+    if (inicio != null && dia.isBefore(normalizarDia(inicio))) return;
+
+    final fechaIso = formatearFechaISO(dia);
+    final docRef = _perrosRef.doc(perroId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snapshot = await tx.get(docRef);
+      final data = snapshot.data();
+      if (data == null) return;
+
+      final tratamientos = _tratamientosDesdeDocumento(data['tratamientos']);
+      final indice = tratamientos.indexWhere((t) => t.id == tratamiento.id);
+      if (indice == -1) return;
+
+      final registro = List<String>.from(tratamientos[indice].registroDosis);
+      if (registro.contains(fechaIso)) {
+        registro.remove(fechaIso);
+      } else {
+        registro.add(fechaIso);
+      }
+      tratamientos[indice] = tratamientos[indice].copyWith(registroDosis: registro);
+
+      tx.update(docRef, {
+        'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
+      });
+    });
+  }
+
+  /// Copia local con la dosis del día marcada o desmarcada.
   TratamientoModel alternarDosis(
     TratamientoModel tratamiento,
     DateTime fecha,
     bool marcar,
   ) {
-    final fechaIso = formatearFechaISO(fecha);
+    final fechaIso = formatearFechaISO(normalizarDia(fecha));
     final registroDosis = List<String>.from(tratamiento.registroDosis);
 
     if (marcar) {

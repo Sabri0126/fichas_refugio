@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
 import '../services/notificaciones_service.dart';
+import '../theme/app_colors.dart';
+import '../theme/entrada_escalonada.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 import 'pantalla_login.dart';
@@ -46,6 +48,34 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     super.dispose();
   }
 
+  Widget _estadoVacio(String texto, {IconData icono = Icons.pets}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.navy.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, size: 30, color: AppColors.navy),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              texto,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textoSecundario),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
@@ -55,7 +85,11 @@ class _PantallaPerrosState extends State<PantallaPerros> {
       appBar: AppBar(
         title: Text(
           widget.soloInactivos ? 'Difuntos' : 'Perritos del refugio',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: AppColors.arena,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         actions: [
           IconButton(
@@ -79,15 +113,14 @@ class _PantallaPerrosState extends State<PantallaPerros> {
         children: [
           // --- SECCIÓN: Barra de búsqueda por nombre ---
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _busquedaController,
               onChanged: (value) => setState(() => _textoBusqueda = value),
               decoration: InputDecoration(
                 hintText: 'Buscar por nombre...',
                 prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.8),
+                fillColor: AppColors.superficie,
                 suffixIcon: _textoBusqueda.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -97,13 +130,12 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                         },
                       )
                     : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
                 ChoiceChip(
@@ -135,7 +167,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text(widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
+            return _estadoVacio(widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.');
           }
 
           final perrosPorEstado = snapshot.data!.where((perro) {
@@ -172,7 +204,10 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           });
 
           if (perros.isEmpty) {
-            return Center(child: Text(_textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.'));
+            return _estadoVacio(
+              _textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : widget.soloInactivos ? 'No hay difuntos registrados.' : 'No hay perritos registrados aún.',
+              icono: _textoBusqueda.isNotEmpty ? Icons.search_off : Icons.pets,
+            );
           }
 
           return LayoutBuilder(
@@ -187,15 +222,15 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                     child: Text(
                       'Perritos del refugio ($totalRefugio) | En casa ($totalEnCasa)',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.navy),
                     ),
                   ),
                   Expanded(
                     child: GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
@@ -206,8 +241,15 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                       itemBuilder: (context, index) {
                         final idDocumento = perros[index].id;
                         final perro = perros[index];
+                        final estiloDato = Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 14,
+                          height: 1.35,
+                          color: Colors.white.withValues(alpha: 0.88),
+                        );
 
-                        return GestureDetector(
+                        return EntradaEscalonada(
+                          indice: index,
+                          child: GestureDetector(
                           onTap: () {
                             Navigator.push(
                               context,
@@ -217,8 +259,10 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                             );
                           },
                           child: Card(
+                            margin: EdgeInsets.zero,
                             clipBehavior: Clip.antiAlias,
-                            elevation: 6,
+                            elevation: 3,
+                            shadowColor: Colors.black.withValues(alpha: 0.35),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             child: Stack(
                               fit: StackFit.expand,
@@ -252,9 +296,12 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                       gradient: LinearGradient(
                                         begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
+                                        stops: const [0.0, 0.35, 0.65, 1.0],
                                         colors: [
                                           Colors.transparent,
-                                          Colors.black.withValues(alpha: 0.8),
+                                          Colors.black.withValues(alpha: 0.10),
+                                          Colors.black.withValues(alpha: 0.60),
+                                          Colors.black.withValues(alpha: 0.90),
                                         ],
                                       ),
                                     ),
@@ -269,33 +316,35 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                     children: [
                                       Text(
                                         perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                           fontSize: 26,
                                           color: Colors.white,
+                                          shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
                                         ),
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
                                         'Fecha de ingreso: ${_perroController.formatearFecha(perro.fechaIngreso)}',
-                                        style: const TextStyle(fontSize: 15, color: Colors.white70),
+                                        style: estiloDato,
                                       ),
                                       Text(
                                         perro.sexo == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
-                                        style: const TextStyle(fontSize: 15, color: Colors.white70),
+                                        style: estiloDato,
                                       ),
                                       Text(
                                         _perroController.formatearEdadTexto(perro),
-                                        style: const TextStyle(fontSize: 15, color: Colors.white70),
+                                        style: estiloDato,
                                       ),
                                       Text(
                                         perro.castrado ? 'Castrado: Sí' : 'Castrado: No',
-                                        style: const TextStyle(fontSize: 15, color: Colors.white70),
+                                        style: estiloDato,
                                       ),
                                       if (widget.soloInactivos && perro.fechaFallecimiento != null)
                                         Text(
                                           'Fallecimiento: ${_perroController.formatearFecha(perro.fechaFallecimiento)}',
-                                          style: const TextStyle(fontSize: 15, color: Colors.white70),
+                                          style: estiloDato,
                                         ),
                                     ],
                                   ),
@@ -322,6 +371,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                               ],
                             ),
                           ),
+                        ),
                         );
                       },
                     ),
@@ -340,8 +390,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
           ? null
           : FloatingActionButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              foregroundColor: Theme.of(context).colorScheme.onSecondary,
+              tooltip: 'Nuevo ingreso',
               child: const Icon(Icons.add),
             ),
     );
