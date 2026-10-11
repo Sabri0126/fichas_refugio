@@ -15,13 +15,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/perro_controller.dart';
+import '../controllers/recordatorio_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/egreso_model.dart';
+import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
+import '../models/recordatorio_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
+import '../theme/recordatorio_tipos.dart';
+import 'formulario_perro.dart';
 
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
@@ -35,6 +40,7 @@ class FichaDetallePerro extends StatefulWidget {
 class _FichaDetallePerroState extends State<FichaDetallePerro> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
+  final RecordatorioController _recordatorioController = RecordatorioController();
   final PageController _controladorCarrusel = PageController();
   final ImagePicker _picker = ImagePicker();
   bool _subiendoFoto = false;
@@ -692,6 +698,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                               textScaler: _escala,
                               style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
                             ),
+                            _progresoDuracion(t),
                           ],
                         ),
                       ),
@@ -710,7 +717,119 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  /// Marca como inactivos los tratamientos diarios cuyo ciclo (fecha_inicio + dias_duracion) ya venció,
+  Widget _progresoDuracion(TratamientoModel t) {
+    final estado = TratamientoController.calcularEstadoDuracion(t);
+    if (estado.fase == FaseTratamiento.indefinido) return const SizedBox.shrink();
+    final texto = _textoDuracion(estado);
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: Semantics(
+          key: ValueKey(texto),
+          label: texto,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: ExcludeSemantics(child: _contenidoDuracion(estado)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _textoDuracion(EstadoDuracion estado) {
+    switch (estado.fase) {
+      case FaseTratamiento.enCurso:
+        final quedan = estado.restantes == 1 ? 'queda 1 día' : 'quedan ${estado.restantes} días';
+        return 'Día ${estado.diaActual} de ${estado.total} · $quedan';
+      case FaseTratamiento.ultimoDia:
+        return 'Último día de medicación. Mañana el tratamiento se pausará automáticamente.';
+      case FaseTratamiento.noIniciado:
+        return estado.diasParaInicio == 1 ? 'Empieza mañana' : 'Empieza en ${estado.diasParaInicio} días';
+      case FaseTratamiento.finalizado:
+        final fin = estado.ultimoDia;
+        if (fin == null) return 'Finalizó';
+        return 'Finalizó el ${_fechaCorta(fin)}';
+      case FaseTratamiento.indefinido:
+        return '';
+    }
+  }
+
+  Widget _contenidoDuracion(EstadoDuracion estado) {
+    final textTheme = Theme.of(context).textTheme;
+    final secundario = textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
+    switch (estado.fase) {
+      case FaseTratamiento.enCurso:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_textoDuracion(estado), textScaler: _escala, style: secundario),
+            const SizedBox(height: 6),
+            _barraDuracion(estado.diaActual / estado.total, AppColors.dosisDada),
+          ],
+        );
+      case FaseTratamiento.ultimoDia:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.pausado.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                children: [
+                  const Icon(Icons.flag_rounded, size: 16, color: AppColors.pausadoTexto),
+                  Text(
+                    'Último día de medicación',
+                    textScaler: _escala,
+                    style: textTheme.labelMedium?.copyWith(color: AppColors.pausadoTexto),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            _barraDuracion(1, AppColors.pausado),
+            const SizedBox(height: 6),
+            Text(
+              'Mañana el tratamiento se pausará automáticamente.',
+              textScaler: _escala,
+              style: secundario,
+            ),
+          ],
+        );
+      case FaseTratamiento.noIniciado:
+      case FaseTratamiento.finalizado:
+        return Text(_textoDuracion(estado), textScaler: _escala, style: secundario);
+      case FaseTratamiento.indefinido:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _barraDuracion(double valor, Color color) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: LinearProgressIndicator(
+        minHeight: 6,
+        value: valor,
+        color: color,
+        backgroundColor: AppColors.bordeTarjeta,
+      ),
+    );
+  }
+
+  String _fechaCorta(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
+  }
+
+  /// Marca como inactivos los tratamientos diarios ya finalizados,
   /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos activos".
   PerroModel _procesarAutoArchivado(PerroModel perro) {
     if (perro.tratamientos.isEmpty) return perro;
@@ -780,6 +899,72 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  List<Widget> _proximosRecordatorios(PerroModel perro) {
+    final proximos = _recordatorioController.proximos(perro.recordatorios);
+    if (proximos.isEmpty) return const [];
+    final visibles = proximos.take(3).toList();
+    final resto = proximos.length - visibles.length;
+    final textTheme = Theme.of(context).textTheme;
+    return [
+      const SizedBox(height: 12),
+      _tarjetaSeccion(
+        titulo: 'Próximos recordatorios',
+        icono: Icons.alarm_rounded,
+        children: [
+          for (var i = 0; i < visibles.length; i++) ...[
+            _filaRecordatorioFicha(visibles[i]),
+            if (i != visibles.length - 1 || resto > 0) const SizedBox(height: 8),
+          ],
+          if (resto > 0)
+            Text(
+              'y $resto más',
+              textScaler: _escala,
+              style: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario),
+            ),
+        ],
+      ),
+    ];
+  }
+
+  Widget _filaRecordatorioFicha(RecordatorioModel recordatorio) {
+    final visual = RecordatorioTipos.de(recordatorio.tipo);
+    final nota = recordatorio.nota.trim();
+    final cuando = _recordatorioController.formatearCuando(recordatorio.fechaHora);
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: visual.color.withValues(alpha: 0.12),
+          child: Icon(visual.icono, size: 20, color: visual.color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                recordatorio.titulo,
+                textScaler: _escala,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.titleMedium,
+              ),
+              Text(
+                nota.isEmpty ? cuando : '$cuando · $nota',
+                textScaler: _escala,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -942,10 +1127,39 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        Text(
-          perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
-          textScaler: _escala,
-          style: Theme.of(context).textTheme.headlineMedium,
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
+              textScaler: _escala,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            if (!esInvitado)
+              OutlinedButton.icon(
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                onPressed: _subiendoFoto || _modoReordenar
+                    ? null
+                    : () async {
+                        final eliminado = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => FormularioPerro(
+                              idDocumento: widget.idDocumento,
+                              perroActual: perro,
+                            ),
+                          ),
+                        );
+                        if (eliminado == true && mounted) Navigator.pop(context);
+                      },
+                icon: const Icon(Icons.edit_note_rounded),
+                label: Text('Editar ficha', textScaler: _escala),
+              ),
+          ],
         ),
         if (perro.estado == 'egresado') ...[
           const SizedBox(height: 12),
@@ -967,6 +1181,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         ),
         const SizedBox(height: 12),
         _buildSeccionSalud(perro, esInvitado),
+        if (!esInvitado) ..._proximosRecordatorios(perro),
         if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 12),
           _tarjetaSeccion(
@@ -1160,12 +1375,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     child: Row(
                       children: [
                         IconButton.filled(
-                          tooltip: 'Editar descripción',
+                          tooltip: 'Editar descripción de la foto',
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.black.withValues(alpha: 0.5),
                             foregroundColor: Colors.white,
                           ),
-                          icon: const Icon(Icons.edit, size: 20),
+                          icon: const Icon(Icons.notes_rounded, size: 20),
                           onPressed: () => _editarFotoAGaleria(foto, index),
                         ),
                         const SizedBox(width: 8),

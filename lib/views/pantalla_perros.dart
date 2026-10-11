@@ -114,15 +114,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     );
   }
 
-  void _abrirEdicion(String idDocumento, PerroModel perro) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FormularioPerro(idDocumento: idDocumento, perroActual: perro),
-      ),
-    );
-  }
-
   Widget _fotoPerro(PerroModel perro) {
     final placeholder = Container(
       color: Theme.of(context).colorScheme.primary,
@@ -191,7 +182,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     }
   }
 
-  Widget _grillaGrande(List<PerroModel> perros, int crossAxisCount, bool esInvitado) {
+  Widget _grillaGrande(List<PerroModel> perros, int crossAxisCount) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -294,18 +285,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                           ],
                         ),
                       ),
-                      if (!esInvitado)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.white),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withValues(alpha: 0.55),
-                            ),
-                            onPressed: () => _abrirEdicion(idDocumento, perro),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -317,7 +296,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     );
   }
 
-  Widget _grillaCompacta(List<PerroModel> perros, double ancho, bool esInvitado) {
+  Widget _grillaCompacta(List<PerroModel> perros, double ancho) {
     final columnas = ancho >= 900 ? 5 : ancho >= 600 ? 4 : 3;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
@@ -422,25 +401,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                           bottom: 6,
                           child: Icon(Icons.home_rounded, color: Colors.white, size: 16),
                         ),
-                      if (!esInvitado)
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: IconButton(
-                            onPressed: () => _abrirEdicion(idDocumento, perro),
-                            icon: const Icon(Icons.edit, color: Colors.white),
-                            iconSize: 16,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withValues(alpha: 0.55),
-                              fixedSize: const Size(32, 32),
-                              padding: EdgeInsets.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -452,7 +412,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     );
   }
 
-  Widget _vistaLista(List<PerroModel> perros, bool esInvitado) {
+  Widget _vistaLista(List<PerroModel> perros) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final ancho = constraints.maxWidth > 700 ? 700.0 : constraints.maxWidth;
@@ -531,11 +491,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                   ],
                                 ),
                               ),
-                              if (!esInvitado)
-                                IconButton(
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () => _abrirEdicion(idDocumento, perro),
-                                ),
                             ],
                           ),
                         ),
@@ -821,9 +776,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                   ),
                   Expanded(
                     child: switch (_modoVista) {
-                      ModoVista.grande => _grillaGrande(perros, crossAxisCount, esInvitado),
-                      ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth, esInvitado),
-                      ModoVista.lista => _vistaLista(perros, esInvitado),
+                      ModoVista.grande => _grillaGrande(perros, crossAxisCount),
+                      ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth),
+                      ModoVista.lista => _vistaLista(perros),
                     },
                   ),
                 ],

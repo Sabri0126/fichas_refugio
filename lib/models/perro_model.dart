@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'egreso_model.dart';
+import 'recordatorio_model.dart';
 import 'tratamiento_model.dart';
 
 /// Convierte un valor proveniente de Firestore (Timestamp, DateTime o String)
@@ -108,6 +109,9 @@ class PerroModel {
   /// Tratamientos médicos asociados a este perro.
   final List<TratamientoModel> tratamientos;
 
+  /// Recordatorios agendados. La clave Firestore es `recordatorios`.
+  final List<RecordatorioModel> recordatorios;
+
   /// Crea una instancia inmutable de [PerroModel].
   PerroModel({
     required this.id,
@@ -133,6 +137,7 @@ class PerroModel {
     this.parientes = const [],
     this.galeria = const [],
     this.tratamientos = const [],
+    this.recordatorios = const [],
   });
 
   /// Construye un [PerroModel] a partir del mapa `data` de un documento de
@@ -220,6 +225,7 @@ class PerroModel {
       parientes: parientes,
       galeria: galeria,
       tratamientos: tratamientos,
+      recordatorios: recordatoriosDesdeValor(data['recordatorios']),
     );
   }
 
@@ -250,6 +256,7 @@ class PerroModel {
       'parientes': parientes,
       'galeria': galeria,
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
+      'recordatorios': recordatorios.map((r) => r.toMap()).toList(),
     };
   }
 
@@ -286,6 +293,7 @@ class PerroModel {
       parientes: parientes ?? this.parientes,
       galeria: galeria ?? this.galeria,
       tratamientos: tratamientos ?? this.tratamientos,
+      recordatorios: recordatorios,
     );
   }
 }

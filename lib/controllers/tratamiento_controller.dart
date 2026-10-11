@@ -1,14 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/estado_duracion.dart';
 import '../models/tratamiento_model.dart';
 
 /// Controlador encargado de la lógica de negocio de los tratamientos médicos
 /// de un perro: creación, edición, archivado, registro de dosis y el cálculo
 /// de auto-archivado por vencimiento de fechas. No contiene código de UI.
 class TratamientoController {
-  final CollectionReference<Map<String, dynamic>> _perrosRef = FirebaseFirestore
-      .instance
-      .collection('perros');
+  CollectionReference<Map<String, dynamic>> get _perrosRef =>
+      FirebaseFirestore.instance.collection('perros');
 
   /// Genera un identificador único para un nuevo tratamiento.
   ///
@@ -278,11 +278,67 @@ class TratamientoController {
     return eventos;
   }
 
-  /// Regla de negocio de auto-archivado: un tratamiento diario se considera
-  /// vencido cuando han transcurrido más de `diasDuracion` días desde su
-  /// `fechaInicio`. Los tratamientos vencidos se marcan como `activo = false`
-  /// para que dejen de listarse en "Tratamientos activos". Los tratamientos
-  /// con `diasDuracion == 0` se consideran indefinidos y nunca vencen.
+  /// Día de inicio = día 1. `diasDuracion == 0` o sin fecha queda indefinido.
+  static EstadoDuracion calcularEstadoDuracion(TratamientoModel tratamiento, {DateTime? hoy}) {
+    final referencia = hoy ?? DateTime.now();
+    final hoyFecha = DateTime(referencia.year, referencia.month, referencia.day);
+    if (tratamiento.diasDuracion <= 0 || tratamiento.fechaInicio == null) {
+      return const EstadoDuracion(fase: FaseTratamiento.indefinido);
+    }
+
+    final inicio = DateTime(
+      tratamiento.fechaInicio!.year,
+      tratamiento.fechaInicio!.month,
+      tratamiento.fechaInicio!.day,
+    );
+    final total = tratamiento.diasDuracion;
+    final ultimoDia = DateTime(inicio.year, inicio.month, inicio.day + total - 1);
+    if (hoyFecha.isBefore(inicio)) {
+      return EstadoDuracion(
+        fase: FaseTratamiento.noIniciado,
+        total: total,
+        ultimoDia: ultimoDia,
+        diasParaInicio: _diasEntre(hoyFecha, inicio),
+      );
+    }
+
+    final diaActual = _diasEntre(inicio, hoyFecha) + 1;
+    if (diaActual < total) {
+      return EstadoDuracion(
+        fase: FaseTratamiento.enCurso,
+        diaActual: diaActual,
+        total: total,
+        restantes: total - diaActual,
+        ultimoDia: ultimoDia,
+      );
+    }
+    if (diaActual == total) {
+      return EstadoDuracion(
+        fase: FaseTratamiento.ultimoDia,
+        diaActual: diaActual,
+        total: total,
+        restantes: 0,
+        ultimoDia: ultimoDia,
+      );
+    }
+    return EstadoDuracion(
+      fase: FaseTratamiento.finalizado,
+      diaActual: diaActual,
+      total: total,
+      restantes: 0,
+      ultimoDia: ultimoDia,
+    );
+  }
+
+  static int _diasEntre(DateTime desde, DateTime hasta) {
+    final a = DateTime.utc(desde.year, desde.month, desde.day);
+    final b = DateTime.utc(hasta.year, hasta.month, hasta.day);
+    return b.difference(a).inDays;
+  }
+
+  /// Regla de negocio de auto-archivado: un tratamiento diario se pausa cuando
+  /// [calcularEstadoDuracion] da [FaseTratamiento.finalizado], es decir el día
+  /// siguiente al último de medicación. Los indefinidos no vencen.
   ///
   /// @param tratamientos la lista completa de tratamientos del perro.
   /// @param ahora fecha de referencia para el cálculo (por defecto, la fecha actual).
@@ -295,12 +351,8 @@ class TratamientoController {
 
     return tratamientos.map((t) {
       if (t.categoria != 'diario' || !t.activo) return t;
-      if (t.fechaInicio == null || t.diasDuracion <= 0) return t;
-
-      final fechaFin = t.fechaInicio!.add(Duration(days: t.diasDuracion));
-      if (fechaReferencia.isAfter(fechaFin)) {
-        return archivar(t);
-      }
+      final estado = calcularEstadoDuracion(t, hoy: fechaReferencia);
+      if (estado.fase == FaseTratamiento.finalizado) return archivar(t);
       return t;
     }).toList();
   }
