@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'services/mensajeria_service.dart';
 import 'services/notificaciones_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,6 +33,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await _capturarNotificacionDeInicio();
+  final idPush = await MensajeriaService.instance.prepararToques();
+  if (idPush != null && idPush.isNotEmpty) {
+    EstadoNotificacion.payloadPendiente = idPush;
+  }
   runApp(const MyApp());
 }
 

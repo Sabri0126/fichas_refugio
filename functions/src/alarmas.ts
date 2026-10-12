@@ -1,0 +1,282 @@
+import { DateTime } from 'luxon';
+
+export const ZONA = 'America/Argentina/Buenos_Aires';
+
+export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'legacy';
+
+export interface Alarma {
+  clave: string;
+  tipo: TipoAlarma;
+  titulo: string;
+  cuerpo: string;
+  categoria: string;
+  idPerro: string;
+  fecha: DateTime;
+}
+
+export interface TratamientoEntrada {
+  id?: string;
+  categoria?: string;
+  activo?: boolean;
+  medicacion?: string;
+  hora_recordatorio?: string;
+  dias_duracion?: number | string;
+  fecha_inicio?: unknown;
+  fecha_proximo_recordatorio?: unknown;
+}
+
+export interface RecordatorioEntrada {
+  id?: string;
+  tipo?: string;
+  titulo?: string;
+  nota?: string;
+  fecha_hora?: unknown;
+}
+
+export interface PerroEntrada {
+  id?: string;
+  estado?: string;
+  nombre?: string;
+  tratamientos?: unknown;
+  recordatorios?: unknown;
+}
+
+interface Hora {
+  hora: number;
+  minuto: number;
+}
+
+export function aZona(valor: unknown): DateTime | null {
+  if (valor == null) return null;
+  if (DateTime.isDateTime(valor)) {
+    const zoned = valor.setZone(ZONA);
+    return zoned.isValid ? zoned : null;
+  }
+  if (valor instanceof Date) {
+    const zoned = DateTime.fromJSDate(valor, { zone: ZONA });
+    return zoned.isValid ? zoned : null;
+  }
+  if (typeof valor === 'string') {
+    const zoned = DateTime.fromISO(valor, { setZone: true }).setZone(ZONA);
+    return zoned.isValid ? zoned : null;
+  }
+  if (typeof valor === 'object') {
+    const candidato = valor as { toDate?: () => Date; seconds?: number; _seconds?: number };
+    if (typeof candidato.toDate === 'function') {
+      const fecha = candidato.toDate();
+      if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return null;
+      const zoned = DateTime.fromJSDate(fecha, { zone: ZONA });
+      return zoned.isValid ? zoned : null;
+    }
+    const segundos = candidato.seconds ?? candidato._seconds;
+    if (typeof segundos === 'number') {
+      const zoned = DateTime.fromSeconds(segundos, { zone: ZONA });
+      return zoned.isValid ? zoned : null;
+    }
+  }
+  return null;
+}
+
+export function calcularAlarmas(perro: PerroEntrada, desde: DateTime, hasta: DateTime): Alarma[] {
+  if (perro.estado !== 'activo') return [];
+  const inicioVentana = desde.setZone(ZONA);
+  const finVentana = hasta.setZone(ZONA);
+  if (!inicioVentana.isValid || !finVentana.isValid || finVentana <= inicioVentana) return [];
+
+  const idPerro = perro.id?.toString() ?? '';
+  const nombre = nombrePerro(perro);
+  const alarmas: Alarma[] = [];
+
+  for (const tratamiento of listaDe<TratamientoEntrada>(perro.tratamientos)) {
+    const categoria = tratamiento.categoria?.toString() ?? '';
+    if (categoria === 'diario') {
+      const diaria = alarmaDiaria(tratamiento, idPerro, nombre, inicioVentana, finVentana);
+      if (diaria.length > 0) alarmas.push(...diaria);
+      continue;
+    }
+    const legacy = alarmaLegacy(tratamiento, idPerro, nombre, inicioVentana, finVentana);
+    if (legacy) alarmas.push(legacy);
+  }
+
+  for (const recordatorio of listaDe<RecordatorioEntrada>(perro.recordatorios)) {
+    const agendado = alarmaRecordatorio(recordatorio, idPerro, nombre, inicioVentana, finVentana);
+    if (agendado) alarmas.push(agendado);
+  }
+
+  alarmas.sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis() || a.clave.localeCompare(b.clave));
+  return alarmas;
+}
+
+export function calcularPausas(perro: PerroEntrada, hoy: DateTime): string[] {
+  if (perro.estado !== 'activo') return [];
+  const hoyDia = hoy.setZone(ZONA).startOf('day');
+  if (!hoyDia.isValid) return [];
+  const ids: string[] = [];
+
+  for (const tratamiento of listaDe<TratamientoEntrada>(perro.tratamientos)) {
+    if (tratamiento.categoria !== 'diario' || tratamiento.activo !== true) continue;
+    const dias = leerDias(tratamiento.dias_duracion);
+    if (dias <= 0) continue;
+    const inicio = diaDe(tratamiento.fecha_inicio);
+    const id = tratamiento.id?.toString() ?? '';
+    if (!inicio || id === '') continue;
+    const ultimoDia = inicio.plus({ days: dias - 1 });
+    if (hoyDia > ultimoDia) ids.push(id);
+  }
+
+  return ids;
+}
+
+function alarmaDiaria(
+  tratamiento: TratamientoEntrada,
+  idPerro: string,
+  nombre: string,
+  desde: DateTime,
+  hasta: DateTime,
+): Alarma[] {
+  if (tratamiento.activo !== true) return [];
+  const medicacion = tratamiento.medicacion?.toString().trim() ?? '';
+  if (medicacion === '') return [];
+  const hora = horaValida(tratamiento.hora_recordatorio);
+  if (!hora) return [];
+
+  const dias = leerDias(tratamiento.dias_duracion);
+  const inicio = diaDe(tratamiento.fecha_inicio);
+  if (dias > 0 && !inicio) return [];
+  const ultimoDia = inicio && dias > 0 ? inicio.plus({ days: dias - 1 }) : null;
+  const idItem = tratamiento.id?.toString() ?? '';
+  const alarmas: Alarma[] = [];
+
+  for (const dia of diasDeVentana(desde, hasta)) {
+    if (inicio && dia < inicio) continue;
+    if (ultimoDia && dia > ultimoDia) continue;
+    const ocurrencia = dia.set({
+      hour: hora.hora,
+      minute: hora.minuto,
+      second: 0,
+      millisecond: 0,
+    });
+    if (!enVentana(ocurrencia, desde, hasta)) continue;
+
+    const esUltimo = ultimoDia != null && dia.hasSame(ultimoDia, 'day');
+    const tipo: TipoAlarma = esUltimo ? 'ultimo_dia' : 'diaria';
+    const titulo = esUltimo ? 'Último día de medicación' : 'Medicación pendiente';
+    const cuerpo = esUltimo
+      ? `Hoy es el último día de ${medicacion} para ${nombre}. Mañana el tratamiento se pausará automáticamente.`
+      : `Toca darle ${medicacion} a ${nombre}`;
+
+    alarmas.push({
+      clave: armarClave(idPerro, tipo, idItem, ocurrencia),
+      tipo,
+      titulo,
+      cuerpo,
+      categoria: 'diario',
+      idPerro,
+      fecha: ocurrencia,
+    });
+  }
+
+  return alarmas;
+}
+
+function alarmaLegacy(
+  tratamiento: TratamientoEntrada,
+  idPerro: string,
+  nombre: string,
+  desde: DateTime,
+  hasta: DateTime,
+): Alarma | null {
+  const fecha = aZona(tratamiento.fecha_proximo_recordatorio);
+  if (!fecha || !enVentana(fecha, desde, hasta)) return null;
+  const categoria = tratamiento.categoria?.toString() ?? '';
+  const medicacion = tratamiento.medicacion?.toString().trim() ?? '';
+  const esVisita = categoria === 'veterinaria';
+  const idItem = tratamiento.id?.toString() ?? '';
+  return {
+    clave: armarClave(idPerro, 'legacy', idItem, fecha),
+    tipo: 'legacy',
+    titulo: esVisita ? 'Visita veterinaria' : 'Dosis única pendiente',
+    cuerpo: esVisita
+      ? `Recordatorio: visita veterinaria para ${nombre}`
+      : `Recordatorio: aplicar ${medicacion} a ${nombre}`,
+    categoria,
+    idPerro,
+    fecha,
+  };
+}
+
+function alarmaRecordatorio(
+  recordatorio: RecordatorioEntrada,
+  idPerro: string,
+  nombre: string,
+  desde: DateTime,
+  hasta: DateTime,
+): Alarma | null {
+  const fecha = aZona(recordatorio.fecha_hora);
+  if (!fecha || !enVentana(fecha, desde, hasta)) return null;
+  const titulo = recordatorio.titulo?.toString().trim() ?? '';
+  const nota = recordatorio.nota?.toString().trim() ?? '';
+  const tipo = recordatorio.tipo?.toString() ?? '';
+  const idItem = recordatorio.id?.toString() ?? '';
+  return {
+    clave: armarClave(idPerro, 'recordatorio', idItem, fecha),
+    tipo: 'recordatorio',
+    titulo: `Recordatorio: ${titulo}`,
+    cuerpo: nota === '' ? nombre : `${nombre} · ${nota}`,
+    categoria: tipo === '' ? 'otro' : tipo,
+    idPerro,
+    fecha,
+  };
+}
+
+function armarClave(idPerro: string, tipo: TipoAlarma, idItem: string, fecha: DateTime): string {
+  return `${idPerro}_${tipo}_${idItem}_${fecha.setZone(ZONA).toFormat('yyyyMMddHHmm')}`;
+}
+
+function enVentana(ocurrencia: DateTime, desde: DateTime, hasta: DateTime): boolean {
+  const millis = ocurrencia.toMillis();
+  return millis > desde.toMillis() && millis <= hasta.toMillis();
+}
+
+function diasDeVentana(desde: DateTime, hasta: DateTime): DateTime[] {
+  const dias: DateTime[] = [];
+  const fin = hasta.setZone(ZONA).startOf('day');
+  for (let dia = desde.setZone(ZONA).startOf('day'); dia <= fin; dia = dia.plus({ days: 1 })) {
+    dias.push(dia);
+  }
+  return dias;
+}
+
+function diaDe(valor: unknown): DateTime | null {
+  const fecha = aZona(valor);
+  return fecha ? fecha.startOf('day') : null;
+}
+
+function horaValida(valor: unknown): Hora | null {
+  if (typeof valor !== 'string') return null;
+  const coincidencia = /^(\d{1,2}):(\d{2})$/.exec(valor.trim());
+  if (!coincidencia) return null;
+  const hora = Number(coincidencia[1]);
+  const minuto = Number(coincidencia[2]);
+  if (hora > 23 || minuto > 59) return null;
+  return { hora, minuto };
+}
+
+function leerDias(valor: unknown): number {
+  if (typeof valor === 'number' && Number.isFinite(valor)) return Math.trunc(valor);
+  if (typeof valor === 'string' && valor.trim() !== '') {
+    const numero = Number(valor);
+    if (Number.isFinite(numero)) return Math.trunc(numero);
+  }
+  return 0;
+}
+
+function nombrePerro(perro: PerroEntrada): string {
+  const nombre = perro.nombre?.toString().trim() ?? '';
+  return nombre === '' ? 'tu perrito' : nombre;
+}
+
+function listaDe<T>(valor: unknown): T[] {
+  if (!Array.isArray(valor)) return [];
+  return valor.filter((item): item is T => typeof item === 'object' && item != null);
+}

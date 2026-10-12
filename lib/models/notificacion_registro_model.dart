@@ -1,11 +1,22 @@
-/// Una entrada del historial local de notificaciones de este teléfono.
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+DateTime? _fecha(dynamic valor) {
+  if (valor is Timestamp) return valor.toDate();
+  if (valor is DateTime) return valor;
+  if (valor is String) return DateTime.tryParse(valor);
+  return null;
+}
+
+/// Un aviso guardado en `notificaciones`. `leida` se calcula en el teléfono.
 class NotificacionRegistroModel {
   final String id;
   final String titulo;
   final String cuerpo;
   final String? idPerro;
   final String categoria;
+  final String tipo;
   final DateTime fecha;
+  final DateTime creada;
   final bool leida;
 
   const NotificacionRegistroModel({
@@ -14,32 +25,32 @@ class NotificacionRegistroModel {
     required this.cuerpo,
     this.idPerro,
     required this.categoria,
+    required this.tipo,
     required this.fecha,
+    required this.creada,
     required this.leida,
   });
 
-  factory NotificacionRegistroModel.fromMap(Map<String, dynamic> data) {
-    final idPerro = data['idPerro']?.toString();
+  /// Devuelve null si falta `creada` o no se puede leer la fecha.
+  static NotificacionRegistroModel? desdeDocumento(
+    String id,
+    Map<String, dynamic> data, {
+    required DateTime? leidasHasta,
+  }) {
+    final creada = _fecha(data['creada']);
+    final ocurrencia = _fecha(data['fecha']) ?? creada;
+    if (creada == null || ocurrencia == null || id.isEmpty) return null;
+    final idPerro = data['id_perro']?.toString();
     return NotificacionRegistroModel(
-      id: data['id']?.toString() ?? '',
+      id: id,
       titulo: data['titulo']?.toString() ?? '',
       cuerpo: data['cuerpo']?.toString() ?? '',
       idPerro: idPerro == null || idPerro.isEmpty ? null : idPerro,
       categoria: data['categoria']?.toString() ?? 'diario',
-      fecha: DateTime.tryParse(data['fecha']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
-      leida: data['leida'] == true,
+      tipo: data['tipo']?.toString() ?? '',
+      fecha: ocurrencia,
+      creada: creada,
+      leida: leidasHasta != null && !creada.isAfter(leidasHasta),
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'titulo': titulo,
-      'cuerpo': cuerpo,
-      'idPerro': idPerro,
-      'categoria': categoria,
-      'fecha': fecha.toIso8601String(),
-      'leida': leida,
-    };
   }
 }

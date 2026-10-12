@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
+import '../services/mensajeria_service.dart';
+import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import 'pantalla_notificaciones.dart';
 import 'pantalla_perros.dart';
@@ -13,44 +17,36 @@ class PantallaMenu extends StatefulWidget {
   State<PantallaMenu> createState() => _PantallaMenuState();
 }
 
-class _PantallaMenuState extends State<PantallaMenu> with WidgetsBindingObserver {
+class _PantallaMenuState extends State<PantallaMenu> {
   final HistorialNotificacionesController _historial = HistorialNotificacionesController();
+  StreamSubscription<int>? _badge;
   int _noLeidas = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _refrescarBadge();
+    final esInvitado = FirebaseAuth.instance.currentUser == null;
+    if (!esInvitado) {
+      unawaited(MensajeriaService.instance.registrarDispositivo().catchError((Object _) {}));
+      unawaited(NotificacionesService.instance.migrarAlarmasLocales());
+      _badge = _historial.observarNoLeidas().listen((cantidad) {
+        if (!mounted) return;
+        setState(() => _noLeidas = cantidad);
+      });
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _badge?.cancel();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _refrescarBadge();
-    }
-  }
-
-  Future<void> _refrescarBadge() async {
-    await _historial.reconciliar();
-    final cantidad = await _historial.contarNoLeidas();
-    if (!mounted) return;
-    setState(() => _noLeidas = cantidad);
-  }
-
-  Future<void> _abrirNotificaciones() async {
-    await Navigator.push(
+  Future<void> _abrirNotificaciones() {
+    return Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const PantallaNotificaciones()),
     );
-    if (!mounted) return;
-    await _refrescarBadge();
   }
 
   @override

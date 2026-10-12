@@ -44,3 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 lib/firebase_options.dart
+
+# Cloud Functions
+functions/node_modules/
+functions/lib/

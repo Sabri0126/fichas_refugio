@@ -278,6 +278,29 @@ class TratamientoController {
     return eventos;
   }
 
+  /// Conserva `activo: false` de un diario que el servidor pausó, salvo reanudación manual.
+  /// No agrega tratamientos que solo existan en [remoto].
+  static List<TratamientoModel> reconciliarPausas(
+    List<TratamientoModel> local,
+    List<TratamientoModel> remoto,
+    Set<String> reanudados,
+  ) {
+    final pausadosRemotos = <String>{
+      for (final tratamiento in remoto)
+        if (!tratamiento.activo) tratamiento.id,
+    };
+    return [
+      for (final tratamiento in local)
+        if (tratamiento.categoria == 'diario' &&
+            tratamiento.activo &&
+            pausadosRemotos.contains(tratamiento.id) &&
+            !reanudados.contains(tratamiento.id))
+          tratamiento.copyWith(activo: false)
+        else
+          tratamiento,
+    ];
+  }
+
   /// Día de inicio = día 1. `diasDuracion == 0` o sin fecha queda indefinido.
   static EstadoDuracion calcularEstadoDuracion(TratamientoModel tratamiento, {DateTime? hoy}) {
     final referencia = hoy ?? DateTime.now();

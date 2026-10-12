@@ -41,6 +41,13 @@ class PerroController {
     return snapshot.docs.map((doc) => PerroModel.fromMap(doc.data(), doc.id)).toList();
   }
 
+  /// Lee una sola vez el documento del perro. Devuelve null si no existe.
+  Future<PerroModel?> obtenerPerroPorId(String id) async {
+    final snapshot = await _perrosRef.doc(id).get();
+    if (!snapshot.exists) return null;
+    return PerroModel.fromMap(snapshot.data()!, snapshot.id);
+  }
+
   /// Valida el campo de nombre del formulario de ficha.
   ///
   /// @param valor el texto ingresado por el usuario.

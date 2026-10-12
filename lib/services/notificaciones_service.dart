@@ -1,30 +1,30 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
-import '../controllers/historial_notificaciones_controller.dart';
+
 import '../views/ficha_detalle_perro.dart';
 
-/// Programa recordatorios diarios de medicación usando notificaciones locales.
+/// Muestra avisos locales y abre la ficha cuando se toca uno.
 class NotificacionesService {
   NotificacionesService._();
   static final NotificacionesService instance = NotificacionesService._();
 
-  final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _inicializado = false;
   bool _inicializando = false;
   GlobalKey<NavigatorState>? _navigatorKey;
 
-  // Debe coincidir con el channelId usado en programarRecordatorios().
   static const _canalTratamientos = AndroidNotificationChannel(
     'tratamientos_diarios',
     'Recordatorios de tratamientos',
     description: 'Recordatorio diario para administrar medicación a los perros',
     importance: Importance.high,
   );
+
+  static const _claveMigracion = 'alarmas_locales_migradas';
 
   Future<void> inicializar({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (navigatorKey != null) _navigatorKey = navigatorKey;
@@ -83,7 +83,10 @@ class NotificacionesService {
   }
 
   void _alRecibirRespuestaNotificacion(NotificationResponse respuesta) {
-    final idPerro = respuesta.payload;
+    abrirDesdePayload(respuesta.payload);
+  }
+
+  void abrirDesdePayload(String? idPerro) {
     if (idPerro == null || idPerro.isEmpty) return;
     _navigatorKey?.currentState?.push(
       MaterialPageRoute(
@@ -92,220 +95,30 @@ class NotificacionesService {
     );
   }
 
-  DateTime? _leerFecha(dynamic valor) {
-    if (valor is Timestamp) return valor.toDate();
-    if (valor is DateTime) return valor;
-    if (valor is String) return DateTime.tryParse(valor);
-    return null;
-  }
-
-  /// Cancela todas las notificaciones y reprograma una alarma diaria por cada tratamiento activo,
-  /// respetando la hora guardada en `hora_recordatorio` (formato 'HH:mm').
-  Future<void> programarRecordatorios(
-    List<Map<String, dynamic>> perrosConTratamiento,
-  ) async {
+  Future<void> mostrarAhora({
+    required String titulo,
+    required String cuerpo,
+    String? payload,
+  }) async {
     await inicializar();
-    try {
-      await HistorialNotificacionesController().reconciliar();
-    } catch (_) {}
-    await _plugin.cancelAll();
-
-    final ahora = DateTime.now();
-    final alarmas = <Map<String, dynamic>>[];
-
-    for (final perro in perrosConTratamiento) {
-      if (perro['estado'] != 'activo') continue;
-
-      final idPerro =
-          perro['id']?.toString() ?? perro['id_documento']?.toString() ?? '';
-      final nombrePerro = perro['nombre']?.toString() ?? 'tu perrito';
-      final tratamientos = List<dynamic>.from(perro['tratamientos'] ?? []);
-
-      for (final tratamientoRaw in tratamientos) {
-        final tratamiento = Map<String, dynamic>.from(tratamientoRaw as Map);
-        final categoria = tratamiento['categoria']?.toString() ?? 'diario';
-        final medicacion = tratamiento['medicacion']?.toString() ?? '';
-        final idTratamiento = tratamiento['id']?.toString() ?? medicacion;
-        final idNotificacion = '$idPerro-$idTratamiento'.hashCode & 0x7fffffff;
-
-        if (categoria == 'diario') {
-          if (tratamiento['activo'] == false) continue;
-          if (medicacion.isEmpty) continue;
-
-          final diasDuracion =
-              int.tryParse(tratamiento['dias_duracion']?.toString() ?? '') ?? 0;
-          final fechaInicio = _leerFecha(tratamiento['fecha_inicio']) ?? ahora;
-
-          final partesHora =
-              (tratamiento['hora_recordatorio']?.toString() ?? '09:00').split(
-                ':',
-              );
-          final hora = partesHora.isNotEmpty
-              ? int.tryParse(partesHora[0]) ?? 9
-              : 9;
-          final minuto = partesHora.length > 1
-              ? int.tryParse(partesHora[1]) ?? 0
-              : 0;
-
-          const detallesNotificacion = NotificationDetails(
-            android: AndroidNotificationDetails(
-              'tratamientos_diarios',
-              'Recordatorios de tratamientos',
-              channelDescription:
-                  'Recordatorio diario para administrar medicación a los perros',
-              importance: Importance.high,
-              priority: Priority.high,
-            ),
-          );
-
-          const tituloDiario = 'Medicación pendiente';
-          final cuerpoDiario = 'Toca darle $medicacion a $nombrePerro';
-          final horaTexto = '${hora.toString().padLeft(2, '0')}:${minuto.toString().padLeft(2, '0')}';
-
-          if (diasDuracion == 0) {
-            // Sin fecha de finalización (indefinido): se mantiene la alarma diaria recurrente.
-            final proxima = _proximaInstancia(hora, minuto);
-            await _plugin.zonedSchedule(
-              idNotificacion,
-              tituloDiario,
-              cuerpoDiario,
-              proxima,
-              detallesNotificacion,
-              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-              matchDateTimeComponents: DateTimeComponents.time,
-              payload: idPerro,
-            );
-            alarmas.add({
-              'id': idNotificacion,
-              'titulo': tituloDiario,
-              'cuerpo': cuerpoDiario,
-              'idPerro': idPerro,
-              'categoria': 'diario',
-              'fecha': _isoLocal(proxima),
-              'repite': true,
-              'hora': horaTexto,
-              'desde': _isoLocal(fechaInicio),
-            });
-            continue;
-          }
-
-          // Tratamiento con fecha de fin: se programa una notificación puntual por cada día
-          // restante para que las alarmas se detengan solas al llegar a fechaFin.
-          final fechaFin = fechaInicio.add(Duration(days: diasDuracion));
-          if (ahora.isAfter(fechaFin)) continue;
-
-          final inicioBucle = ahora.isAfter(fechaInicio) ? ahora : fechaInicio;
-          var fechaCursor = DateTime(
-            inicioBucle.year,
-            inicioBucle.month,
-            inicioBucle.day,
-          );
-          var indiceDia = 0;
-
-          while (!fechaCursor.isAfter(fechaFin)) {
-            final horarioDelDia = DateTime(
-              fechaCursor.year,
-              fechaCursor.month,
-              fechaCursor.day,
-              hora,
-              minuto,
-            );
-            if (horarioDelDia.isAfter(ahora)) {
-              final idNotificacionDia =
-                  '$idPerro-$idTratamiento-$indiceDia'.hashCode & 0x7fffffff;
-              await _plugin.zonedSchedule(
-                idNotificacionDia,
-                tituloDiario,
-                cuerpoDiario,
-                tz.TZDateTime.from(horarioDelDia, tz.local),
-                detallesNotificacion,
-                androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-                matchDateTimeComponents: null,
-                payload: idPerro,
-              );
-              alarmas.add({
-                'id': idNotificacionDia,
-                'titulo': tituloDiario,
-                'cuerpo': cuerpoDiario,
-                'idPerro': idPerro,
-                'categoria': 'diario',
-                'fecha': _isoLocal(horarioDelDia),
-              });
-            }
-            fechaCursor = fechaCursor.add(const Duration(days: 1));
-            indiceDia++;
-          }
-          continue;
-        }
-
-        // Dosis única / Visita veterinaria: alarma única a futuro (no recurrente).
-        final fechaProximoRecordatorio = _leerFecha(
-          tratamiento['fecha_proximo_recordatorio'],
-        );
-        if (fechaProximoRecordatorio == null) continue;
-        if (!fechaProximoRecordatorio.isAfter(ahora)) continue;
-
-        final esVisitaVet = categoria == 'veterinaria';
-        final titulo = esVisitaVet
-            ? 'Visita veterinaria'
-            : 'Dosis única pendiente';
-        final cuerpo = esVisitaVet
-            ? 'Recordatorio: visita veterinaria para $nombrePerro'
-            : 'Recordatorio: aplicar $medicacion a $nombrePerro';
-
-        await _plugin.zonedSchedule(
-          idNotificacion,
-          titulo,
-          cuerpo,
-          tz.TZDateTime.from(fechaProximoRecordatorio, tz.local),
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'tratamientos_diarios',
-              'Recordatorios de tratamientos',
-              channelDescription:
-                  'Recordatorio diario para administrar medicación a los perros',
-              importance: Importance.high,
-              priority: Priority.high,
-            ),
-          ),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          matchDateTimeComponents: null,
-          payload: idPerro,
-        );
-        alarmas.add({
-          'id': idNotificacion,
-          'titulo': titulo,
-          'cuerpo': cuerpo,
-          'idPerro': idPerro,
-          'categoria': esVisitaVet ? 'veterinaria' : 'unico',
-          'fecha': _isoLocal(fechaProximoRecordatorio),
-        });
-      }
-    }
-
-    try {
-      await HistorialNotificacionesController().guardarSnapshot(alarmas);
-    } catch (_) {}
-  }
-
-  String _isoLocal(DateTime fecha) {
-    return DateTime(fecha.year, fecha.month, fecha.day, fecha.hour, fecha.minute).toIso8601String();
-  }
-
-  // Usa un DateTime local (constructor de Dart) para que la instancia absoluta
-  // resultante corresponda a la hora:minuto pedidos en la zona horaria del dispositivo.
-  tz.TZDateTime _proximaInstancia(int hora, int minuto) {
-    final ahora = DateTime.now();
-    var horarioLocal = DateTime(
-      ahora.year,
-      ahora.month,
-      ahora.day,
-      hora,
-      minuto,
+    const detalles = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'tratamientos_diarios',
+        'Recordatorios de tratamientos',
+        channelDescription: 'Recordatorio diario para administrar medicación a los perros',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
     );
-    if (horarioLocal.isBefore(ahora)) {
-      horarioLocal = horarioLocal.add(const Duration(days: 1));
-    }
-    return tz.TZDateTime.from(horarioLocal, tz.local);
+    final id = DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff);
+    await _plugin.show(id, titulo, cuerpo, detalles, payload: payload);
+  }
+
+  Future<void> migrarAlarmasLocales() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_claveMigracion) == true) return;
+    await inicializar();
+    await _plugin.cancelAll();
+    await prefs.setBool(_claveMigracion, true);
   }
 }

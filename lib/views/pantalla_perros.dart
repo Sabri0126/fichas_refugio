@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
-import '../services/notificaciones_service.dart';
+import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import 'ficha_detalle_perro.dart';
@@ -32,27 +32,17 @@ class _PantallaPerrosState extends State<PantallaPerros> {
   String _textoBusqueda = '';
   String _filtroUbicacion = 'Todos';
   String _filtroEgreso = 'Todos';
-  StreamSubscription<List<PerroModel>>? _suscripcionTratamientos;
   ModoVista _modoVista = ModoVista.grande;
   late final Stream<List<PerroModel>> _streamPerros = _perroController.observarPerros();
 
   @override
   void initState() {
     super.initState();
-    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
-    // Los visitantes no deben programar notificaciones locales.
-    if (!esInvitado) {
-      _suscripcionTratamientos = _perroController.observarPerros().listen((perros) {
-        final perrosConId = perros.map((p) => {...p.toMap(), 'id': p.id}).toList();
-        NotificacionesService.instance.programarRecordatorios(perrosConId);
-      });
-    }
     unawaited(_cargarModoVista());
   }
 
   @override
   void dispose() {
-    _suscripcionTratamientos?.cancel();
     _busquedaController.dispose();
     super.dispose();
   }
@@ -609,6 +599,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               final confirmar = await _confirmarCierreSesion(esInvitado);
               if (confirmar != true || !context.mounted) return;
               if (!esInvitado) {
+                await MensajeriaService.instance.desregistrarDispositivo();
                 await FirebaseAuth.instance.signOut();
               }
               if (!context.mounted) return;

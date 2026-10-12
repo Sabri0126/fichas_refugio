@@ -63,6 +63,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
   List<TratamientoModel> _tratamientos = [];
+  final Set<String> _idsReanudadosManualmente = {};
   List<RecordatorioModel> _recordatorios = [];
 
   bool _hayCambios = false;
@@ -482,6 +483,21 @@ class _FormularioPerroState extends State<FormularioPerro> {
             .where((p) => (p['id'] as String).isNotEmpty)
             .toList();
 
+        var tratamientosAGuardar = _tratamientos;
+        final idDocumento = widget.idDocumento;
+        if (idDocumento != null && idDocumento.isNotEmpty) {
+          try {
+            final remoto = await _perroController.obtenerPerroPorId(idDocumento);
+            if (remoto != null) {
+              tratamientosAGuardar = TratamientoController.reconciliarPausas(
+                _tratamientos,
+                remoto.tratamientos,
+                _idsReanudadosManualmente,
+              );
+            }
+          } catch (_) {}
+        }
+
         final perro = PerroModel(
           id: widget.idDocumento ?? '',
           nombre: _nombreController.text.trim(),
@@ -516,7 +532,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           enCasa: _enCasa,
           fotoPerfil: urlImagen,
           parientes: parientesNormalizados,
-          tratamientos: _tratamientos,
+          tratamientos: tratamientosAGuardar,
           recordatorios: _recordatorios,
         );
 
@@ -1052,8 +1068,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final actual = _tratamientos[indice];
     if (actual.categoria != 'diario') return;
 
+    final estabaReanudado = _idsReanudadosManualmente.contains(actual.id);
     setState(() {
-      _tratamientos[indice] = _tratamientoController.alternarPausa(actual);
+      final actualizado = _tratamientoController.alternarPausa(actual);
+      _tratamientos[indice] = actualizado;
+      if (actualizado.activo) {
+        _idsReanudadosManualmente.add(actual.id);
+      } else {
+        _idsReanudadosManualmente.remove(actual.id);
+      }
       _hayCambios = true;
     });
 
@@ -1064,7 +1087,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
       await _tratamientoController.persistirAlternarPausa(idDocumento, actual.id);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _tratamientos[indice] = actual);
+      setState(() {
+        _tratamientos[indice] = actual;
+        if (estabaReanudado) {
+          _idsReanudadosManualmente.add(actual.id);
+        } else {
+          _idsReanudadosManualmente.remove(actual.id);
+        }
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo actualizar el estado del tratamiento')),
       );
