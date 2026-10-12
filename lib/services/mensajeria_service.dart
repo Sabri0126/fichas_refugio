@@ -17,10 +17,19 @@ class MensajeriaService {
   StreamSubscription<RemoteMessage>? _enPrimerPlano;
   bool _toquesListos = false;
 
+  /// Android, iOS, macOS y web. En Windows y Linux el plugin no tiene canal.
+  bool get _pushSoportado {
+    if (kIsWeb) return true;
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.macOS => true,
+      _ => false,
+    };
+  }
+
   /// Lee el push que abrió la app cerrada y engancha el toque con la app en segundo plano.
   /// Devuelve el id del perro para dejarlo pendiente hasta después del desbloqueo.
   Future<String?> prepararToques() async {
-    if (_toquesListos) return null;
+    if (!_pushSoportado || _toquesListos) return null;
     _toquesListos = true;
     FirebaseMessaging.onMessageOpenedApp.listen((mensaje) {
       NotificacionesService.instance.abrirDesdePayload(mensaje.data['id_perro']?.toString());
@@ -32,6 +41,7 @@ class MensajeriaService {
   }
 
   Future<void> registrarDispositivo() async {
+    if (!_pushSoportado) return;
     final usuario = FirebaseAuth.instance.currentUser;
     if (usuario == null) return;
 
@@ -63,6 +73,7 @@ class MensajeriaService {
   }
 
   Future<void> desregistrarDispositivo() async {
+    if (!_pushSoportado) return;
     try {
       await _borrarToken().timeout(const Duration(seconds: 3));
     } catch (_) {}

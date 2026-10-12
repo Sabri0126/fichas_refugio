@@ -64,7 +64,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
   List<Map<String, dynamic>> _parientes = [];
   List<TratamientoModel> _tratamientos = [];
   final Set<String> _idsReanudadosManualmente = {};
+  final Set<String> _idsInicialesTratamientos = {};
   List<RecordatorioModel> _recordatorios = [];
+  final Set<String> _idsInicialesRecordatorios = {};
 
   bool _hayCambios = false;
 
@@ -93,7 +95,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _sexo = perro.sexo;
       _parientes = perro.parientes;
       _tratamientos = perro.tratamientos;
+      _idsInicialesTratamientos.addAll(
+        perro.tratamientos.map((tratamiento) => tratamiento.id).where((id) => id.isNotEmpty),
+      );
       _recordatorios = List<RecordatorioModel>.from(perro.recordatorios);
+      _idsInicialesRecordatorios.addAll(
+        perro.recordatorios.map((recordatorio) => recordatorio.id).where((id) => id.isNotEmpty),
+      );
       _historialEgresos = List<EgresoModel>.from(perro.historialEgresos);
 
       _fechaFallecimiento = perro.fechaFallecimiento;
@@ -484,6 +492,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
             .toList();
 
         var tratamientosAGuardar = _tratamientos;
+        var recordatoriosAGuardar = _recordatorios;
+        var altasConservadas = 0;
         final idDocumento = widget.idDocumento;
         if (idDocumento != null && idDocumento.isNotEmpty) {
           try {
@@ -494,6 +504,20 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 remoto.tratamientos,
                 _idsReanudadosManualmente,
               );
+              final tratamientosFusionados = TratamientoController.fusionarAltasRemotas(
+                local: tratamientosAGuardar,
+                remoto: remoto.tratamientos,
+                idsIniciales: _idsInicialesTratamientos,
+              );
+              final recordatoriosFusionados = RecordatorioController.fusionarAltasRemotas(
+                local: _recordatorios,
+                remoto: remoto.recordatorios,
+                idsIniciales: _idsInicialesRecordatorios,
+              );
+              altasConservadas = (tratamientosFusionados.length - tratamientosAGuardar.length) +
+                  (recordatoriosFusionados.length - _recordatorios.length);
+              tratamientosAGuardar = tratamientosFusionados;
+              recordatoriosAGuardar = recordatoriosFusionados;
             }
           } catch (_) {}
         }
@@ -533,12 +557,21 @@ class _FormularioPerroState extends State<FormularioPerro> {
           fotoPerfil: urlImagen,
           parientes: parientesNormalizados,
           tratamientos: tratamientosAGuardar,
-          recordatorios: _recordatorios,
+          recordatorios: recordatoriosAGuardar,
         );
 
         await _perroController.guardarPerro(perro);
 
         if (mounted) {
+          if (altasConservadas > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Se conservaron $altasConservadas cambios que hizo otra persona mientras editabas.',
+                ),
+              ),
+            );
+          }
           Navigator.pop(context);
         }
       } catch (e) {

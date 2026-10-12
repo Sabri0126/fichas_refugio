@@ -301,6 +301,28 @@ class TratamientoController {
     ];
   }
 
+  /// Agrega al final las altas remotas que no estaban al abrir el formulario.
+  /// No modifica los objetos de [local] ni de [remoto]. Ignora `id` vacío.
+  static List<TratamientoModel> fusionarAltasRemotas({
+    required List<TratamientoModel> local,
+    required List<TratamientoModel> remoto,
+    required Set<String> idsIniciales,
+  }) {
+    final presentes = <String>{
+      for (final item in local)
+        if (item.id.isNotEmpty) item.id,
+    };
+    final altas = <TratamientoModel>[];
+    for (final item in remoto) {
+      if (item.id.isEmpty || idsIniciales.contains(item.id) || presentes.contains(item.id)) {
+        continue;
+      }
+      altas.add(item);
+      presentes.add(item.id);
+    }
+    return [...local, ...altas];
+  }
+
   /// Día de inicio = día 1. `diasDuracion == 0` o sin fecha queda indefinido.
   static EstadoDuracion calcularEstadoDuracion(TratamientoModel tratamiento, {DateTime? hoy}) {
     final referencia = hoy ?? DateTime.now();

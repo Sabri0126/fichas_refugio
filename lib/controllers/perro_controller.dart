@@ -150,6 +150,96 @@ class PerroController {
     return List<EgresoModel>.from(base);
   }
 
+  /// Copia [lista] con la entrada [indice] reemplazada. No muta [lista].
+  static List<EgresoModel> reemplazarEgreso(List<EgresoModel> lista, int indice, EgresoModel nuevo) {
+    if (indice < 0 || indice >= lista.length) {
+      throw RangeError.index(indice, lista, 'indice');
+    }
+    return [
+      for (var i = 0; i < lista.length; i++)
+        if (i == indice) nuevo else lista[i],
+    ];
+  }
+
+  /// Copia [lista] sin la entrada [indice]. No muta [lista].
+  static List<EgresoModel> quitarEgreso(List<EgresoModel> lista, int indice) {
+    if (indice < 0 || indice >= lista.length) {
+      throw RangeError.index(indice, lista, 'indice');
+    }
+    return [
+      for (var i = 0; i < lista.length; i++)
+        if (i != indice) lista[i],
+    ];
+  }
+
+  /// Null si el egreso se puede guardar.
+  static String? validarEgreso(EgresoModel egreso) {
+    final hoy = DateTime.now();
+    final hoyDia = DateTime(hoy.year, hoy.month, hoy.day);
+    final egresoDia = _dia(egreso.fechaEgreso);
+    final regresoDia = _dia(egreso.fechaRegreso);
+    if (egresoDia != null && egresoDia.isAfter(hoyDia)) {
+      return 'La fecha de egreso no puede ser futura.';
+    }
+    if (regresoDia != null && egresoDia != null && regresoDia.isBefore(egresoDia)) {
+      return 'La fecha de regreso no puede ser anterior a la de egreso.';
+    }
+    return null;
+  }
+
+  /// Reemplaza o quita una entrada solo si sigue igual a [esperado].
+  /// [nuevo] null la elimina. Escribe `[]` si no queda ninguna.
+  Future<void> actualizarHistorialEgresos(
+    String idPerro,
+    EgresoModel esperado,
+    int indice,
+    EgresoModel? nuevo,
+  ) async {
+    final ref = _perrosRef.doc(idPerro);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      if (data == null) throw const HistorialDesactualizadoException();
+      final lista = _leerHistorial(data['historial_egresos']);
+      if (indice < 0 || indice >= lista.length || !_mismoEgreso(lista[indice], esperado)) {
+        throw const HistorialDesactualizadoException();
+      }
+      final siguiente = nuevo == null
+          ? quitarEgreso(lista, indice)
+          : reemplazarEgreso(lista, indice, nuevo);
+      tx.update(ref, {
+        'historial_egresos': siguiente.map((egreso) => egreso.toMap()).toList(),
+      });
+    });
+  }
+
+  static DateTime? _dia(DateTime? fecha) {
+    if (fecha == null) return null;
+    return DateTime(fecha.year, fecha.month, fecha.day);
+  }
+
+  static bool _mismoEgreso(EgresoModel actual, EgresoModel esperado) {
+    final izq = actual.toMap();
+    final der = esperado.toMap();
+    if (izq.length != der.length) return false;
+    for (final entrada in izq.entries) {
+      if (der[entrada.key] != entrada.value) return false;
+    }
+    return true;
+  }
+
+  List<EgresoModel> _leerHistorial(dynamic valor) {
+    if (valor is! List) return const [];
+    final historial = <EgresoModel>[];
+    for (final item in valor) {
+      if (item is! Map) continue;
+      try {
+        historial.add(EgresoModel.fromMap(Map<String, dynamic>.from(item)));
+      } catch (_) {}
+    }
+    return historial;
+  }
+
   /// Determina la relación inversa a mostrar en el familiar vinculado (p. ej.
   /// si A es "Madre" de B, B es "Hijo/a" de A, respetando el sexo del perro
   /// original para elegir entre "Hijo" e "Hija").
@@ -402,4 +492,9 @@ class PerroController {
       'galeria': nuevaGaleria,
     });
   }
+}
+
+/// La entrada del historial cambió desde que se abrió la ficha.
+class HistorialDesactualizadoException implements Exception {
+  const HistorialDesactualizadoException();
 }

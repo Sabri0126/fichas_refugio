@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../theme/app_colors.dart';
 import '../views/ficha_detalle_perro.dart';
 
 /// Muestra avisos locales y abre la ficha cuando se toca uno.
@@ -37,7 +38,7 @@ class NotificacionesService {
       tz.setLocalLocation(tz.getLocation(timeZoneName));
 
       const configuracionAndroid = AndroidInitializationSettings(
-        '@mipmap/ic_launcher',
+        'ic_stat_huella',
       );
       const configuracionWindows = WindowsInitializationSettings(
         appName: 'Fichas Refugio',
@@ -108,6 +109,8 @@ class NotificacionesService {
         channelDescription: 'Recordatorio diario para administrar medicación a los perros',
         importance: Importance.high,
         priority: Priority.high,
+        icon: 'ic_stat_huella',
+        color: AppColors.terracota,
       ),
     );
     final id = DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff);

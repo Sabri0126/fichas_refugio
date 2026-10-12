@@ -45,6 +45,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   final ImagePicker _picker = ImagePicker();
   bool _subiendoFoto = false;
   bool _modoReordenar = false;
+  int? _egresoEnCurso;
   int _paginaActual = 0;
   double _escalaTexto = 1.3;
   List<Map<String, dynamic>> _fotosReordenar = [];
@@ -1034,17 +1035,22 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _historialEgresos(PerroModel perro) {
-    final ordenados = [...perro.historialEgresos]..sort((a, b) {
-      if (a.fechaEgreso == null && b.fechaEgreso == null) return 0;
-      if (a.fechaEgreso == null) return 1;
-      if (b.fechaEgreso == null) return -1;
-      return b.fechaEgreso!.compareTo(a.fechaEgreso!);
+  Widget _historialEgresos(PerroModel perro, bool esInvitado) {
+    final originales = perro.historialEgresos;
+    final indices = List<int>.generate(originales.length, (i) => i);
+    indices.sort((a, b) {
+      final fechaA = originales[a].fechaEgreso;
+      final fechaB = originales[b].fechaEgreso;
+      if (fechaA == null && fechaB == null) return 0;
+      if (fechaA == null) return 1;
+      if (fechaB == null) return -1;
+      return fechaB.compareTo(fechaA);
     });
     final filas = <Widget>[];
-    for (var i = 0; i < ordenados.length; i++) {
+    for (var i = 0; i < indices.length; i++) {
       if (i > 0) filas.add(const Divider());
-      filas.add(_filaEgreso(ordenados[i]));
+      final indice = indices[i];
+      filas.add(_filaEgreso(originales[indice], indice, esInvitado));
     }
     return _tarjetaSeccion(
       titulo: 'Historial de egresos',
@@ -1053,7 +1059,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _filaEgreso(EgresoModel egreso) {
+  Widget _filaEgreso(EgresoModel egreso, int indice, bool esInvitado) {
     final motivo = _perroController.formatearMotivoEgreso(egreso.motivo);
     final icono = switch (egreso.motivo) {
       'adopcion' => Icons.favorite_rounded,
@@ -1118,8 +1124,79 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ],
           ),
         ),
+        if (!esInvitado)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Editar egreso',
+                color: AppColors.textoSecundario,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                onPressed: _egresoEnCurso == indice ? null : () => _editarEgreso(indice, egreso),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Eliminar egreso',
+                color: AppColors.error,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                onPressed: _egresoEnCurso == indice ? null : () => _eliminarEgreso(indice, egreso),
+              ),
+            ],
+          ),
       ],
     );
+  }
+
+  Future<void> _editarEgreso(int indice, EgresoModel egreso) async {
+    final nuevo = await showDialog<EgresoModel>(
+      context: context,
+      builder: (context) => _DialogoEditarEgreso(egreso: egreso),
+    );
+    if (nuevo == null || !mounted) return;
+    await _guardarCambioEgreso(indice, egreso, nuevo, 'Egreso actualizado.');
+  }
+
+  Future<void> _eliminarEgreso(int indice, EgresoModel egreso) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Eliminar este egreso?'),
+        content: const Text('Se borra del historial de la ficha. Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    await _guardarCambioEgreso(indice, egreso, null, 'Egreso eliminado.');
+  }
+
+  Future<void> _guardarCambioEgreso(
+    int indice,
+    EgresoModel esperado,
+    EgresoModel? nuevo,
+    String mensajeOk,
+  ) async {
+    setState(() => _egresoEnCurso = indice);
+    try {
+      await _perroController.actualizarHistorialEgresos(widget.idDocumento, esperado, indice, nuevo);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensajeOk)));
+    } on HistorialDesactualizadoException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Otra persona modificó este historial. Revisá y volvé a intentar.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar el cambio.')),
+      );
+    } finally {
+      if (mounted) setState(() => _egresoEnCurso = null);
+    }
   }
 
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
@@ -1169,7 +1246,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         _buildDatosBasicos(perro),
         if (perro.historialEgresos.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _historialEgresos(perro),
+          _historialEgresos(perro, esInvitado),
         ],
         const SizedBox(height: 12),
         _tarjetaSeccion(
@@ -1809,6 +1886,167 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _DialogoEditarEgreso extends StatefulWidget {
+  final EgresoModel egreso;
+
+  const _DialogoEditarEgreso({required this.egreso});
+
+  @override
+  State<_DialogoEditarEgreso> createState() => _DialogoEditarEgresoState();
+}
+
+class _DialogoEditarEgresoState extends State<_DialogoEditarEgreso> {
+  late String _motivo;
+  DateTime? _fechaEgreso;
+  DateTime? _fechaRegreso;
+  late final TextEditingController _nota;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final motivo = widget.egreso.motivo;
+    _motivo = motivo == 'familia' ? 'familia' : 'adopcion';
+    _fechaEgreso = widget.egreso.fechaEgreso;
+    _fechaRegreso = widget.egreso.fechaRegreso;
+    _nota = TextEditingController(text: widget.egreso.nota ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nota.dispose();
+    super.dispose();
+  }
+
+  String _textoFecha(DateTime? fecha) {
+    if (fecha == null) return 'Sin fecha';
+    final dd = fecha.day.toString().padLeft(2, '0');
+    final mm = fecha.month.toString().padLeft(2, '0');
+    return '$dd/$mm/${fecha.year}';
+  }
+
+  Future<void> _elegirEgreso() async {
+    final hoy = DateTime.now();
+    final inicial = _fechaEgreso ?? hoy;
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: inicial.isAfter(hoy) ? hoy : inicial,
+      firstDate: DateTime(2000),
+      lastDate: hoy,
+    );
+    if (fecha == null) return;
+    setState(() => _fechaEgreso = fecha);
+  }
+
+  Future<void> _elegirRegreso() async {
+    final hoy = DateTime.now();
+    final inicial = _fechaRegreso ?? _fechaEgreso ?? hoy;
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: inicial.isAfter(hoy) ? hoy : inicial,
+      firstDate: DateTime(2000),
+      lastDate: hoy,
+    );
+    if (fecha == null) return;
+    setState(() => _fechaRegreso = fecha);
+  }
+
+  void _guardar() {
+    final nota = _nota.text.trim();
+    final nuevo = EgresoModel(
+      motivo: _motivo,
+      fechaEgreso: _fechaEgreso,
+      nota: nota.isEmpty ? null : nota,
+      fechaRegreso: _fechaRegreso,
+    );
+    final error = PerroController.validarEgreso(nuevo);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    Navigator.pop(context, nuevo);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editar egreso'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final ancho = constraints.maxWidth - 24;
+                Widget chip(String valor, String texto) {
+                  return ChoiceChip(
+                    label: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: ancho),
+                      child: Text(texto),
+                    ),
+                    selected: _motivo == valor,
+                    onSelected: (_) => setState(() => _motivo = valor),
+                  );
+                }
+
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    chip('adopcion', 'Adoptado'),
+                    chip('familia', 'Volvió con su familia'),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Fecha de egreso'),
+              subtitle: Text(_textoFecha(_fechaEgreso)),
+              trailing: const Icon(Icons.calendar_today_outlined),
+              onTap: _elegirEgreso,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Fecha de regreso'),
+              subtitle: Text(_textoFecha(_fechaRegreso)),
+              trailing: const Icon(Icons.calendar_today_outlined),
+              onTap: _elegirRegreso,
+            ),
+            if (_fechaRegreso != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(() => _fechaRegreso = null),
+                  child: const Text('Quitar fecha de regreso'),
+                ),
+              ),
+            TextField(
+              controller: _nota,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Nota (opcional)',
+                helperText: 'La ven también los visitantes. No cargues datos personales.',
+                helperMaxLines: 3,
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: AppColors.error)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(onPressed: _guardar, child: const Text('Guardar')),
+      ],
     );
   }
 }

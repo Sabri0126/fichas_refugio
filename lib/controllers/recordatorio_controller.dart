@@ -70,4 +70,26 @@ class RecordatorioController {
     final numero = '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}';
     return '$nombre $numero $hora';
   }
+
+  /// Agrega al final las altas remotas que no estaban al abrir el formulario.
+  /// No modifica los objetos de [local] ni de [remoto]. Ignora `id` vacío.
+  static List<RecordatorioModel> fusionarAltasRemotas({
+    required List<RecordatorioModel> local,
+    required List<RecordatorioModel> remoto,
+    required Set<String> idsIniciales,
+  }) {
+    final presentes = <String>{
+      for (final item in local)
+        if (item.id.isNotEmpty) item.id,
+    };
+    final altas = <RecordatorioModel>[];
+    for (final item in remoto) {
+      if (item.id.isEmpty || idsIniciales.contains(item.id) || presentes.contains(item.id)) {
+        continue;
+      }
+      altas.add(item);
+      presentes.add(item.id);
+    }
+    return [...local, ...altas];
+  }
 }
