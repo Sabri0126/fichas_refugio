@@ -6,12 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
-import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
-import 'pantalla_login.dart';
 
 enum ModoVista { grande, compacta, lista }
 
@@ -45,32 +43,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
   void dispose() {
     _busquedaController.dispose();
     super.dispose();
-  }
-
-  Future<bool> _confirmarCierreSesion(bool esInvitado) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(esInvitado ? '¿Salir?' : '¿Cerrar sesión?'),
-        content: Text(
-          esInvitado
-              ? '¿Querés salir del modo visitante y volver al inicio de sesión?'
-              : '¿Estás seguro de que querés salir de tu cuenta?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.logout),
-            label: const Text('Salir'),
-          ),
-        ],
-      ),
-    );
-    return confirmar == true;
   }
 
   Future<void> _cargarModoVista() async {
@@ -554,7 +526,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
 
     return Scaffold(
-      // --- SECCIÓN: AppBar (título y botón de cerrar sesión) ---
+      // --- SECCIÓN: AppBar (título y selector de vista) ---
       appBar: AppBar(
         title: Text(
           widget.seccion == SeccionPerros.difuntos
@@ -591,24 +563,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                 child: const Text('Lista'),
               ),
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Cerrar sesión',
-            onPressed: () async {
-              final confirmar = await _confirmarCierreSesion(esInvitado);
-              if (confirmar != true || !context.mounted) return;
-              if (!esInvitado) {
-                await MensajeriaService.instance.desregistrarDispositivo();
-                await FirebaseAuth.instance.signOut();
-              }
-              if (!context.mounted) return;
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const PantallaLogin()),
-                (route) => false,
-              );
-            },
           ),
         ],
       ),

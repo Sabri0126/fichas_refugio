@@ -831,7 +831,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   /// Marca como inactivos los tratamientos diarios ya finalizados,
-  /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos activos".
+  /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos actuales".
   PerroModel _procesarAutoArchivado(PerroModel perro) {
     if (perro.tratamientos.isEmpty) return perro;
 
@@ -861,13 +861,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         ),
         if (tieneHistorial) ...[
           const SizedBox(height: 24),
-          Text('Tratamientos activos', textScaler: _escala, style: textTheme.titleLarge),
+          Text('Tratamientos actuales', textScaler: _escala, style: textTheme.titleLarge),
           const SizedBox(height: 12),
           if (tratamientosActivos.isEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                'No hay tratamientos diarios activos.',
+                'No hay tratamientos diarios actuales.',
                 textScaler: _escala,
                 style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
               ),
