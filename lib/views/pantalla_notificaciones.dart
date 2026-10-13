@@ -158,7 +158,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
           clipBehavior: Clip.antiAlias,
           color: noLeida ? AppColors.terracota.withValues(alpha: 0.08) : null,
           child: InkWell(
-            onTap: item.idPerro == null
+            onTap: item.tipo == 'clima' || item.idPerro == null
                 ? null
                 : () => Navigator.push(
                       context,
@@ -230,6 +230,27 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         fondo: AppColors.pausado.withValues(alpha: 0.12),
       );
     }
+    if (item.categoria == 'lluvia') {
+      return (
+        icono: Icons.umbrella_rounded,
+        color: CategoryColors.unicoTexto,
+        fondo: CategoryColors.unicoTexto.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'calor') {
+      return (
+        icono: Icons.wb_sunny_rounded,
+        color: AppColors.pausado,
+        fondo: AppColors.pausado.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'frio') {
+      return (
+        icono: Icons.ac_unit_rounded,
+        color: CategoryColors.higieneTexto,
+        fondo: CategoryColors.higieneTexto.withValues(alpha: 0.12),
+      );
+    }
     if (item.categoria == 'medicacion') {
       return (
         icono: CategoryColors.icono('unico'),
@@ -284,32 +305,42 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
 
   Widget _ayudaAvisos() {
     final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        title: Text('¿No te llegan los avisos?', style: Theme.of(context).textTheme.titleMedium),
-        children: [
-          Text(
-            '1) Verificá que las notificaciones de la app estén permitidas en los ajustes del teléfono.',
-            style: estilo,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: Text('¿No te llegan los avisos?', style: Theme.of(context).textTheme.titleMedium),
+            children: [
+              Text(
+                '1) Verificá que las notificaciones de la app estén permitidas en los ajustes del teléfono.',
+                style: estilo,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '2) Quitá la restricción de batería para la app (en Samsung: Ajustes > Batería > Límites de uso en segundo plano > quitá la app de "Apps en suspensión").',
+                style: estilo,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '3) No fuerces la detención de la app.',
+                style: estilo,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            '2) Quitá la restricción de batería para la app (en Samsung: Ajustes > Batería > Límites de uso en segundo plano > quitá la app de "Apps en suspensión").',
-            style: estilo,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '3) No fuerces la detención de la app.',
-            style: estilo,
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Datos del clima: Open-Meteo.com',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario),
+        ),
+      ],
     );
   }
 }

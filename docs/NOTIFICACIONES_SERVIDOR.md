@@ -105,6 +105,47 @@ firebase functions:log --only enviarNotificaciones
 
 Cada corrida deja un log `enviarNotificaciones` con la cantidad de alarmas, envíos, tokens borrados y pausas. No incluye nombres ni medicación.
 
+## 7. Clima
+
+Hay una segunda función, `enviarAvisosClima`. Corre a las 08:00 y a las 19:00, hora de Buenos Aires, en la misma región `southamerica-east1`. A la mañana evalúa lluvia y calor de ese día. A la noche evalúa el frío o la helada de la noche que empieza. Manda el push a los mismos documentos de `dispositivos` y guarda el aviso en `notificaciones`. Los visitantes no tienen token y no lo reciben.
+
+### Documento `config/clima`
+
+Crearlo a mano en la consola de Firestore, colección `config`, id `clima`. Si no existe, o si falta un campo, la función usa estos valores. Un número que no sea un número finito se ignora y vuelve al valor de la tabla.
+
+| Campo | Default | Unidad |
+| --- | --- | --- |
+| `activo` | `true` | Si es `false`, la corrida no consulta ni envía nada. |
+| `latitud` | `-38.9833` | Grados, WGS84. |
+| `longitud` | `-64.0933` | Grados, WGS84. Negativo es oeste. |
+| `lugar` | `Río Colorado, Río Negro` | Nombre de referencia. No sale en el texto del aviso. |
+| `lluvia_prob_min` | `60` | Porcentaje. Avisa si la probabilidad entre las 08 y las 22 llega a este valor. |
+| `lluvia_mm_min` | `2` | Milímetros. Avisa si la suma de precipitación en ese tramo llega a este valor. |
+| `calor_max` | `35` | °C. Máxima diaria. |
+| `frio_min` | `3` | °C. Mínima entre las 20:00 y las 08:00 del día siguiente. |
+| `helada_max` | `0` | °C. Si la mínima de esa noche es menor o igual, el aviso es de helada en vez de frío. |
+
+Para mudar el refugio, cambiá `latitud` y `longitud`. Para avisar con menos calor, por ejemplo, poné `calor_max` en `10`.
+
+### Probar una corrida
+
+En Google Cloud, Cloud Scheduler, abrí el trabajo de `enviarAvisosClima` y usá **Forzar ejecución**. La hora local de esa corrida decide si evalúa la mañana (antes de las 12) o la noche.
+
+El id del aviso es `clima_{categoria}_{yyyyMMdd}_{manana|noche}`, por ejemplo `notificaciones/clima_calor_20261013_manana`. `create()` no lo vuelve a escribir si ya existe, así que una segunda corrida del mismo día no manda otro push. Para repetir la prueba, borrá ese documento en la consola y forzá de nuevo.
+
+Logs:
+
+```powershell
+firebase functions:log --only enviarAvisosClima
+```
+
+Cada corrida deja `avisos` y `enviados`. Si Open-Meteo no responde, el log es `enviarAvisosClima: consulta fallida` y no se envía nada.
+
+### Costo y atribución
+
+Son dos llamadas por día a Open-Meteo, sin clave. El uso no comercial de esa API es gratis. Hay que atribuir la fuente: la pantalla de notificaciones muestra `Datos del clima: Open-Meteo.com`.
+
+
 ## 6. Limitaciones
 
 - Si `dispositivos` está vacío, el historial se guarda y los tratamientos vencidos se pausan, pero nadie recibe el push.

@@ -1,20 +1,16 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
-import { type Firestore, FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { getMessaging } from 'firebase-admin/messaging';
+import { type Firestore, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { DateTime } from 'luxon';
 
 import { type Alarma, type PerroEntrada, ZONA, aZona, calcularAlarmas, calcularPausas } from './alarmas.js';
+import { type MomentoClima, evaluarClima, normalizarConfig } from './clima.js';
+import { crearNotificacion, enviarAlarma } from './envio.js';
 
 if (getApps().length === 0) initializeApp();
 
-const CANAL_ANDROID = 'tratamientos_diarios';
 const REGION = 'southamerica-east1';
-const TOKENS_INVALIDOS = new Set([
-  'messaging/registration-token-not-registered',
-  'messaging/invalid-registration-token',
-]);
 
 export const enviarNotificaciones = onSchedule(
   {
@@ -72,65 +68,88 @@ export const enviarNotificaciones = onSchedule(
   },
 );
 
+export const enviarAvisosClima = onSchedule(
+  {
+    schedule: '0 8,19 * * *',
+    timeZone: ZONA,
+    timeoutSeconds: 60,
+    maxInstances: 1,
+    region: REGION,
+  },
+  async () => {
+    const db = getFirestore();
+    const ahora = DateTime.now().setZone(ZONA);
+    const config = normalizarConfig((await db.doc('config/clima').get()).data());
+    if (!config.activo) {
+      logger.info('enviarAvisosClima', { avisos: 0, enviados: 0 });
+      return;
+    }
+
+    const crudo = await consultarOpenMeteo(config.latitud, config.longitud);
+    if (crudo == null) return;
+
+    const momento: MomentoClima = ahora.hour < 12 ? 'manana' : 'noche';
+    const avisos = evaluarClima(crudo, config, momento, ahora);
+    const dispositivos = await db.collection('dispositivos').get();
+    const tokens = dispositivos.docs.map((doc) => doc.id);
+    let enviados = 0;
+    const tokensMalos = new Set<string>();
+
+    for (const aviso of avisos) {
+      const mensaje = {
+        clave: aviso.clave,
+        titulo: aviso.titulo,
+        cuerpo: aviso.cuerpo,
+        idPerro: '',
+        categoria: aviso.categoria,
+        tipo: aviso.tipo,
+        fecha: ahora,
+      };
+      const creada = await crearNotificacion(db, mensaje);
+      if (!creada) continue;
+      const resultado = await enviarAlarma(tokens, mensaje);
+      enviados += resultado.enviados;
+      for (const token of resultado.invalidos) tokensMalos.add(token);
+    }
+
+    for (const token of tokensMalos) {
+      await db.collection('dispositivos').doc(token).delete();
+    }
+
+    logger.info('enviarAvisosClima', { avisos: avisos.length, enviados });
+  },
+);
+
+async function consultarOpenMeteo(latitud: number, longitud: number): Promise<unknown | null> {
+  const url = new URL('https://api.open-meteo.com/v1/forecast');
+  url.searchParams.set('latitude', String(latitud));
+  url.searchParams.set('longitude', String(longitud));
+  url.searchParams.set('timezone', ZONA);
+  url.searchParams.set('forecast_days', '2');
+  url.searchParams.set('hourly', 'temperature_2m,precipitation_probability,precipitation');
+  url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum');
+
+  let ultimo: unknown;
+  for (let intento = 0; intento < 2; intento += 1) {
+    try {
+      const respuesta = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (!respuesta.ok) throw new Error(`Open-Meteo respondió ${respuesta.status}`);
+      return (await respuesta.json()) as unknown;
+    } catch (error) {
+      ultimo = error;
+    }
+  }
+
+  const mensaje = ultimo instanceof Error ? ultimo.message : 'error desconocido';
+  logger.error('enviarAvisosClima: consulta fallida', { mensaje });
+  return null;
+}
+
 function inicioDeVentana(ultima: unknown, ahora: DateTime): DateTime {
   const piso = ahora.minus({ hours: 12 });
   const fecha = aZona(ultima);
   if (!fecha) return ahora.minus({ minutes: 5 });
   return fecha > piso ? fecha : piso;
-}
-
-async function crearNotificacion(
-  db: Firestore,
-  alarma: Alarma,
-): Promise<boolean> {
-  try {
-    await db.collection('notificaciones').doc(alarma.clave).create({
-      titulo: alarma.titulo,
-      cuerpo: alarma.cuerpo,
-      id_perro: alarma.idPerro,
-      categoria: alarma.categoria,
-      tipo: alarma.tipo,
-      fecha: Timestamp.fromDate(alarma.fecha.toJSDate()),
-      creada: FieldValue.serverTimestamp(),
-      expira_en: Timestamp.fromDate(alarma.fecha.plus({ days: 30 }).toJSDate()),
-    });
-    return true;
-  } catch (error) {
-    if (yaExiste(error)) return false;
-    throw error;
-  }
-}
-
-async function enviarAlarma(
-  tokens: string[],
-  alarma: Alarma,
-): Promise<{ enviados: number; invalidos: string[] }> {
-  let enviados = 0;
-  const invalidos: string[] = [];
-  for (let i = 0; i < tokens.length; i += 500) {
-    const lote = tokens.slice(i, i + 500);
-    if (lote.length === 0) continue;
-    const respuesta = await getMessaging().sendEachForMulticast({
-      tokens: lote,
-      notification: { title: alarma.titulo, body: alarma.cuerpo },
-      data: {
-        id_perro: alarma.idPerro,
-        tipo: alarma.tipo,
-        notif_id: alarma.clave,
-      },
-      android: {
-        priority: 'high',
-        ttl: 12 * 60 * 60 * 1000,
-        notification: { channelId: CANAL_ANDROID },
-      },
-    });
-    enviados += respuesta.successCount;
-    respuesta.responses.forEach((item, indice) => {
-      const codigo = item.error?.code;
-      if (codigo && TOKENS_INVALIDOS.has(codigo)) invalidos.push(lote[indice]);
-    });
-  }
-  return { enviados, invalidos };
 }
 
 async function pausarTratamientos(
@@ -158,7 +177,3 @@ async function pausarTratamientos(
   });
 }
 
-function yaExiste(error: unknown): boolean {
-  const codigo = (error as { code?: number | string }).code;
-  return codigo === 6 || codigo === 'already-exists' || codigo === 'ALREADY_EXISTS';
-}

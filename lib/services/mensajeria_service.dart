@@ -32,12 +32,20 @@ class MensajeriaService {
     if (!_pushSoportado || _toquesListos) return null;
     _toquesListos = true;
     FirebaseMessaging.onMessageOpenedApp.listen((mensaje) {
-      NotificacionesService.instance.abrirDesdePayload(mensaje.data['id_perro']?.toString());
+      final idPerro = _idPerro(mensaje.data);
+      if (idPerro == null) return;
+      NotificacionesService.instance.abrirDesdePayload(idPerro);
     });
     final inicial = await _mensajeria.getInitialMessage();
-    final idPerro = inicial?.data['id_perro']?.toString();
-    if (idPerro == null || idPerro.isEmpty) return null;
+    final idPerro = inicial == null ? null : _idPerro(inicial.data);
+    if (idPerro == null) return null;
     return idPerro;
+  }
+
+  String? _idPerro(Map<String, dynamic> data) {
+    final id = data['id_perro']?.toString().trim();
+    if (id == null || id.isEmpty) return null;
+    return id;
   }
 
   Future<void> registrarDispositivo() async {
@@ -67,7 +75,7 @@ class MensajeriaService {
       NotificacionesService.instance.mostrarAhora(
         titulo: titulo,
         cuerpo: cuerpo,
-        payload: mensaje.data['id_perro']?.toString(),
+        payload: _idPerro(mensaje.data),
       );
     });
   }
