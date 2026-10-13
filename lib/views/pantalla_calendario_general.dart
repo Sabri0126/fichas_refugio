@@ -33,6 +33,8 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   DateTime _diaEnfocado = DateTime.now();
   CalendarFormat _formato = CalendarFormat.month;
   String? _idPerroFiltro;
+  final ScrollController _scrollCalendario = ScrollController();
+  final ScrollController _scrollResumen = ScrollController();
 
   @override
   void initState() {
@@ -56,11 +58,27 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   DateTime _soloFecha(DateTime fecha) =>
       DateTime(fecha.year, fecha.month, fecha.day);
 
+  @override
+  void dispose() {
+    _scrollCalendario.dispose();
+    _scrollResumen.dispose();
+    super.dispose();
+  }
+
   void _irAHoy() {
     setState(() {
       _diaSeleccionado = _hoy;
       _diaEnfocado = _hoy;
     });
+  }
+
+  void _cambiarFormato(CalendarFormat formato) {
+    if (_formato == formato) return;
+    setState(() => _formato = formato);
+  }
+
+  String _plural(int n, String singular, String plural) {
+    return n == 1 ? '1 $singular' : '$n $plural';
   }
 
   @override
@@ -69,10 +87,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       appBar: AppBar(
         title: const Text('Calendario general'),
         actions: [
-          IconButton(
-            tooltip: 'Ir a hoy',
+          TextButton(
             onPressed: _irAHoy,
-            icon: const Icon(Icons.today_rounded),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).appBarTheme.foregroundColor),
+            child: const Text('Hoy'),
           ),
         ],
       ),
@@ -89,44 +107,102 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
-            final activos =
-                snapshot.data!
-                    .where((perro) => perro.estado == 'activo')
-                    .toList()
-                  ..sort((a, b) => a.nombre.compareTo(b.nombre));
-            if (activos.isEmpty) {
+            final perros = snapshot.data!;
+            if (perros.isEmpty) {
               return _estadoMensaje('No hay perritos registrados aún.');
             }
+            final activos =
+                perros.where((perro) => perro.estado == 'activo').toList()
+                  ..sort((a, b) => a.nombre.compareTo(b.nombre));
             final filtro = activos.any((perro) => perro.id == _idPerroFiltro)
                 ? _idPerroFiltro
                 : null;
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: [
-                _filtroPerro(activos, filtro),
-                const SizedBox(height: 12),
-                FutureBuilder<void>(
-                  future: _localeListo,
-                  builder: (context, locale) {
-                    if (locale.connectionState != ConnectionState.done) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(child: CircularProgressIndicator()),
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final ancho = constraints.maxWidth >= 900;
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: FutureBuilder<void>(
+                    future: _localeListo,
+                    builder: (context, locale) {
+                      if (locale.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final filtroPerro = _filtroPerro(activos, filtro);
+                      if (!ancho) {
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                          children: [
+                            filtroPerro,
+                            const SizedBox(height: 12),
+                            _selectorFormato(),
+                            const SizedBox(height: 12),
+                            _calendario(perros, filtro, altoCelda: 52),
+                            const SizedBox(height: 12),
+                            _leyenda(),
+                            const SizedBox(height: 20),
+                            _resumen(perros, filtro),
+                          ],
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: LayoutBuilder(
+                                builder: (context, caja) {
+                                  final anchoColumna = caja.maxWidth > 760 ? 760.0 : caja.maxWidth;
+                                  final altoCelda = (anchoColumna / 7).clamp(48.0, 72.0);
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: SizedBox(
+                                      width: anchoColumna,
+                                      height: caja.maxHeight,
+                                      child: _conScroll(
+                                        _scrollCalendario,
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            filtroPerro,
+                                            const SizedBox(height: 12),
+                                            _selectorFormato(),
+                                            const SizedBox(height: 12),
+                                            _calendario(perros, filtro, altoCelda: altoCelda),
+                                            const SizedBox(height: 12),
+                                            _leyenda(),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              flex: 6,
+                              child: _conScroll(
+                                _scrollResumen,
+                                Align(
+                                  alignment: Alignment.topLeft,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 880),
+                                    child: _resumen(perros, filtro),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _calendario(activos, filtro),
-                        const SizedBox(height: 12),
-                        _leyenda(),
-                        const SizedBox(height: 20),
-                        _resumen(activos, filtro),
-                      ],
-                    );
-                  },
-                ),
-              ],
+                    },
+                  ),
+                );
+              },
             );
           },
         ),
@@ -164,6 +240,39 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     );
   }
 
+  Widget _conScroll(ScrollController controlador, Widget child) {
+    return Scrollbar(
+      controller: controlador,
+      child: SingleChildScrollView(
+        controller: controlador,
+        padding: const EdgeInsets.only(top: 12, bottom: 24),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _selectorFormato() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SegmentedButton<CalendarFormat>(
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: CalendarFormat.month, label: Text('Mes')),
+            ButtonSegment(value: CalendarFormat.twoWeeks, label: Text('2 semanas')),
+          ],
+          selected: {_formato},
+          onSelectionChanged: (seleccion) => _cambiarFormato(seleccion.first),
+        ),
+      ),
+    );
+  }
+
   Widget _filtroPerro(List<PerroModel> activos, String? filtro) {
     return DropdownButtonFormField<String?>(
       initialValue: filtro,
@@ -187,9 +296,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     );
   }
 
-  Widget _calendario(List<PerroModel> activos, String? filtro) {
+  Widget _calendario(List<PerroModel> perros, String? filtro, {required double altoCelda}) {
     final textTheme = Theme.of(context).textTheme;
     return TableCalendar<void>(
+      rowHeight: altoCelda,
       locale: 'es_ES',
       firstDay: _primerDia,
       lastDay: _ultimoDia,
@@ -204,7 +314,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       availableGestures: AvailableGestures.horizontalSwipe,
       selectedDayPredicate: (dia) => isSameDay(dia, _diaSeleccionado),
       headerStyle: HeaderStyle(
-        formatButtonVisible: true,
+        formatButtonVisible: false,
         titleCentered: true,
         titleTextStyle: textTheme.titleMedium ?? const TextStyle(),
         leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.navy),
@@ -242,9 +352,21 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         ),
       ),
       calendarBuilders: CalendarBuilders(
+        headerTitleBuilder: (context, dia) {
+          final titulo = DateFormat.yMMMM('es_ES').format(dia);
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              titulo,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: textTheme.titleMedium,
+            ),
+          );
+        },
         markerBuilder: (context, date, events) {
           final claves = CalendarioGeneralController.marcadoresDelDia(
-            activos,
+            perros,
             date,
             hoy: _hoy,
             idPerro: filtro,
@@ -275,10 +397,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         });
       },
       onPageChanged: (enfocado) => _diaEnfocado = enfocado,
-      onFormatChanged: (formato) {
-        if (_formato == formato) return;
-        setState(() => _formato = formato);
-      },
+      onFormatChanged: _cambiarFormato,
     );
   }
 
@@ -304,21 +423,22 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       runSpacing: 6,
       children: [
         punto(CategoryColors.diario, 'Dosis dada'),
-        punto(AppColors.dosisOlvidada, 'Olvidada'),
         punto(AppColors.pendiente, 'Pendiente'),
         punto(CategoryColors.unico, 'Dosis única'),
         punto(CategoryColors.higiene, 'Higiene'),
         punto(CategoryColors.evento, 'Evento'),
         punto(CategoryColors.veterinaria, 'Veterinaria'),
+        punto(AppColors.terracota, 'Ingreso'),
+        punto(AppColors.textoSecundario, 'Fallecimiento'),
         punto(AppColors.navy, 'Recordatorio'),
       ],
     );
   }
 
-  Widget _resumen(List<PerroModel> activos, String? filtro) {
+  Widget _resumen(List<PerroModel> perros, String? filtro) {
     final textTheme = Theme.of(context).textTheme;
     final resumen = CalendarioGeneralController.construirResumen(
-      activos,
+      perros,
       _diaSeleccionado,
       hoy: _hoy,
       idPerro: filtro,
@@ -344,14 +464,6 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       );
     } else if (comparacion < 0) {
       secciones.add(
-        _seccion(
-          'Dosis olvidadas',
-          Icons.warning_amber_rounded,
-          resumen.olvidadas,
-          tinte: AppColors.dosisOlvidada,
-        ),
-      );
-      secciones.add(
         _seccion('Dosis dadas', Icons.check_circle_outline, resumen.dadas),
       );
     } else {
@@ -359,6 +471,13 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         _seccion('Programadas', Icons.event_outlined, resumen.programadas),
       );
     }
+    secciones.add(
+      _seccion(
+        'Eventos especiales',
+        Icons.pets_rounded,
+        resumen.hitos,
+      ),
+    );
     secciones.add(
       _seccion(
         'Eventos y visitas',
@@ -373,15 +492,16 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
 
     final conteos = <String>[
       if (comparacion <= 0 && resumen.dadas.isNotEmpty)
-        '${resumen.dadas.length} dadas',
+        _plural(resumen.dadas.length, 'dosis dada', 'dosis dadas'),
       if (resumen.pendientes.isNotEmpty)
-        '${resumen.pendientes.length} pendientes',
+        _plural(resumen.pendientes.length, 'pendiente', 'pendientes'),
       if (resumen.programadas.isNotEmpty)
-        '${resumen.programadas.length} programadas',
-      if (resumen.olvidadas.isNotEmpty) '${resumen.olvidadas.length} olvidadas',
-      if (resumen.eventos.isNotEmpty) '${resumen.eventos.length} eventos',
+        _plural(resumen.programadas.length, 'programada', 'programadas'),
+      if (resumen.hitos.isNotEmpty) _textoHitos(resumen.hitos),
+      if (resumen.eventos.isNotEmpty)
+        _plural(resumen.eventos.length, 'evento', 'eventos'),
       if (resumen.recordatorios.isNotEmpty)
-        '${resumen.recordatorios.length} recordatorios',
+        _plural(resumen.recordatorios.length, 'recordatorio', 'recordatorios'),
     ];
 
     return Column(
@@ -427,6 +547,16 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         ],
       ],
     );
+  }
+
+  String _textoHitos(List<ItemResumen> hitos) {
+    final ingresos = hitos.where((item) => item.categoria == 'ingreso').length;
+    final decesos = hitos.where((item) => item.categoria == 'deceso').length;
+    final partes = <String>[
+      if (ingresos > 0) _plural(ingresos, 'ingreso', 'ingresos'),
+      if (decesos > 0) _plural(decesos, 'fallecimiento', 'fallecimientos'),
+    ];
+    return partes.join(' · ');
   }
 
   Widget _chipConteo(String texto) {
@@ -515,47 +645,53 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
             },
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  _avatar(item.perro),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.titulo,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.titleMedium,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final angosta = constraints.maxWidth < 400;
+                  final texto = angosta && item.hora != null ? '${item.hora} · $subtitulo' : subtitulo;
+                  return Row(
+                    children: [
+                      _avatar(item.perro),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.titulo,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: textTheme.titleMedium,
+                            ),
+                            Text(
+                              texto,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: AppColors.textoSecundario,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          subtitulo,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textoSecundario,
-                          ),
-                        ),
+                      ),
+                      if (!angosta && item.hora != null) ...[
+                        const SizedBox(width: 8),
+                        Text(item.hora!, style: textTheme.labelMedium),
                       ],
-                    ),
-                  ),
-                  if (item.hora != null) ...[
-                    const SizedBox(width: 8),
-                    Text(item.hora!, style: textTheme.labelMedium),
-                  ],
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 28,
-                    height: 28,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: visual.tinte,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(visual.icono, size: 16, color: visual.color),
-                  ),
-                ],
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: visual.tinte,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(visual.icono, size: 16, color: visual.color),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -565,6 +701,20 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   }
 
   _VisualCategoria _visualCategoria(ItemResumen item) {
+    if (item.categoria == 'ingreso') {
+      return _VisualCategoria(
+        icono: Icons.login_rounded,
+        color: AppColors.terracota,
+        tinte: AppColors.terracota.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'deceso') {
+      return _VisualCategoria(
+        icono: Icons.local_florist,
+        color: AppColors.textoSecundario,
+        tinte: AppColors.textoSecundario.withValues(alpha: 0.12),
+      );
+    }
     if (item.esRecordatorio) {
       final tipo = RecordatorioTipos.de(item.categoria);
       return _VisualCategoria(

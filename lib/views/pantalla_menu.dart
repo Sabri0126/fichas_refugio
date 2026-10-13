@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
+import '../controllers/perro_controller.dart';
+import '../models/perro_model.dart';
 import '../services/mensajeria_service.dart';
 import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
@@ -23,6 +25,7 @@ class PantallaMenu extends StatefulWidget {
 class _PantallaMenuState extends State<PantallaMenu> {
   final HistorialNotificacionesController _historial =
       HistorialNotificacionesController();
+  final PerroController _perros = PerroController();
   StreamSubscription<int>? _badge;
   int _noLeidas = 0;
 
@@ -145,7 +148,26 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                         color: Colors.white,
                                       ),
                                 ),
-                                const SizedBox(height: 60),
+                                const SizedBox(height: 12),
+                                StreamBuilder<List<PerroModel>>(
+                                  stream: _perros.observarPerros(),
+                                  builder: (context, snapshot) {
+                                    final datos = snapshot.data;
+                                    if (datos == null) return const SizedBox.shrink();
+                                    final total = datos.where((perro) => perro.estado == 'activo').length;
+                                    final texto = total == 1
+                                        ? '1 perrito a nuestro cuidado'
+                                        : '$total perritos a nuestro cuidado';
+                                    return Text(
+                                      texto,
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Colors.white.withValues(alpha: 0.75),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 48),
                                 _MenuButton(
                                   label: 'Perritos del refugio',
                                   icon: Icons.favorite,

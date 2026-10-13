@@ -32,16 +32,16 @@ class ResumenDia {
   final List<ItemResumen> dadas;
   final List<ItemResumen> pendientes;
   final List<ItemResumen> programadas;
-  final List<ItemResumen> olvidadas;
   final List<ItemResumen> eventos;
+  final List<ItemResumen> hitos;
   final List<ItemResumen> recordatorios;
 
   const ResumenDia({
     this.dadas = const [],
     this.pendientes = const [],
     this.programadas = const [],
-    this.olvidadas = const [],
     this.eventos = const [],
+    this.hitos = const [],
     this.recordatorios = const [],
   });
 
@@ -49,8 +49,8 @@ class ResumenDia {
       dadas.length +
       pendientes.length +
       programadas.length +
-      olvidadas.length +
       eventos.length +
+      hitos.length +
       recordatorios.length;
 }
 
@@ -70,21 +70,22 @@ abstract final class CalendarioGeneralController {
     final dadas = <ItemResumen>[];
     final pendientes = <ItemResumen>[];
     final programadas = <ItemResumen>[];
-    final olvidadas = <ItemResumen>[];
     final eventos = <ItemResumen>[];
+    final hitos = <ItemResumen>[];
     final recordatorios = <ItemResumen>[];
 
     for (final perro in perros) {
-      if (perro.estado != 'activo') continue;
       if (idPerro != null && perro.id != idPerro) continue;
+      _agregarHitos(perro, diaFecha, hitos);
+      if (perro.estado != 'activo') continue;
 
       for (final tratamiento in perro.tratamientos) {
         if (tratamiento.categoria == 'diario') {
           final dada = tratamiento.registroDosis.contains(iso);
           if (dada) dadas.add(_itemTratamiento(perro, tratamiento));
           // Limitación conocida: de un tratamiento pausado solo se muestran
-          // las dosis dadas. Si `activo` es false, no entra en pendientes,
-          // programadas ni olvidadas aunque el día le corresponda.
+          // las dosis dadas. Si `activo` es false, no entra en pendientes
+          // ni programadas aunque el día le corresponda.
           if (!tratamiento.activo || !_corresponde(tratamiento, diaFecha)) {
             continue;
           }
@@ -92,8 +93,6 @@ abstract final class CalendarioGeneralController {
             if (!dada) pendientes.add(_itemTratamiento(perro, tratamiento));
           } else if (diaFecha.isAfter(hoyFecha)) {
             programadas.add(_itemTratamiento(perro, tratamiento));
-          } else if (!dada) {
-            olvidadas.add(_itemTratamiento(perro, tratamiento));
           }
         } else if (tratamiento.registroDosis.contains(iso)) {
           eventos.add(_itemTratamiento(perro, tratamiento));
@@ -110,8 +109,8 @@ abstract final class CalendarioGeneralController {
       dadas,
       pendientes,
       programadas,
-      olvidadas,
       eventos,
+      hitos,
       recordatorios,
     ]) {
       lista.sort(_compararItems);
@@ -121,14 +120,35 @@ abstract final class CalendarioGeneralController {
       dadas: dadas,
       pendientes: pendientes,
       programadas: programadas,
-      olvidadas: olvidadas,
       eventos: eventos,
+      hitos: hitos,
       recordatorios: recordatorios,
     );
   }
 
+  static void _agregarHitos(PerroModel perro, DateTime dia, List<ItemResumen> hitos) {
+    final ingreso = perro.fechaIngreso;
+    if (ingreso != null && _soloFecha(ingreso) == dia) {
+      hitos.add(ItemResumen(
+        perro: perro,
+        titulo: 'Ingreso de ${perro.nombre}',
+        detalle: '',
+        categoria: 'ingreso',
+      ));
+    }
+    final deceso = perro.fechaFallecimiento;
+    if (deceso != null && _soloFecha(deceso) == dia) {
+      hitos.add(ItemResumen(
+        perro: perro,
+        titulo: 'Falleció ${perro.nombre}',
+        detalle: '',
+        categoria: 'deceso',
+      ));
+    }
+  }
+
   /// Claves de puntos del día, sin repetir y como máximo 5.
-  /// Prioridad: olvidada, pendiente, diario (dadas), categorías de eventos, recordatorio.
+  /// Prioridad: pendiente, diario (dadas), categorías de eventos, ingreso, deceso, recordatorio.
   static List<String> marcadoresDelDia(
     List<PerroModel> perros,
     DateTime dia, {
@@ -143,7 +163,6 @@ abstract final class CalendarioGeneralController {
       claves.add(clave);
     }
 
-    if (resumen.olvidadas.isNotEmpty) agregar('olvidada');
     if (resumen.pendientes.isNotEmpty) agregar('pendiente');
     if (resumen.dadas.isNotEmpty) agregar('diario');
     const ordenEventos = ['unico', 'higiene', 'evento', 'veterinaria'];
@@ -151,13 +170,16 @@ abstract final class CalendarioGeneralController {
     for (final categoria in ordenEventos) {
       if (presentes.contains(categoria)) agregar(categoria);
     }
+    if (resumen.hitos.any((item) => item.categoria == 'ingreso')) agregar('ingreso');
+    if (resumen.hitos.any((item) => item.categoria == 'deceso')) agregar('deceso');
     if (resumen.recordatorios.isNotEmpty) agregar('recordatorio');
     return claves;
   }
 
   static Color colorMarcador(String clave) {
     return switch (clave) {
-      'olvidada' => AppColors.dosisOlvidada,
+      'ingreso' => AppColors.terracota,
+      'deceso' => AppColors.textoSecundario,
       'pendiente' => AppColors.pendiente,
       'diario' => CategoryColors.diario,
       'recordatorio' => AppColors.navy,

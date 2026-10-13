@@ -275,7 +275,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  Future<void> _editarFotoAGaleria(Map<String, dynamic> foto, int index) async {
+  Future<void> _editarFotoAGaleria(Map<String, dynamic> foto, int index, {bool estudios = false}) async {
     final textoController = TextEditingController(text: foto['texto']?.toString() ?? '');
 
     final textoDescriptivo = await showDialog<String>(
@@ -284,7 +284,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         title: const Text('Editar descripción'),
         content: TextField(
           controller: textoController,
-          decoration: const InputDecoration(hintText: 'Descripción de la foto'),
+          decoration: InputDecoration(
+            hintText: estudios ? 'Radiografía, herida, resultado...' : 'Descripción de la foto',
+          ),
           maxLines: 3,
         ),
         actions: [
@@ -300,7 +302,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      await _perroController.editarFotoDeGaleria(widget.idDocumento, index, textoDescriptivo);
+      if (estudios) {
+        await _perroController.editarFotoDeEstudios(widget.idDocumento, index, textoDescriptivo);
+      } else {
+        await _perroController.editarFotoDeGaleria(widget.idDocumento, index, textoDescriptivo);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar la foto')));
@@ -312,12 +318,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  Future<void> _eliminarFotoAGaleria(Map<String, dynamic> foto, int index) async {
+  Future<void> _eliminarFotoAGaleria(Map<String, dynamic> foto, int index, {bool estudios = false}) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar foto'),
-        content: const Text('¿Querés eliminar esta foto de la galería?'),
+        title: Text(estudios ? 'Eliminar estudio' : 'Eliminar foto'),
+        content: Text(
+          estudios ? '¿Querés eliminar este estudio?' : '¿Querés eliminar esta foto de la galería?',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
@@ -331,7 +339,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      final urlFoto = await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
+      final urlFoto = estudios
+          ? await _perroController.eliminarFotoDeEstudios(widget.idDocumento, index)
+          : await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
 
       if (urlFoto != null) {
         try {
@@ -350,7 +360,22 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  Future<void> _agregarFotoAGaleria() async {
+  Future<void> _moverFoto({required String desde, required int indice}) async {
+    setState(() => _subiendoFoto = true);
+    try {
+      await _perroController.moverFoto(widget.idDocumento, desde: desde, indice: indice);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo mover la foto')));
+      }
+    } finally {
+      if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
+  Future<void> _agregarFotoAGaleria() => _agregarFoto(estudios: false);
+
+  Future<void> _agregarFoto({required bool estudios}) async {
     final XFile? imagen = await _picker.pickImage(source: ImageSource.gallery);
 
     if (imagen == null || !mounted) return;
@@ -394,14 +419,19 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       final textoDescriptivo = await showDialog<String>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Agregar descripción (opcional)'),
+          title: Text(estudios ? 'Agregar estudio' : 'Agregar descripción (opcional)'),
           content: TextField(
             controller: textoController,
-            decoration: const InputDecoration(hintText: "Ej: Jugando en el patio..."),
+            decoration: InputDecoration(
+              hintText: estudios ? 'Radiografía, herida, resultado...' : 'Ej: Jugando en el patio...',
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, null), child: const Text('Cancelar')),
-            ElevatedButton(onPressed: () => Navigator.pop(dialogContext, textoController.text), child: const Text('Subir Foto')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, textoController.text),
+              child: Text(estudios ? 'Subir estudio' : 'Subir Foto'),
+            ),
           ],
         ),
       );
@@ -417,7 +447,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           await refStorage.putFile(archivoParaSubir);
           final urlDescarga = await refStorage.getDownloadURL();
 
-          await _perroController.agregarFotoAGaleria(widget.idDocumento, urlDescarga, textoDescriptivo);
+          if (estudios) {
+            await _perroController.agregarFotoAEstudios(widget.idDocumento, urlDescarga, textoDescriptivo);
+          } else {
+            await _perroController.agregarFotoAGaleria(widget.idDocumento, urlDescarga, textoDescriptivo);
+          }
         } catch (e) {
           if (mounted && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al subir la foto')));
@@ -1357,8 +1391,140 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           tratamientos,
         ],
         if (!esInvitado) ..._proximosRecordatorios(perro),
+        const SizedBox(height: 12),
+        _buildEstudios(perro, esInvitado),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildEstudios(PerroModel perro, bool esInvitado) {
+    final fotos = perro.galeriaEstudios;
+    final estiloVacio = Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
+    return _tarjetaSeccion(
+      titulo: 'Estudios y registros',
+      icono: Icons.grid_view_rounded,
+      children: [
+        if (fotos.isEmpty)
+          Text('Todavía no hay estudios.', style: estiloVacio)
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var index = 0; index < fotos.length; index++)
+                _miniaturaEstudio(fotos[index], index, esInvitado),
+            ],
+          ),
+        if (!esInvitado) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: const Text('Agregar estudio'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _miniaturaEstudio(Map<String, dynamic> foto, int index, bool esInvitado) {
+    final url = foto['url']?.toString() ?? '';
+    final texto = foto['texto']?.toString() ?? '';
+    return SizedBox(
+      width: 88,
+      height: 88,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Material(
+              color: AppColors.rellenoInput,
+              clipBehavior: Clip.antiAlias,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                onTap: url.isEmpty ? null : () => _abrirFotoPantallaCompleta(url),
+                child: url.isEmpty
+                    ? const Icon(Icons.broken_image_outlined, color: AppColors.textoSecundario)
+                    : Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: AppColors.textoSecundario),
+                      ),
+              ),
+            ),
+          ),
+          if (texto.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Text(
+                      texto,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (!esInvitado)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: PopupMenuButton<String>(
+                tooltip: 'Opciones del estudio',
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                icon: const Icon(Icons.more_horiz, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.45),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(28, 28),
+                  fixedSize: const Size(28, 28),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onSelected: (accion) {
+                  switch (accion) {
+                    case 'mover':
+                      _moverFoto(desde: 'galeria_estudios', indice: index);
+                    case 'editar':
+                      _editarFotoAGaleria(foto, index, estudios: true);
+                    case 'borrar':
+                      _eliminarFotoAGaleria(foto, index, estudios: true);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'mover', child: Text('Mover a fotos')),
+                  PopupMenuItem(
+                    value: 'editar',
+                    child: Text(texto.isEmpty ? 'Agregar descripción' : 'Editar descripción'),
+                  ),
+                  const PopupMenuItem(value: 'borrar', child: Text('Eliminar')),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rotuloFotos() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
     );
   }
 
@@ -1526,6 +1692,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                           ),
                           icon: const Icon(Icons.notes_rounded, size: 20),
                           onPressed: () => _editarFotoAGaleria(foto, index),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          tooltip: 'Mover a estudios',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black.withValues(alpha: 0.5),
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.drive_file_move_outlined, size: 20),
+                          onPressed: () => _moverFoto(desde: 'galeria', indice: index),
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
@@ -1709,35 +1885,48 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                           ),
                         ),
                       ),
-                      Expanded(flex: 2, child: galeriaWidget),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: _rotuloFotos(),
+                            ),
+                            Expanded(child: galeriaWidget),
+                          ],
+                        ),
+                      ),
                     ],
                   );
                 }
-                // --- SECCIÓN: Panel de información (layout angosto, apilado bajo la galería) ---
-                final galeriaVacia = galeria.isEmpty && !_modoReordenar;
-                return Column(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
-                      height: galeriaVacia ? 200 : 300,
-                      decoration: const BoxDecoration(
-                        color: AppColors.superficie,
-                        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-                        boxShadow: [
-                          BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
-                        ],
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _rotuloFotos(),
+                      SizedBox(
+                        height: 220,
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            color: AppColors.superficie,
+                            borderRadius: BorderRadius.all(Radius.circular(24)),
+                            boxShadow: [
+                              BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.all(Radius.circular(24)),
+                            child: galeriaWidget,
+                          ),
+                        ),
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: galeriaWidget,
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-                        child: _buildInfoContenido(perro, esInvitado),
-                      ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+                      _buildInfoContenido(perro, esInvitado),
+                    ],
+                  ),
                 );
               },
             ),

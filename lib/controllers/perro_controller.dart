@@ -274,14 +274,17 @@ class PerroController {
     if (perro.notaEgreso == null) datosPerro['nota_egreso'] = FieldValue.delete();
     if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
 
-    // La galería se gestiona exclusivamente desde sus propios métodos
-    // (agregarFotoAGaleria, editarFotoDeGaleria, etc.), no desde este
+    // La galería y los estudios se gestionan desde sus propios métodos
+    // (agregarFotoAGaleria, agregarFotoAEstudios, etc.), no desde este
     // formulario, así que se inyecta el estado previo del documento para no
-    // pisarla con el valor por defecto ([]) que trae `perro`.
+    // pisarlos con el valor por defecto ([]) que trae `perro`.
     if (perro.id.isNotEmpty) {
       final snapshotActual = await docRef.get();
-      final galeriaPrevia = snapshotActual.data()?['galeria'];
+      final datosActuales = snapshotActual.data();
+      final galeriaPrevia = datosActuales?['galeria'];
+      final estudiosPrevios = datosActuales?['galeria_estudios'];
       datosPerro['galeria'] = galeriaPrevia is List ? galeriaPrevia : <Map<String, dynamic>>[];
+      datosPerro['galeria_estudios'] = estudiosPrevios is List ? estudiosPrevios : <Map<String, dynamic>>[];
     }
 
     final batch = FirebaseFirestore.instance.batch();
@@ -409,13 +412,15 @@ class PerroController {
       return;
     }
 
-    final galeria = List<dynamic>.from(data['galeria'] ?? []);
-    final indice = galeria.indexWhere((foto) => (foto is Map ? foto['url']?.toString() : foto?.toString()) == urlAnterior);
-    if (indice != -1) {
-      final item = Map<String, dynamic>.from(galeria[indice] as Map);
+    for (final campo in ['galeria', 'galeria_estudios']) {
+      final fotos = List<dynamic>.from(data[campo] ?? []);
+      final indice = fotos.indexWhere((foto) => (foto is Map ? foto['url']?.toString() : foto?.toString()) == urlAnterior);
+      if (indice == -1) continue;
+      final item = Map<String, dynamic>.from(fotos[indice] as Map);
       item['url'] = urlNueva;
-      galeria[indice] = item;
-      await _perrosRef.doc(id).update({'galeria': galeria});
+      fotos[indice] = item;
+      await _perrosRef.doc(id).update({campo: fotos});
+      return;
     }
   }
 
@@ -426,8 +431,17 @@ class PerroController {
   /// @param texto descripción opcional de la foto.
   /// @return un `Future` que se completa cuando se guardó el cambio.
   Future<void> agregarFotoAGaleria(String id, String url, String texto) {
+    return _agregarFoto(id, 'galeria', url, texto);
+  }
+
+  /// Agrega una foto a `galeria_estudios` sin copiar el archivo.
+  Future<void> agregarFotoAEstudios(String id, String url, String texto) {
+    return _agregarFoto(id, 'galeria_estudios', url, texto);
+  }
+
+  Future<void> _agregarFoto(String id, String campo, String url, String texto) {
     return _perrosRef.doc(id).update({
-      'galeria': FieldValue.arrayUnion([
+      campo: FieldValue.arrayUnion([
         {'url': url, 'texto': texto}
       ])
     });
@@ -439,18 +453,27 @@ class PerroController {
   /// @param indice posición de la foto dentro de la lista `galeria`.
   /// @param nuevoTexto nueva descripción de la foto.
   /// @return un `Future` que se completa cuando se guardó el cambio.
-  Future<void> editarFotoDeGaleria(String id, int indice, String nuevoTexto) async {
+  Future<void> editarFotoDeGaleria(String id, int indice, String nuevoTexto) {
+    return editarTextoDeFoto(id, 'galeria', indice, nuevoTexto);
+  }
+
+  /// Edita el texto de una foto de estudios según su posición.
+  Future<void> editarFotoDeEstudios(String id, int indice, String nuevoTexto) {
+    return editarTextoDeFoto(id, 'galeria_estudios', indice, nuevoTexto);
+  }
+
+  Future<void> editarTextoDeFoto(String id, String campo, int indice, String nuevoTexto) async {
     final snapshot = await _perrosRef.doc(id).get();
     final data = snapshot.data();
     if (data == null) return;
 
-    final galeria = List<dynamic>.from(data['galeria'] ?? []);
-    if (indice < 0 || indice >= galeria.length) return;
+    final fotos = List<dynamic>.from(data[campo] ?? []);
+    if (indice < 0 || indice >= fotos.length) return;
 
-    final urlActual = (galeria[indice] is Map) ? (galeria[indice] as Map)['url'] : null;
-    galeria[indice] = {'url': urlActual, 'texto': nuevoTexto};
+    final urlActual = (fotos[indice] is Map) ? (fotos[indice] as Map)['url'] : null;
+    fotos[indice] = {'url': urlActual, 'texto': nuevoTexto};
 
-    await _perrosRef.doc(id).update({'galeria': galeria});
+    await _perrosRef.doc(id).update({campo: fotos});
   }
 
   /// Elimina una foto de la galería según su posición y devuelve su URL para
@@ -460,21 +483,48 @@ class PerroController {
   /// @param indice posición de la foto dentro de la lista `galeria`.
   /// @return la URL de la foto eliminada, o `null` si no tenía URL o el
   /// índice no existía.
-  Future<String?> eliminarFotoDeGaleria(String id, int indice) async {
+  Future<String?> eliminarFotoDeGaleria(String id, int indice) {
+    return eliminarFoto(id, 'galeria', indice);
+  }
+
+  /// Quita una foto de estudios y devuelve su URL para borrar el archivo.
+  Future<String?> eliminarFotoDeEstudios(String id, int indice) {
+    return eliminarFoto(id, 'galeria_estudios', indice);
+  }
+
+  Future<String?> eliminarFoto(String id, String campo, int indice) async {
     final snapshot = await _perrosRef.doc(id).get();
     final data = snapshot.data();
     if (data == null) return null;
 
-    final galeria = List<dynamic>.from(data['galeria'] ?? []);
-    if (indice < 0 || indice >= galeria.length) return null;
+    final fotos = List<dynamic>.from(data[campo] ?? []);
+    if (indice < 0 || indice >= fotos.length) return null;
 
-    final fotoAEliminar = galeria[indice];
-    galeria.removeAt(indice);
+    final fotoAEliminar = fotos[indice];
+    fotos.removeAt(indice);
 
-    await _perrosRef.doc(id).update({'galeria': galeria});
+    await _perrosRef.doc(id).update({campo: fotos});
 
     final urlFoto = (fotoAEliminar is Map ? fotoAEliminar['url'] : null)?.toString();
     return (urlFoto != null && urlFoto.isNotEmpty) ? urlFoto : null;
+  }
+
+  /// Pasa una foto de [desde] a la otra lista en una sola escritura.
+  /// [desde] es `galeria` o `galeria_estudios`. No toca Storage.
+  Future<void> moverFoto(String id, {required String desde, required int indice}) async {
+    final destino = desde == 'galeria' ? 'galeria_estudios' : 'galeria';
+    final snapshot = await _perrosRef.doc(id).get();
+    final data = snapshot.data();
+    if (data == null) return;
+
+    final origen = List<dynamic>.from(data[desde] ?? []);
+    if (indice < 0 || indice >= origen.length) return;
+
+    final foto = origen.removeAt(indice);
+    final llegada = List<dynamic>.from(data[destino] ?? []);
+    llegada.add(foto);
+
+    await _perrosRef.doc(id).update({desde: origen, destino: llegada});
   }
 
   /// Guarda el nuevo orden de las fotos tras un reordenamiento manual,

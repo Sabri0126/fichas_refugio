@@ -58,6 +58,8 @@ PerroModel perro({
   String id = 'p1',
   String nombre = 'Luna',
   String estado = 'activo',
+  DateTime? fechaIngreso,
+  DateTime? fechaFallecimiento,
   List<TratamientoModel> tratamientos = const [],
   List<RecordatorioModel> recordatorios = const [],
 }) {
@@ -65,6 +67,8 @@ PerroModel perro({
     id: id,
     nombre: nombre,
     estado: estado,
+    fechaIngreso: fechaIngreso,
+    fechaFallecimiento: fechaFallecimiento,
     tratamientos: tratamientos,
     recordatorios: recordatorios,
   );
@@ -145,12 +149,11 @@ void main() {
 
       expect(dia.pendientes.map((item) => item.titulo), ['Último', 'En curso']);
       expect(dia.dadas, isEmpty);
-      expect(dia.olvidadas, isEmpty);
       expect(dia.programadas, isEmpty);
     },
   );
 
-  test('ayer sin marcar es olvidada y ayer marcada es dada', () {
+  test('ayer sin marcar no aparece y ayer marcada es dada', () {
     final lista = [
       perro(
         tratamientos: [
@@ -167,9 +170,10 @@ void main() {
 
     final dia = resumen(lista, ayer);
 
-    expect(dia.olvidadas.map((item) => item.titulo), ['Sin marcar']);
     expect(dia.dadas.map((item) => item.titulo), ['Marcada']);
     expect(dia.pendientes, isEmpty);
+    expect(dia.total, 1);
+    expect(marcadores(lista, ayer), ['diario']);
   });
 
   test('mañana dentro del rango queda programada', () {
@@ -181,7 +185,6 @@ void main() {
     expect(dia.programadas.single.hora, '21:00');
     expect(dia.dadas, isEmpty);
     expect(dia.pendientes, isEmpty);
-    expect(dia.olvidadas, isEmpty);
   });
 
   test('un diario pausado solo muestra las dosis dadas', () {
@@ -195,15 +198,14 @@ void main() {
     final hoyPausado = resumen(lista, hoy);
 
     expect(diaDada.dadas, hasLength(1));
-    expect(diaDada.olvidadas, isEmpty);
-    expect(diaSinMarca.olvidadas, isEmpty);
     expect(diaSinMarca.dadas, isEmpty);
+    expect(diaSinMarca.total, 0);
     expect(hoyPausado.pendientes, isEmpty);
     expect(hoyPausado.dadas, isEmpty);
   });
 
   test(
-    'un diario fuera de rango no entra en pendientes, olvidadas ni programadas',
+    'un diario fuera de rango no entra en pendientes ni programadas',
     () {
       final tratamiento = diario(inicio: DateTime(2026, 6, 10), dias: 5);
       final lista = [
@@ -412,19 +414,24 @@ void main() {
     ];
 
     expect(marcadores(lista, ayer), [
-      'olvidada',
       'diario',
       'unico',
       'higiene',
       'evento',
+      'veterinaria',
     ]);
+    expect(marcadores(lista, ayer), isNot(contains('olvidada')));
     expect(marcadores(lista, hoy), ['pendiente']);
   });
 
   test('los colores de marcador siguen la paleta pedida', () {
     expect(
-      CalendarioGeneralController.colorMarcador('olvidada'),
-      AppColors.dosisOlvidada,
+      CalendarioGeneralController.colorMarcador('ingreso'),
+      AppColors.terracota,
+    );
+    expect(
+      CalendarioGeneralController.colorMarcador('deceso'),
+      AppColors.textoSecundario,
     );
     expect(
       CalendarioGeneralController.colorMarcador('pendiente'),
@@ -462,10 +469,38 @@ void main() {
     expect(dia.dadas, isEmpty);
     expect(dia.pendientes, isEmpty);
     expect(dia.programadas, isEmpty);
-    expect(dia.olvidadas, isEmpty);
+    expect(dia.hitos, isEmpty);
     expect(dia.eventos, isEmpty);
     expect(dia.recordatorios, isEmpty);
     expect(dia.total, 0);
     expect(marcadores([perro()], DateTime(2026, 1, 2)), isEmpty);
+  });
+
+  test('el ingreso y el deceso aparecen aunque el perro no esté activo', () {
+    final pampa = perro(
+      id: 'pampa',
+      nombre: 'Pampa',
+      fechaIngreso: DateTime(2026, 6, 15, 18, 30),
+    );
+    final zanca = perro(
+      id: 'zanca',
+      nombre: 'Zanca',
+      estado: 'inactivo',
+      fechaFallecimiento: ayer,
+      tratamientos: [diario(medicacion: 'No debe verse')],
+    );
+
+    final diaIngreso = resumen([pampa, zanca], hoy);
+    expect(diaIngreso.hitos.map((item) => item.titulo), ['Ingreso de Pampa']);
+    expect(marcadores([pampa], hoy), ['ingreso']);
+
+    final diaDeceso = resumen([pampa, zanca], ayer);
+    expect(diaDeceso.hitos.map((item) => item.titulo), ['Falleció Zanca']);
+    expect(diaDeceso.dadas, isEmpty);
+    expect(diaDeceso.pendientes, isEmpty);
+    expect(marcadores([zanca], ayer), ['deceso']);
+
+    final filtrado = resumen([pampa, zanca], hoy, idPerro: 'zanca');
+    expect(filtrado.hitos, isEmpty);
   });
 }

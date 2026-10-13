@@ -27,6 +27,17 @@ DateTime? _fechaDesdeValor(dynamic valor) {
   return null;
 }
 
+/// Fotos opcionales (`galeria_estudios`). Si el campo no existe o no es una
+/// lista, queda vacía: los documentos viejos no lo tienen.
+List<Map<String, dynamic>> _fotosOpcionales(dynamic valor) {
+  if (valor is! List) return const [];
+  return valor
+      .whereType<Map>()
+      .map((foto) => Map<String, dynamic>.from(foto))
+      .where((foto) => foto.isNotEmpty)
+      .toList();
+}
+
 /// Representa un perro registrado en el refugio, tal como se almacena en la
 /// colección `perros` de Firestore.
 class PerroModel {
@@ -106,6 +117,10 @@ class PerroModel {
   /// claves `url` (ubicación de la imagen) y `texto`/`descripcion` (pie de foto).
   final List<Map<String, dynamic>> galeria;
 
+  /// Fotos de estudios y registros médicos. Misma forma que [galeria].
+  /// La clave Firestore es `galeria_estudios`.
+  final List<Map<String, dynamic>> galeriaEstudios;
+
   /// Tratamientos médicos asociados a este perro.
   final List<TratamientoModel> tratamientos;
 
@@ -136,6 +151,7 @@ class PerroModel {
     this.fotoPerfil,
     this.parientes = const [],
     this.galeria = const [],
+    this.galeriaEstudios = const [],
     this.tratamientos = const [],
     this.recordatorios = const [],
   });
@@ -224,6 +240,7 @@ class PerroModel {
       fotoPerfil: data['foto_perfil']?.toString(),
       parientes: parientes,
       galeria: galeria,
+      galeriaEstudios: _fotosOpcionales(data['galeria_estudios']),
       tratamientos: tratamientos,
       recordatorios: recordatoriosDesdeValor(data['recordatorios']),
     );
@@ -255,6 +272,7 @@ class PerroModel {
       'foto_perfil': fotoPerfil,
       'parientes': parientes,
       'galeria': galeria,
+      'galeria_estudios': galeriaEstudios,
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
       'recordatorios': recordatorios.map((r) => r.toMap()).toList(),
     };
@@ -267,6 +285,7 @@ class PerroModel {
     List<TratamientoModel>? tratamientos,
     List<Map<String, dynamic>>? parientes,
     List<Map<String, dynamic>>? galeria,
+    List<Map<String, dynamic>>? galeriaEstudios,
     String? fotoPerfil,
   }) {
     return PerroModel(
@@ -292,6 +311,7 @@ class PerroModel {
       fotoPerfil: fotoPerfil ?? this.fotoPerfil,
       parientes: parientes ?? this.parientes,
       galeria: galeria ?? this.galeria,
+      galeriaEstudios: galeriaEstudios ?? this.galeriaEstudios,
       tratamientos: tratamientos ?? this.tratamientos,
       recordatorios: recordatorios,
     );
