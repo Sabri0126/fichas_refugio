@@ -550,12 +550,68 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 Icon(icono, size: 22, color: AppColors.navy),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(titulo, textScaler: _escala, style: Theme.of(context).textTheme.titleLarge),
+                  child: Text(
+                    titulo,
+                    textScaler: _escala,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _encabezadoGrupo(String titulo, IconData icono) {
+    return Semantics(
+      header: true,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.navy.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icono, size: 20, color: AppColors.navy),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    textScaler: _escala,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 3,
+              width: 40,
+              decoration: BoxDecoration(
+                color: AppColors.terracota,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
           ],
         ),
       ),
@@ -843,14 +899,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return perro.copyWith(tratamientos: actualizados);
   }
 
-  Widget _buildSeccionSalud(PerroModel perro, bool esInvitado) {
-    final tratamientos = perro.tratamientos;
-    final fechaHoy = _fechaHoyISO();
-    // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
-    final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
-    final tieneHistorial = tratamientos.isNotEmpty;
-    final textTheme = Theme.of(context).textTheme;
-
+  Widget _buildFichaMedica(PerroModel perro) {
     return _tarjetaSeccion(
       titulo: 'Ficha médica',
       icono: Icons.favorite_outline,
@@ -859,47 +908,58 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.',
           _escalaTexto,
         ),
-        if (tieneHistorial) ...[
-          const SizedBox(height: 24),
-          Text('Tratamientos actuales', textScaler: _escala, style: textTheme.titleLarge),
-          const SizedBox(height: 12),
-          if (tratamientosActivos.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                'No hay tratamientos diarios actuales.',
-                textScaler: _escala,
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
-              ),
+      ],
+    );
+  }
+
+  Widget? _buildTratamientosActuales(PerroModel perro, bool esInvitado) {
+    final tratamientos = perro.tratamientos;
+    if (tratamientos.isEmpty) return null;
+    final fechaHoy = _fechaHoyISO();
+    // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
+    final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
+    final textTheme = Theme.of(context).textTheme;
+
+    return _tarjetaSeccion(
+      titulo: 'Tratamientos actuales',
+      icono: Icons.medication_outlined,
+      children: [
+        if (tratamientosActivos.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'No hay tratamientos diarios actuales.',
+              textScaler: _escala,
+              style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
             ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            clipBehavior: Clip.none,
-            child: Column(
-              children: [
-                for (var n = 0; n < tratamientosActivos.length; n++)
-                  EntradaEscalonada(
-                    indice: n,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildTarjetaTratamiento(tratamientosActivos[n], fechaHoy, esInvitado),
-                    ),
+          ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          clipBehavior: Clip.none,
+          child: Column(
+            children: [
+              for (var n = 0; n < tratamientosActivos.length; n++)
+                EntradaEscalonada(
+                  indice: n,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildTarjetaTratamiento(tratamientosActivos[n], fechaHoy, esInvitado),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonalIcon(
-              icon: const Icon(Icons.calendar_month_outlined),
-              label: Text('Ver Historial Médico', textScaler: _escala),
-              onPressed: () => _mostrarHistorialCompleto(tratamientos),
-            ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonalIcon(
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: Text('Ver Historial Médico', textScaler: _escala),
+            onPressed: () => _mostrarHistorialCompleto(tratamientos),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -1200,6 +1260,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
+    final tratamientos = _buildTratamientosActuales(perro, esInvitado);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1243,11 +1304,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           _bannerEgreso(perro),
         ],
         const SizedBox(height: 16),
+        _encabezadoGrupo('Perfil general', Icons.pets_rounded),
         _buildDatosBasicos(perro),
-        if (perro.historialEgresos.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _historialEgresos(perro, esInvitado),
-        ],
         const SizedBox(height: 12),
         _tarjetaSeccion(
           titulo: 'Historia y observaciones',
@@ -1256,9 +1314,6 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
           ],
         ),
-        const SizedBox(height: 12),
-        _buildSeccionSalud(perro, esInvitado),
-        if (!esInvitado) ..._proximosRecordatorios(perro),
         if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 12),
           _tarjetaSeccion(
@@ -1290,6 +1345,18 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ],
           ),
         ],
+        if (perro.historialEgresos.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _historialEgresos(perro, esInvitado),
+        ],
+        const SizedBox(height: 28),
+        _encabezadoGrupo('Información médica', Icons.medical_services_outlined),
+        _buildFichaMedica(perro),
+        if (tratamientos != null) ...[
+          const SizedBox(height: 12),
+          tratamientos,
+        ],
+        if (!esInvitado) ..._proximosRecordatorios(perro),
         const SizedBox(height: 24),
       ],
     );

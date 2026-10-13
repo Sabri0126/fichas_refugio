@@ -7,6 +7,8 @@ import '../controllers/historial_notificaciones_controller.dart';
 import '../services/mensajeria_service.dart';
 import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/category_colors.dart';
+import 'pantalla_calendario_general.dart';
 import 'pantalla_login.dart';
 import 'pantalla_notificaciones.dart';
 import 'pantalla_perros.dart';
@@ -19,7 +21,8 @@ class PantallaMenu extends StatefulWidget {
 }
 
 class _PantallaMenuState extends State<PantallaMenu> {
-  final HistorialNotificacionesController _historial = HistorialNotificacionesController();
+  final HistorialNotificacionesController _historial =
+      HistorialNotificacionesController();
   StreamSubscription<int>? _badge;
   int _noLeidas = 0;
 
@@ -28,7 +31,11 @@ class _PantallaMenuState extends State<PantallaMenu> {
     super.initState();
     final esInvitado = FirebaseAuth.instance.currentUser == null;
     if (!esInvitado) {
-      unawaited(MensajeriaService.instance.registrarDispositivo().catchError((Object _) {}));
+      unawaited(
+        MensajeriaService.instance.registrarDispositivo().catchError(
+          (Object _) {},
+        ),
+      );
       unawaited(NotificacionesService.instance.migrarAlarmasLocales());
       _badge = _historial.observarNoLeidas().listen((cantidad) {
         if (!mounted) return;
@@ -111,7 +118,9 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   builder: (context, constraints) {
                     return SingleChildScrollView(
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
                         child: Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -119,15 +128,22 @@ class _PantallaMenuState extends State<PantallaMenu> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.pets, size: 72, color: Colors.white),
+                                const Icon(
+                                  Icons.pets,
+                                  size: 72,
+                                  color: Colors.white,
+                                ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'Refugio Milagros de Amor',
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                    fontSize: 32,
-                                    color: Colors.white,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(
+                                        fontSize: 32,
+                                        color: Colors.white,
+                                      ),
                                 ),
                                 const SizedBox(height: 60),
                                 _MenuButton(
@@ -136,7 +152,11 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                   color: AppColors.terracota,
                                   onTap: () => Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.activos)),
+                                    MaterialPageRoute(
+                                      builder: (_) => const PantallaPerros(
+                                        seccion: SeccionPerros.activos,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -146,7 +166,11 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                   color: AppColors.navy,
                                   onTap: () => Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.difuntos)),
+                                    MaterialPageRoute(
+                                      builder: (_) => const PantallaPerros(
+                                        seccion: SeccionPerros.difuntos,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -156,7 +180,24 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                   color: AppColors.activoTexto,
                                   onTap: () => Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => const PantallaPerros(seccion: SeccionPerros.egresados)),
+                                    MaterialPageRoute(
+                                      builder: (_) => const PantallaPerros(
+                                        seccion: SeccionPerros.egresados,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                _MenuButton(
+                                  label: 'Calendario general',
+                                  icon: Icons.calendar_month_rounded,
+                                  color: CategoryColors.unicoTexto,
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const PantallaCalendarioGeneral(),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -173,21 +214,29 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   child: IconButton(
                     tooltip: 'Cerrar sesión',
                     onPressed: () async {
-                      final confirmar = await _confirmarCierreSesion(esInvitado);
+                      final confirmar = await _confirmarCierreSesion(
+                        esInvitado,
+                      );
                       if (confirmar != true || !context.mounted) return;
                       if (!esInvitado) {
-                        await MensajeriaService.instance.desregistrarDispositivo();
+                        await MensajeriaService.instance
+                            .desregistrarDispositivo();
                         await FirebaseAuth.instance.signOut();
                       }
                       if (!context.mounted) return;
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (context) => const PantallaLogin()),
+                        MaterialPageRoute(
+                          builder: (context) => const PantallaLogin(),
+                        ),
                         (route) => false,
                       );
                     },
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                    constraints: const BoxConstraints.tightFor(
+                      width: 44,
+                      height: 44,
+                    ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.black.withValues(alpha: 0.4),
                       foregroundColor: Colors.white,
@@ -210,7 +259,10 @@ class _PantallaMenuState extends State<PantallaMenu> {
                         tooltip: 'Notificaciones',
                         onPressed: _abrirNotificaciones,
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 44,
+                          height: 44,
+                        ),
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.black.withValues(alpha: 0.4),
                           foregroundColor: Colors.white,
@@ -257,7 +309,9 @@ class _MenuButton extends StatelessWidget {
           elevation: 0,
           minimumSize: const Size(0, 64),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
         child: Row(
           children: [
@@ -274,7 +328,9 @@ class _MenuButton extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(color: Colors.white),
               ),
             ),
           ],
