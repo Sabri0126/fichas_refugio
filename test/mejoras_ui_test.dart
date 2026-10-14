@@ -322,6 +322,8 @@ void main() {
 
     expect(find.text('Castrada'), findsOneWidget);
     expect(find.text('1 año aprox.'), findsOneWidget);
+    expect(find.text('En el refugio'), findsOneWidget);
+    expect(find.text('Activo'), findsNothing);
     expect(find.text('+3'), findsOneWidget);
     expect(find.textContaining('Llegó en enero'), findsOneWidget);
     expect(find.byKey(TarjetaPerro.citaKey), findsOneWidget);
@@ -348,6 +350,138 @@ void main() {
 
     expect(find.byKey(TarjetaPerro.citaKey), findsNothing);
     expect(find.text('Melchor'), findsOneWidget);
+  });
+
+  test('las líneas de familia invierten la relación y agrupan nombres', () {
+    final hembra = PerroModel(
+      id: 'h',
+      nombre: 'Nika',
+      sexo: 'hembra',
+      parientes: [
+        {'nombre': 'Luna', 'relacion': 'Madre'},
+        {'nombre': 'Toto', 'relacion': 'Hermano/a'},
+        {'nombre': 'Sol', 'relacion': 'Hermano/a'},
+        {'nombre': 'Roco', 'relacion': 'Hermano'},
+        {'nombre': 'Pipo', 'relacion': 'Hijo/a'},
+        {'nombre': '  ', 'relacion': 'Padre'},
+        {'nombre': 'Raro', 'relacion': 'Primo'},
+      ],
+    );
+    expect(
+      TarjetaPerro.lineasFamilia(hembra),
+      ['Hija de Luna', 'Hermana de Toto, Sol y Roco', 'Mamá de Pipo'],
+    );
+
+    final macho = PerroModel(
+      id: 'm',
+      nombre: 'Canelo',
+      sexo: 'macho',
+      parientes: [
+        {'nombre': 'Luna', 'relacion': 'Hija'},
+        {'nombre': 'Nika', 'relacion': 'Madre'},
+        {'nombre': 'Toto', 'relacion': 'Padre'},
+        {'nombre': 'Sol', 'relacion': 'Hermana'},
+      ],
+    );
+    expect(
+      TarjetaPerro.lineasFamilia(macho),
+      ['Papá de Luna', 'Hijo de Nika y Toto', 'Hermano de Sol'],
+    );
+  });
+
+  test('la etiqueta de estado distingue activos, egresados y difuntos', () {
+    String? etiqueta({String estado = 'activo', String? motivo}) {
+      return TarjetaPerro.etiquetaEstado(
+        PerroModel(id: 'p', nombre: 'Canelo', estado: estado, motivoEgreso: motivo),
+      );
+    }
+
+    expect(etiqueta(), isNull);
+    expect(etiqueta(estado: 'egresado', motivo: 'familia'), 'Volvió con su familia');
+    expect(etiqueta(estado: 'egresado', motivo: 'adopcion'), 'Adoptado');
+    expect(etiqueta(estado: 'egresado'), 'Egresado');
+    expect(etiqueta(estado: 'inactivo'), 'En memoria');
+  });
+
+  testWidgets('la tarjeta de un egresado no dice que está en el refugio', (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    final perro = PerroModel(
+      id: 'c',
+      nombre: 'Canelo',
+      sexo: 'macho',
+      estado: 'egresado',
+      motivoEgreso: 'familia',
+      fechaEgreso: DateTime(2026, 10, 1),
+      edad: 10,
+      edadAnioBase: DateTime.now().year,
+      parientes: [
+        {'nombre': 'Luna', 'relacion': 'Hermano/a'},
+        {'nombre': 'Toto', 'relacion': 'Hermano/a'},
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(body: Center(child: TarjetaPerro(perro: perro))),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('En el refugio'), findsNothing);
+    expect(find.text('Volvió con su familia'), findsOneWidget);
+    expect(find.text('Desde el 01/10/2026'), findsOneWidget);
+    expect(find.text('Hermano de Luna y Toto'), findsOneWidget);
+    expect(find.byIcon(Icons.home_rounded), findsOneWidget);
+  });
+
+  testWidgets('la tarjeta de un difunto muestra el recuerdo y las fechas', (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    final perro = PerroModel(
+      id: 'd',
+      nombre: 'Luna',
+      sexo: 'hembra',
+      estado: 'inactivo',
+      fechaIngreso: DateTime(2016, 1, 2),
+      fechaFallecimiento: DateTime(2026, 3, 4),
+      edad: 10,
+      edadAnioBase: DateTime.now().year,
+      parientes: [
+        {'nombre': 'Canelo', 'relacion': 'Hijo'},
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(body: Center(child: TarjetaPerro(perro: perro))),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('En memoria'), findsOneWidget);
+    expect(find.text('En el refugio'), findsNothing);
+    expect(find.text('Ingreso 02/01/2016 – Fallecimiento 04/03/2026'), findsOneWidget);
+    expect(find.text('Mamá de Canelo'), findsOneWidget);
+  });
+
+  test('el pdf incluye familiares y la fecha de fallecimiento', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final bytes = await ExportarFicha.generar(
+      perro: PerroModel(
+        id: 'p3',
+        nombre: 'Canelo',
+        estado: 'inactivo',
+        fechaFallecimiento: DateTime(2026, 3, 2),
+        historia: 'Volvió un tiempo y después partió.',
+        parientes: [
+          {'nombre': 'Luna', 'relacion': 'Hermano/a'},
+          {'nombre': '  ', 'relacion': 'Madre'},
+        ],
+      ),
+      edad: '10 años',
+    );
+    expect(bytes, isNotEmpty);
   });
 
   test('el fragmento de la historia saca viñetas y negritas', () {

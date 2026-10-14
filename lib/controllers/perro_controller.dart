@@ -131,7 +131,7 @@ class PerroController {
   ///
   /// @param motivo `'adopcion'`, `'familia'` o null.
   /// @return `'Adoptado'`, `'Volvió con su familia'` o `''`.
-  String formatearMotivoEgreso(String? motivo) {
+  static String formatearMotivoEgreso(String? motivo) {
     if (motivo == 'adopcion') return 'Adoptado';
     if (motivo == 'familia') return 'Volvió con su familia';
     return '';

@@ -214,7 +214,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   String _lineaEgresoAnterior(EgresoModel egreso) {
-    final motivo = _perroController.formatearMotivoEgreso(egreso.motivo);
+    final motivo = PerroController.formatearMotivoEgreso(egreso.motivo);
     final fecha = _perroController.formatearFecha(egreso.fechaEgreso);
     final base = motivo.isEmpty ? fecha : '$motivo · $fecha';
     if (egreso.fechaRegreso == null) return base;
@@ -1802,6 +1802,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
+                  persist: false,
+                  duration: const Duration(seconds: 5),
                   content: Text('Se eliminó ${_capitalizarPrimera(quitado.medicacion)}'),
                   action: SnackBarAction(
                     label: 'Deshacer',

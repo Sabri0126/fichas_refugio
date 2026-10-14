@@ -128,6 +128,14 @@ class TarjetaPerro extends StatelessWidget {
   static const alto = 450.0;
   static const citaKey = Key('citaHistoria');
 
+  /// Saturación 0.6: la foto de un difunto queda un poco más apagada.
+  static const _saturacionSuave = <double>[
+    0.68504, 0.28608, 0.02888, 0, 0,
+    0.08504, 0.88608, 0.02888, 0, 0,
+    0.08504, 0.28608, 0.62888, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+
   final PerroModel perro;
 
   const TarjetaPerro({super.key, required this.perro});
@@ -139,6 +147,68 @@ class TarjetaPerro extends StatelessWidget {
     final valor = partes.length > 1 ? partes.sublist(1).join(':').trim() : texto;
     if (texto.startsWith('Edad estimada')) return '$valor aprox.';
     return valor;
+  }
+
+  /// Cinta de la foto. Los activos no llevan etiqueta.
+  static String? etiquetaEstado(PerroModel perro) {
+    switch (perro.estado) {
+      case 'egresado':
+        final motivo = PerroController.formatearMotivoEgreso(perro.motivoEgreso);
+        return motivo.isEmpty ? 'Egresado' : motivo;
+      case 'inactivo':
+        return 'En memoria';
+      default:
+        return null;
+    }
+  }
+
+  /// Qué es este perro de cada familiar, agrupado: «Hermana de Luna y Toto».
+  ///
+  /// En [PerroModel.parientes] la relación es la del otro perro hacia este
+  /// (si dice «Madre», ese familiar es la madre). Acá se invierte.
+  static List<String> lineasFamilia(PerroModel perro) {
+    final hembra = perro.sexo == 'hembra';
+    final grupos = <String, List<String>>{};
+    for (final familiar in perro.parientes) {
+      final nombre = (familiar['nombre'] ?? '').toString().trim();
+      if (nombre.isEmpty) continue;
+      final rol = _rolHaciaFamiliar((familiar['relacion'] ?? '').toString(), hembra);
+      if (rol == null) continue;
+      (grupos[rol] ??= <String>[]).add(nombre);
+    }
+    return [
+      for (final entrada in grupos.entries) '${entrada.key} ${_nombres(entrada.value)}',
+    ];
+  }
+
+  static String? _rolHaciaFamiliar(String relacion, bool hembra) {
+    switch (relacion) {
+      case 'Madre':
+      case 'Padre':
+        return hembra ? 'Hija de' : 'Hijo de';
+      case 'Hijo/a':
+      case 'Hijo':
+      case 'Hija':
+        return hembra ? 'Mamá de' : 'Papá de';
+      case 'Hermano/a':
+      case 'Hermano':
+      case 'Hermana':
+        return hembra ? 'Hermana de' : 'Hermano de';
+      default:
+        return null;
+    }
+  }
+
+  static String _nombres(List<String> nombres) {
+    if (nombres.length == 1) return nombres.single;
+    if (nombres.length == 2) return '${nombres[0]} y ${nombres[1]}';
+    return '${nombres.sublist(0, nombres.length - 1).join(', ')} y ${nombres.last}';
+  }
+
+  static String _fecha(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
   }
 
   /// Recorte de la historia, sin viñetas ni énfasis de Markdown.
@@ -172,6 +242,10 @@ class TarjetaPerro extends StatelessWidget {
     final fotos = urlsMiniaturas(perro);
     final visibles = fotos.take(3).toList();
     final resto = fotos.length > 3 ? '+${fotos.length - 2}' : null;
+    final difunto = perro.estado == 'inactivo';
+    final etiqueta = etiquetaEstado(perro);
+    final familia = lineasFamilia(perro);
+    final lugar = _chipLugar();
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
@@ -198,7 +272,10 @@ class TarjetaPerro extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: SizedBox(width: double.infinity, child: _fotoConNombre(nombre)),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: _fotoConNombre(nombre, difunto: difunto, etiqueta: etiqueta),
+                            ),
                           ),
                           const SizedBox(height: 22),
                           Wrap(
@@ -208,9 +285,13 @@ class TarjetaPerro extends StatelessWidget {
                               _chip(hembra ? Icons.female : Icons.male, hembra ? 'Hembra' : 'Macho'),
                               _chip(null, edadVisible(perro)),
                               _chip(null, PerroController.formatearCastracion(perro)),
-                              _chip(null, perro.enCasa ? 'En casa' : 'En el refugio'),
+                              ?lugar,
                             ],
                           ),
+                          if (familia.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _familia(familia),
+                          ],
                           if (historia != null) ...[
                             const SizedBox(height: 10),
                             _cita(historia),
@@ -233,7 +314,10 @@ class TarjetaPerro extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6, child: ColoredBox(color: AppColors.terracota)),
+                  SizedBox(
+                    height: 6,
+                    child: ColoredBox(color: difunto ? AppColors.navy : AppColors.terracota),
+                  ),
                 ],
               ),
             ],
@@ -277,8 +361,59 @@ class TarjetaPerro extends StatelessWidget {
     );
   }
 
-  Widget _fotoConNombre(String nombre) {
+  Widget? _chipLugar() {
+    if (perro.estado == 'egresado') {
+      final fecha = perro.fechaEgreso;
+      if (fecha == null) return null;
+      final icono = perro.motivoEgreso == 'familia' ? Icons.home_rounded : Icons.favorite_rounded;
+      return _chip(icono, 'Desde el ${_fecha(fecha)}');
+    }
+    if (perro.estado == 'inactivo') {
+      final partes = <String>[
+        if (perro.fechaIngreso != null) 'Ingreso ${_fecha(perro.fechaIngreso!)}',
+        if (perro.fechaFallecimiento != null) 'Fallecimiento ${_fecha(perro.fechaFallecimiento!)}',
+      ];
+      if (partes.isEmpty) return null;
+      return _chip(null, partes.join(' – '));
+    }
+    return _chip(null, perro.enCasa ? 'En casa' : 'En el refugio');
+  }
+
+  Widget _familia(List<String> lineas) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(Icons.people_outline, size: 14, color: AppColors.navy),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            lineas.join('\n'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              height: 1.3,
+              color: AppColors.texto,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fotoConNombre(String nombre, {required bool difunto, required String? etiqueta}) {
     final url = perro.fotoPerfil;
+    final foto = difunto
+        ? ColorFiltered(
+            colorFilter: const ColorFilter.matrix(_saturacionSuave),
+            child: _foto(url, 72),
+          )
+        : _foto(url, 72);
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.bottomCenter,
@@ -298,7 +433,34 @@ class TarjetaPerro extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              child: _foto(url, 72),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  foto,
+                  if (etiqueta != null)
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10),
+                        padding: const EdgeInsets.fromLTRB(10, 4, 12, 4),
+                        decoration: BoxDecoration(
+                          color: difunto ? AppColors.navy : AppColors.terracota,
+                          borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
+                          border: difunto ? Border.all(color: AppColors.arena) : null,
+                        ),
+                        child: Text(
+                          etiqueta,
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -375,13 +537,15 @@ class TarjetaPerro extends StatelessWidget {
             Icon(icono, size: 13, color: AppColors.navy),
             const SizedBox(width: 4),
           ],
-          Text(
-            texto,
-            style: const TextStyle(
-              fontFamily: 'Nunito',
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-              color: AppColors.texto,
+          Flexible(
+            child: Text(
+              texto,
+              style: const TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: AppColors.texto,
+              ),
             ),
           ),
         ],

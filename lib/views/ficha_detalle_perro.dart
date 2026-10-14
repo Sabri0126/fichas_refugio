@@ -481,6 +481,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       ScaffoldMessenger.of(context)
           .showSnackBar(
             SnackBar(
+              persist: false,
+              duration: const Duration(seconds: 5),
               content: Text(estudios ? 'Estudio eliminado' : 'Foto eliminada'),
               action: SnackBarAction(
                 label: 'Deshacer',
@@ -1202,7 +1204,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Widget _bannerEgreso(PerroModel perro) {
-    final motivo = _perroController.formatearMotivoEgreso(perro.motivoEgreso);
+    final motivo = PerroController.formatearMotivoEgreso(perro.motivoEgreso);
     final nota = perro.notaEgreso?.trim();
     final icono = perro.motivoEgreso == 'familia' ? Icons.home_rounded : Icons.favorite_rounded;
     return Container(
@@ -1272,7 +1274,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Widget _filaEgreso(EgresoModel egreso, int indice, bool esInvitado) {
-    final motivo = _perroController.formatearMotivoEgreso(egreso.motivo);
+    final motivo = PerroController.formatearMotivoEgreso(egreso.motivo);
     final icono = switch (egreso.motivo) {
       'adopcion' => Icons.favorite_rounded,
       'familia' => Icons.home_rounded,

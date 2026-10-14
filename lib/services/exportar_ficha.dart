@@ -108,6 +108,7 @@ abstract final class ExportarFicha {
           _datos(perro, edad),
           pw.SizedBox(height: 16),
           _seccion('Historia', perro.historia.trim().isEmpty ? 'Sin historia cargada.' : perro.historia.trim()),
+          if (_textoFamiliares(perro.parientes) case final familiares?) _seccion('Familiares', familiares),
           _seccion('Ficha médica', perro.fichaMedica.trim().isEmpty ? 'Sin ficha médica.' : perro.fichaMedica.trim()),
           if (perro.tratamientos.isNotEmpty) _tratamientos(perro.tratamientos),
           if (perro.recordatorios.isNotEmpty) _recordatorios(perro.recordatorios),
@@ -165,6 +166,7 @@ abstract final class ExportarFicha {
       _castracion(perro),
       perro.enCasa ? 'En casa' : 'En el refugio',
       'Ingreso: ${_fecha(perro.fechaIngreso)}',
+      if (perro.fechaFallecimiento != null) 'Fallecimiento: ${_fecha(perro.fechaFallecimiento)}',
       _estado(perro),
     ];
     return pw.Wrap(
@@ -183,6 +185,19 @@ abstract final class ExportarFicha {
           ),
       ],
     );
+  }
+
+  /// Relación tal como está guardada: «Luna — Madre».
+  static String? _textoFamiliares(List<Map<String, dynamic>> parientes) {
+    final lineas = <String>[];
+    for (final familiar in parientes) {
+      final nombre = (familiar['nombre'] ?? '').toString().trim();
+      if (nombre.isEmpty) continue;
+      final relacion = (familiar['relacion'] ?? '').toString().trim();
+      lineas.add(relacion.isEmpty ? nombre : '$nombre — $relacion');
+    }
+    if (lineas.isEmpty) return null;
+    return lineas.join('\n');
   }
 
   static pw.Widget _seccion(String titulo, String cuerpo) {

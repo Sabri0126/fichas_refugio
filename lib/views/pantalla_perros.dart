@@ -174,7 +174,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
   }
 
   String? _lineaMotivo(PerroModel perro) {
-    final motivo = _perroController.formatearMotivoEgreso(perro.motivoEgreso);
+    final motivo = PerroController.formatearMotivoEgreso(perro.motivoEgreso);
     if (motivo.isEmpty) return null;
     return 'Motivo: $motivo';
   }
@@ -338,7 +338,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
 
   Widget _resumenEgreso(PerroModel perro) {
     final nombre = perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre';
-    final motivo = _perroController.formatearMotivoEgreso(perro.motivoEgreso);
+    final motivo = PerroController.formatearMotivoEgreso(perro.motivoEgreso);
     final chips = <String>[
       perro.sexo == 'hembra' ? 'Hembra' : 'Macho',
       _edadCorta(perro),
