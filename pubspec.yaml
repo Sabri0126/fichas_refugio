@@ -54,6 +54,8 @@ dependencies:
   google_fonts: ^8.2.1
   shared_preferences: ^2.5.6
   firebase_messaging: ^16.7.0
+  share_plus: ^10.1.4
+  pdf: ^3.11.3
 
 dev_dependencies:
   flutter_test:
@@ -82,6 +84,19 @@ flutter:
   assets:
     - assets/PortonRefugio.jpg
     - google_fonts/
+
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: google_fonts/Nunito-Regular.ttf
+        - asset: google_fonts/Nunito-Italic.ttf
+          style: italic
+        - asset: google_fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: google_fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: google_fonts/Nunito-ExtraBold.ttf
+          weight: 800
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

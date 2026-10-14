@@ -16,6 +16,8 @@ class ItemResumen {
   final String? hora;
   final String categoria;
   final bool esRecordatorio;
+  final String? tratamientoId;
+  final bool pendiente;
 
   ItemResumen({
     required this.perro,
@@ -24,6 +26,8 @@ class ItemResumen {
     this.hora,
     required this.categoria,
     this.esRecordatorio = false,
+    this.tratamientoId,
+    this.pendiente = false,
   });
 }
 
@@ -77,20 +81,22 @@ abstract final class CalendarioGeneralController {
     for (final perro in perros) {
       if (idPerro != null && perro.id != idPerro) continue;
       _agregarHitos(perro, diaFecha, hitos);
-      if (perro.estado != 'activo') continue;
+      final fallecido = perro.estado == 'inactivo';
+      if (perro.estado != 'activo' && !fallecido) continue;
 
       for (final tratamiento in perro.tratamientos) {
         if (tratamiento.categoria == 'diario') {
           final dada = tratamiento.registroDosis.contains(iso);
           if (dada) dadas.add(_itemTratamiento(perro, tratamiento));
-          // Limitación conocida: de un tratamiento pausado solo se muestran
-          // las dosis dadas. Si `activo` es false, no entra en pendientes
-          // ni programadas aunque el día le corresponda.
-          if (!tratamiento.activo || !_corresponde(tratamiento, diaFecha)) {
+          // De un tratamiento pausado, o de un perro fallecido, solo se
+          // muestran las dosis ya dadas. No entran pendientes ni programadas.
+          if (fallecido || !tratamiento.activo || !_corresponde(tratamiento, diaFecha)) {
             continue;
           }
           if (diaFecha == hoyFecha) {
-            if (!dada) pendientes.add(_itemTratamiento(perro, tratamiento));
+            if (!dada) {
+              pendientes.add(_itemTratamiento(perro, tratamiento, pendiente: true));
+            }
           } else if (diaFecha.isAfter(hoyFecha)) {
             programadas.add(_itemTratamiento(perro, tratamiento));
           }
@@ -99,6 +105,7 @@ abstract final class CalendarioGeneralController {
         }
       }
 
+      if (fallecido) continue;
       for (final recordatorio in perro.recordatorios) {
         if (_soloFecha(recordatorio.fechaHora) != diaFecha) continue;
         recordatorios.add(_itemRecordatorio(perro, recordatorio));
@@ -176,6 +183,24 @@ abstract final class CalendarioGeneralController {
     return claves;
   }
 
+  /// Claves de la leyenda que aparecen al menos un día del mes de [mes].
+  static List<String> clavesEnMes(
+    List<PerroModel> perros,
+    DateTime mes, {
+    required DateTime hoy,
+    String? idPerro,
+  }) {
+    final inicio = DateTime(mes.year, mes.month, 1);
+    final fin = DateTime(mes.year, mes.month + 1, 0);
+    final claves = <String>[];
+    for (var dia = inicio; !dia.isAfter(fin); dia = dia.add(const Duration(days: 1))) {
+      for (final clave in marcadoresDelDia(perros, dia, hoy: hoy, idPerro: idPerro)) {
+        if (!claves.contains(clave)) claves.add(clave);
+      }
+    }
+    return claves;
+  }
+
   static Color colorMarcador(String clave) {
     return switch (clave) {
       'ingreso' => AppColors.terracota,
@@ -205,8 +230,9 @@ abstract final class CalendarioGeneralController {
 
   static ItemResumen _itemTratamiento(
     PerroModel perro,
-    TratamientoModel tratamiento,
-  ) {
+    TratamientoModel tratamiento, {
+    bool pendiente = false,
+  }) {
     return ItemResumen(
       perro: perro,
       titulo: tratamiento.medicacion,
@@ -215,6 +241,8 @@ abstract final class CalendarioGeneralController {
           ? _horaONula(tratamiento.horaRecordatorio)
           : null,
       categoria: tratamiento.categoria,
+      tratamientoId: tratamiento.id,
+      pendiente: pendiente,
     );
   }
 

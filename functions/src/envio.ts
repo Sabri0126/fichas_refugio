@@ -16,6 +16,8 @@ export interface MensajePush {
   categoria: string;
   tipo: string;
   fecha: DateTime;
+  idTratamiento?: string;
+  dia?: string;
 }
 
 export async function crearNotificacion(db: Firestore, mensaje: MensajePush): Promise<boolean> {
@@ -27,6 +29,8 @@ export async function crearNotificacion(db: Firestore, mensaje: MensajePush): Pr
       categoria: mensaje.categoria,
       tipo: mensaje.tipo,
       fecha: Timestamp.fromDate(mensaje.fecha.toJSDate()),
+      ...(mensaje.idTratamiento ? { id_tratamiento: mensaje.idTratamiento } : {}),
+      ...(mensaje.dia ? { dia: mensaje.dia } : {}),
       creada: FieldValue.serverTimestamp(),
       expira_en: Timestamp.fromDate(mensaje.fecha.plus({ days: 30 }).toJSDate()),
     });
@@ -53,6 +57,8 @@ export async function enviarAlarma(
         id_perro: mensaje.idPerro,
         tipo: mensaje.tipo,
         notif_id: mensaje.clave,
+        ...(mensaje.idTratamiento ? { id_tratamiento: mensaje.idTratamiento } : {}),
+        ...(mensaje.dia ? { dia: mensaje.dia } : {}),
       },
       android: {
         priority: 'high',

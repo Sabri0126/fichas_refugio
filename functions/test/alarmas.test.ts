@@ -42,8 +42,12 @@ describe('calcularAlarmas', () => {
     const dentro = calcularAlarmas(perro(), ba('2026-01-10T08:00:00'), ba('2026-01-10T10:00:00'));
     expect(dentro).toHaveLength(1);
     expect(dentro[0].tipo).toBe('diaria');
-    expect(dentro[0].titulo).toBe('Medicación pendiente');
-    expect(dentro[0].cuerpo).toBe('Toca darle Doxiciclina a Canelo');
+    expect(dentro[0].titulo).toBe('Medicación dada');
+    expect(dentro[0].cuerpo).toBe(
+      'Se marcó Doxiciclina para Canelo. Si no se la diste, tocá para dejarla pendiente.',
+    );
+    expect(dentro[0].idTratamiento).toBe('doxi');
+    expect(dentro[0].dia).toBe('2026-01-10');
     expect(dentro[0].categoria).toBe('diario');
 
     const fuera = calcularAlarmas(perro(), ba('2026-01-10T10:00:00'), ba('2026-01-10T10:05:00'));
@@ -64,14 +68,14 @@ describe('calcularAlarmas', () => {
   it('N=30 avisa el día 29, marca el último día y no avisa el 31', () => {
     const dia29 = calcularAlarmas(perro(), ba('2026-01-29T08:00:00'), ba('2026-01-29T10:00:00'));
     expect(dia29[0].tipo).toBe('diaria');
-    expect(dia29[0].cuerpo).toBe('Toca darle Doxiciclina a Canelo');
+    expect(dia29[0].cuerpo).toContain('Se marcó Doxiciclina para Canelo');
 
     const dia30 = calcularAlarmas(perro(), ba('2026-01-30T08:00:00'), ba('2026-01-30T10:00:00'));
     expect(dia30).toHaveLength(1);
     expect(dia30[0].tipo).toBe('ultimo_dia');
     expect(dia30[0].titulo).toBe('Último día de medicación');
     expect(dia30[0].cuerpo).toBe(
-      'Hoy es el último día de Doxiciclina para Canelo. Mañana el tratamiento se pausará automáticamente.',
+      'Hoy es el último día de Doxiciclina para Canelo. Mañana el tratamiento se pausará automáticamente. Si no se la diste, tocá para dejarla pendiente.',
     );
 
     const dia31 = calcularAlarmas(perro(), ba('2026-01-31T08:00:00'), ba('2026-01-31T10:00:00'));
@@ -207,5 +211,20 @@ describe('calcularAlarmas', () => {
 
     const diaUtc = calcularAlarmas(conInicio, ba('2026-01-15T08:00:00'), ba('2026-01-15T10:00:00'));
     expect(diaUtc).toHaveLength(0);
+  });
+
+  it('un día ya marcado no genera alarma', () => {
+    const alarmas = calcularAlarmas(
+      perro({ tratamientos: [diario({ registro_dosis: ['2026-01-10'] })] }),
+      ba('2026-01-10T08:00:00'),
+      ba('2026-01-10T10:00:00'),
+    );
+    expect(alarmas).toHaveLength(0);
+  });
+
+  it('la alarma diaria trae el tratamiento y el día', () => {
+    const alarmas = calcularAlarmas(perro(), ba('2026-01-10T08:00:00'), ba('2026-01-10T10:00:00'));
+    expect(alarmas[0].idTratamiento).toBe('doxi');
+    expect(alarmas[0].dia).toBe('2026-01-10');
   });
 });

@@ -11,11 +11,11 @@ import {
 const manana = DateTime.fromISO('2026-10-13T08:00:00', { zone: ZONA });
 const noche = DateTime.fromISO('2026-10-13T19:00:00', { zone: ZONA });
 const CONSEJO_LLUVIA =
-  'Guardá las cuchas y los comederos que estén a la intemperie, y revisá que los espacios no se inunden.';
+  'Guardá las cuchas y los comederos que estén a la intemperie, y revisá que sus espacios no se inunden.';
 const CONSEJO_CALOR =
-  'Poné piletas con agua fresca, reforzá los bebederos y asegurá sombra para todos.';
+  'Poné piletas con agua fresca, reforzá los bebederos y asegurá sombra para todos. Evitá el sol en las horas centrales del día.';
 const CONSEJO_FRIO =
-  'Prendé las estufas, revisá que las cuchas estén secas y con abrigo, y sumá mantas o paja para los más viejos y los cachorros.';
+  'Prendé las estufas, revisá que las cuchas estén secas y con abrigo, y sumá mantas para los más viejos y los cachorros.';
 
 function hora(dia: string, h: number, extra: { t?: number | null; p?: number | null; mm?: number | null } = {}) {
   return { dia, h, ...extra };
@@ -120,16 +120,16 @@ describe('evaluarClima', () => {
   });
 
   it('avisa calor justo en el umbral y no por debajo', () => {
-    const enUmbral = evaluarClima(pronostico({ maxima: [35, 10] }), config(), 'manana', manana);
+    const enUmbral = evaluarClima(pronostico({ maxima: [30, 10] }), config(), 'manana', manana);
     expect(enUmbral.map((aviso) => aviso.titulo)).toEqual(['Hoy hará mucho calor']);
-    expect(enUmbral[0].cuerpo).toBe(`Máxima de 35 °C. ${CONSEJO_CALOR}`);
+    expect(enUmbral[0].cuerpo).toBe(`Máxima de 30 °C. ${CONSEJO_CALOR}`);
     expect(enUmbral[0].clave).toBe('clima_calor_20261013_manana');
 
-    const debajo = evaluarClima(pronostico({ maxima: [34.9, 40] }), config(), 'manana', manana);
+    const debajo = evaluarClima(pronostico({ maxima: [29.9, 40] }), config(), 'manana', manana);
     expect(debajo).toEqual([]);
 
-    const redondeada = evaluarClima(pronostico({ maxima: [35.6, 10] }), config(), 'manana', manana);
-    expect(redondeada[0].cuerpo.startsWith('Máxima de 36 °C.')).toBe(true);
+    const redondeada = evaluarClima(pronostico({ maxima: [30.6, 10] }), config(), 'manana', manana);
+    expect(redondeada[0].cuerpo.startsWith('Máxima de 31 °C.')).toBe(true);
   });
 
   it('la noche fría y la helada usan la mínima del tramo, aunque sea después de la medianoche', () => {
@@ -206,8 +206,8 @@ describe('evaluarClima', () => {
       lugar: 'Río Colorado, Río Negro',
       lluviaProbMin: 60,
       lluviaMmMin: 2,
-      calorMax: 35,
-      frioMin: 3,
+      calorMax: 30,
+      frioMin: 4,
       heladaMax: 0,
     });
   });

@@ -21,6 +21,13 @@ class PerroController {
         );
   }
 
+  /// `true` cuando Firestore está sirviendo la copia local, sin red.
+  Stream<bool> observarDesdeCache() {
+    return _perrosRef.snapshots(includeMetadataChanges: true).map(
+          (snapshot) => snapshot.metadata.isFromCache,
+        );
+  }
+
   /// Escucha en tiempo real un perro puntual por su id de documento.
   ///
   /// @param id id del documento del perro en la colección `perros`.
@@ -75,7 +82,7 @@ class PerroController {
   ///
   /// @param perro el perro sobre el cual calcular la edad.
   /// @return la edad estimada en años.
-  int calcularEdadEstimada(PerroModel perro) {
+  static int calcularEdadEstimada(PerroModel perro) {
     if (perro.estado == 'inactivo' || perro.estado == 'egresado') {
       return perro.edad;
     }
@@ -91,16 +98,24 @@ class PerroController {
   ///
   /// @param perro el perro sobre el cual generar el texto.
   /// @return el texto de edad listo para mostrarse (p. ej. `'Edad estimada: 3 años'`).
-  String formatearEdadTexto(PerroModel perro) {
+  static String formatearEdadTexto(PerroModel perro) {
     if (perro.edadIndeterminada) {
       return 'Edad: Indeterminada';
     }
 
     if (perro.edad == 0) {
-      return 'Edad: ${perro.meses} meses';
+      return perro.meses == 1 ? 'Edad: 1 mes' : 'Edad: ${perro.meses} meses';
     }
 
-    return 'Edad estimada: ${calcularEdadEstimada(perro)} años';
+    final anios = calcularEdadEstimada(perro);
+    return 'Edad estimada: $anios ${anios == 1 ? 'año' : 'años'}';
+  }
+
+  /// Castrado o castrada, según el sexo. Si no lo está, también concuerda.
+  static String formatearCastracion(PerroModel perro) {
+    final hembra = perro.sexo == 'hembra';
+    if (perro.castrado) return hembra ? 'Castrada' : 'Castrado';
+    return hembra ? 'No castrada' : 'No castrado';
   }
 
   /// Formatea una fecha en formato `dd/mm/yyyy` para mostrarla en la UI.

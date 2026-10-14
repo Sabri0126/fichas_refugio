@@ -12,6 +12,8 @@ export interface Alarma {
   categoria: string;
   idPerro: string;
   fecha: DateTime;
+  idTratamiento?: string;
+  dia?: string;
 }
 
 export interface TratamientoEntrada {
@@ -23,6 +25,7 @@ export interface TratamientoEntrada {
   dias_duracion?: number | string;
   fecha_inicio?: unknown;
   fecha_proximo_recordatorio?: unknown;
+  registro_dosis?: unknown;
 }
 
 export interface RecordatorioEntrada {
@@ -158,12 +161,16 @@ function alarmaDiaria(
     });
     if (!enVentana(ocurrencia, desde, hasta)) continue;
 
+    const diaIso = dia.setZone(ZONA).toFormat('yyyy-MM-dd');
+    if (diaYaMarcado(tratamiento.registro_dosis, diaIso)) continue;
+
     const esUltimo = ultimoDia != null && dia.hasSame(ultimoDia, 'day');
     const tipo: TipoAlarma = esUltimo ? 'ultimo_dia' : 'diaria';
-    const titulo = esUltimo ? 'Último día de medicación' : 'Medicación pendiente';
+    const aviso = 'Si no se la diste, tocá para dejarla pendiente.';
+    const titulo = esUltimo ? 'Último día de medicación' : 'Medicación dada';
     const cuerpo = esUltimo
-      ? `Hoy es el último día de ${medicacion} para ${nombre}. Mañana el tratamiento se pausará automáticamente.`
-      : `Toca darle ${medicacion} a ${nombre}`;
+      ? `Hoy es el último día de ${medicacion} para ${nombre}. Mañana el tratamiento se pausará automáticamente. ${aviso}`
+      : `Se marcó ${medicacion} para ${nombre}. ${aviso}`;
 
     alarmas.push({
       clave: armarClave(idPerro, tipo, idItem, ocurrencia),
@@ -173,6 +180,8 @@ function alarmaDiaria(
       categoria: 'diario',
       idPerro,
       fecha: ocurrencia,
+      idTratamiento: idItem,
+      dia: diaIso,
     });
   }
 
@@ -227,6 +236,11 @@ function alarmaRecordatorio(
     idPerro,
     fecha,
   };
+}
+
+function diaYaMarcado(registro: unknown, dia: string): boolean {
+  if (!Array.isArray(registro)) return false;
+  return registro.some((item) => item?.toString() === dia);
 }
 
 function armarClave(idPerro: string, tipo: TipoAlarma, idItem: string, fecha: DateTime): string {

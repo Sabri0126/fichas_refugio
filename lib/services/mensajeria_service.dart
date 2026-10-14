@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'notificaciones_service.dart';
+import '../models/dosis_avisada.dart';
 
 /// Registra el celular para recibir push y reutiliza el toque de las alarmas locales.
 class MensajeriaService {
@@ -27,25 +28,18 @@ class MensajeriaService {
   }
 
   /// Lee el push que abrió la app cerrada y engancha el toque con la app en segundo plano.
-  /// Devuelve el id del perro para dejarlo pendiente hasta después del desbloqueo.
+  /// Devuelve el payload para dejarlo pendiente hasta después del desbloqueo.
   Future<String?> prepararToques() async {
     if (!_pushSoportado || _toquesListos) return null;
     _toquesListos = true;
     FirebaseMessaging.onMessageOpenedApp.listen((mensaje) {
-      final idPerro = _idPerro(mensaje.data);
-      if (idPerro == null) return;
-      NotificacionesService.instance.abrirDesdePayload(idPerro);
+      final aviso = AvisoFicha.desdeDatos(mensaje.data);
+      if (aviso == null) return;
+      NotificacionesService.instance.abrirDesdePayload(aviso.payload);
     });
     final inicial = await _mensajeria.getInitialMessage();
-    final idPerro = inicial == null ? null : _idPerro(inicial.data);
-    if (idPerro == null) return null;
-    return idPerro;
-  }
-
-  String? _idPerro(Map<String, dynamic> data) {
-    final id = data['id_perro']?.toString().trim();
-    if (id == null || id.isEmpty) return null;
-    return id;
+    if (inicial == null) return null;
+    return AvisoFicha.desdeDatos(inicial.data)?.payload;
   }
 
   Future<void> registrarDispositivo() async {
@@ -72,10 +66,11 @@ class MensajeriaService {
       final titulo = notificacion?.title ?? '';
       final cuerpo = notificacion?.body ?? '';
       if (titulo.isEmpty && cuerpo.isEmpty) return;
+      final aviso = AvisoFicha.desdeDatos(mensaje.data);
       NotificacionesService.instance.mostrarAhora(
         titulo: titulo,
         cuerpo: cuerpo,
-        payload: _idPerro(mensaje.data),
+        payload: aviso?.payload,
       );
     });
   }

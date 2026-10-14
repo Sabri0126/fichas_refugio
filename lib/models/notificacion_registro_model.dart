@@ -13,6 +13,8 @@ class NotificacionRegistroModel {
   final String titulo;
   final String cuerpo;
   final String? idPerro;
+  final String? idTratamiento;
+  final String? dia;
   final String categoria;
   final String tipo;
   final DateTime fecha;
@@ -24,6 +26,8 @@ class NotificacionRegistroModel {
     required this.titulo,
     required this.cuerpo,
     this.idPerro,
+    this.idTratamiento,
+    this.dia,
     required this.categoria,
     required this.tipo,
     required this.fecha,
@@ -41,11 +45,15 @@ class NotificacionRegistroModel {
     final ocurrencia = _fecha(data['fecha']) ?? creada;
     if (creada == null || ocurrencia == null || id.isEmpty) return null;
     final idPerro = data['id_perro']?.toString();
+    final idTratamiento = data['id_tratamiento']?.toString().trim() ?? '';
+    final dia = data['dia']?.toString().trim() ?? '';
     return NotificacionRegistroModel(
       id: id,
       titulo: data['titulo']?.toString() ?? '',
       cuerpo: data['cuerpo']?.toString() ?? '',
       idPerro: idPerro == null || idPerro.isEmpty ? null : idPerro,
+      idTratamiento: idTratamiento.isEmpty ? null : idTratamiento,
+      dia: dia.isEmpty ? null : dia,
       categoria: data['categoria']?.toString() ?? 'diario',
       tipo: data['tipo']?.toString() ?? '',
       fecha: ocurrencia,

@@ -3,6 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/estado_duracion.dart';
 import '../models/tratamiento_model.dart';
 
+/// Cómo se pinta un día en la tira de dosis de la ficha.
+enum EstadoMarcaDosis { dada, pendiente, olvidada, pausa }
+
+/// Un día visible de la tira, ya clasificado.
+class MarcaDiaDosis {
+  final DateTime dia;
+  final EstadoMarcaDosis estado;
+
+  const MarcaDiaDosis(this.dia, this.estado);
+}
+
 /// Controlador encargado de la lógica de negocio de los tratamientos médicos
 /// de un perro: creación, edición, archivado, registro de dosis y el cálculo
 /// de auto-archivado por vencimiento de fechas. No contiene código de UI.
@@ -259,6 +270,16 @@ class TratamientoController {
     List<TratamientoModel> tratamientos,
   ) => tratamientos.where((t) => t.activo && t.categoria == 'diario').toList();
 
+  /// Pausa los diarios que siguen activos. Los eventos médicos no cambian.
+  static List<TratamientoModel> pausarDiariosActivos(List<TratamientoModel> tratamientos) {
+    return [
+      for (final tratamiento in tratamientos)
+        tratamiento.categoria == 'diario' && tratamiento.activo
+            ? tratamiento.copyWith(activo: false)
+            : tratamiento,
+    ];
+  }
+
   /// Tratamientos diarios pausados.
   List<TratamientoModel> obtenerDiariosPausados(
     List<TratamientoModel> tratamientos,
@@ -373,6 +394,49 @@ class TratamientoController {
       restantes: 0,
       ultimoDia: ultimoDia,
     );
+  }
+
+  /// Últimos [maximo] días del tratamiento que ya empezaron y no pasaron
+  /// el último día de medicación. Los días anteriores al inicio no entran.
+  /// Si el tratamiento está pausado, un día sin dosis es [EstadoMarcaDosis.pausa]
+  /// y no se marca como olvidado.
+  static List<MarcaDiaDosis> marcasDosisRecientes(
+    TratamientoModel tratamiento, {
+    DateTime? hoy,
+    int maximo = 5,
+  }) {
+    final referencia = hoy ?? DateTime.now();
+    final hoyFecha = DateTime(referencia.year, referencia.month, referencia.day);
+    final inicio = tratamiento.fechaInicio;
+    final inicioFecha = inicio == null
+        ? null
+        : DateTime(inicio.year, inicio.month, inicio.day);
+    final marcas = <MarcaDiaDosis>[];
+
+    for (var i = 0; i < 21 && marcas.length < maximo; i++) {
+      final dia = hoyFecha.subtract(Duration(days: i));
+      if (inicioFecha != null && dia.isBefore(inicioFecha)) break;
+      final fase = calcularEstadoDuracion(tratamiento, hoy: dia).fase;
+      if (fase == FaseTratamiento.noIniciado || fase == FaseTratamiento.finalizado) {
+        continue;
+      }
+      final iso =
+          '${dia.year.toString().padLeft(4, '0')}-${dia.month.toString().padLeft(2, '0')}-${dia.day.toString().padLeft(2, '0')}';
+      final dada = tratamiento.registroDosis.contains(iso);
+      final EstadoMarcaDosis estado;
+      if (dada) {
+        estado = EstadoMarcaDosis.dada;
+      } else if (!tratamiento.activo) {
+        estado = EstadoMarcaDosis.pausa;
+      } else if (dia == hoyFecha) {
+        estado = EstadoMarcaDosis.pendiente;
+      } else {
+        estado = EstadoMarcaDosis.olvidada;
+      }
+      marcas.add(MarcaDiaDosis(dia, estado));
+    }
+
+    return marcas.reversed.toList();
   }
 
   static int _diasEntre(DateTime desde, DateTime hasta) {

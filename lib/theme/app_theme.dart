@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
-TextTheme _buildTextTheme() {
+TextTheme _buildTextTheme(PaletaApp paleta) {
   final base = GoogleFonts.nunitoTextTheme().apply(
-    bodyColor: AppColors.texto,
-    displayColor: AppColors.texto,
+    bodyColor: paleta.texto,
+    displayColor: paleta.texto,
   );
 
   return base.copyWith(
@@ -18,19 +18,21 @@ TextTheme _buildTextTheme() {
   );
 }
 
-ThemeData buildAppTheme() {
+ThemeData buildAppTheme({bool oscuro = false}) {
+  final paleta = oscuro ? PaletaApp.oscura : PaletaApp.clara;
   final colorScheme = ColorScheme.fromSeed(
     seedColor: AppColors.navy,
+    brightness: oscuro ? Brightness.dark : Brightness.light,
     primary: AppColors.navy,
     onPrimary: AppColors.arena,
     secondary: AppColors.terracota,
     onSecondary: Colors.white,
-    surface: AppColors.superficie,
-    onSurface: AppColors.texto,
+    surface: paleta.superficie,
+    onSurface: paleta.texto,
     error: AppColors.error,
   );
 
-  final textTheme = _buildTextTheme();
+  final textTheme = _buildTextTheme(paleta);
 
   OutlineInputBorder bordeInput(Color color, [double ancho = 1]) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -46,8 +48,9 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    extensions: [paleta],
     colorScheme: colorScheme,
-    scaffoldBackgroundColor: AppColors.arena,
+    scaffoldBackgroundColor: paleta.fondo,
     textTheme: textTheme,
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.navy,
@@ -57,12 +60,12 @@ ThemeData buildAppTheme() {
       titleTextStyle: textTheme.titleLarge?.copyWith(color: AppColors.arena),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.superficie,
+      color: paleta.superficie,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.bordeTarjeta),
+        side: BorderSide(color: paleta.borde),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -75,8 +78,8 @@ ThemeData buildAppTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(48, 48),
-        foregroundColor: AppColors.navy,
-        side: const BorderSide(color: AppColors.bordeInput),
+        foregroundColor: paleta.texto,
+        side: BorderSide(color: paleta.borde),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
       ),
@@ -84,15 +87,18 @@ ThemeData buildAppTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         minimumSize: const Size(48, 48),
+        foregroundColor: paleta.texto,
         textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.rellenoInput,
-      border: bordeInput(AppColors.bordeInput),
-      enabledBorder: bordeInput(AppColors.bordeInput),
-      focusedBorder: bordeInput(AppColors.navy, 1.6),
+      fillColor: paleta.relleno,
+      hintStyle: textTheme.bodyMedium?.copyWith(color: paleta.textoSuave),
+      labelStyle: textTheme.bodyMedium?.copyWith(color: paleta.textoSuave),
+      border: bordeInput(paleta.borde),
+      enabledBorder: bordeInput(paleta.borde),
+      focusedBorder: bordeInput(paleta.lienzo, 1.6),
       errorBorder: bordeInput(AppColors.error),
       focusedErrorBorder: bordeInput(AppColors.error, 1.6),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -110,31 +116,45 @@ ThemeData buildAppTheme() {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
     chipTheme: ChipThemeData(
-      selectedColor: AppColors.terracota.withValues(alpha: 0.16),
-      checkmarkColor: AppColors.terracota,
-      side: const BorderSide(color: AppColors.bordeInput),
+      backgroundColor: paleta.relleno,
+      selectedColor: AppColors.terracota.withValues(alpha: oscuro ? 0.32 : 0.16),
+      checkmarkColor: oscuro ? paleta.texto : AppColors.terracota,
+      side: BorderSide(color: paleta.borde),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      labelStyle: textTheme.labelLarge,
+      labelStyle: textTheme.labelLarge?.copyWith(color: paleta.texto),
+      secondaryLabelStyle: textTheme.labelLarge?.copyWith(color: paleta.texto),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        foregroundColor: WidgetStatePropertyAll(paleta.texto),
+        backgroundColor: WidgetStateProperty.resolveWith((estados) {
+          if (estados.contains(WidgetState.selected)) return paleta.relleno;
+          return paleta.superficie;
+        }),
+        side: WidgetStatePropertyAll(BorderSide(color: paleta.borde)),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
       showDragHandle: true,
-      backgroundColor: AppColors.superficie,
+      backgroundColor: paleta.superficie,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
     ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: AppColors.terracota,
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: oscuro
+          ? Color.lerp(AppColors.terracota, Colors.black, 0.35)
+          : AppColors.terracota,
       foregroundColor: Colors.white,
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.superficie,
+      backgroundColor: paleta.superficie,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: AppColors.bordeTarjeta),
+        side: BorderSide(color: paleta.borde),
       ),
       titleTextStyle: textTheme.titleLarge,
       contentTextStyle: textTheme.bodyMedium,
@@ -156,22 +176,22 @@ ThemeData buildAppTheme() {
       ),
     ),
     datePickerTheme: DatePickerThemeData(
-      backgroundColor: AppColors.superficie,
+      backgroundColor: paleta.superficie,
       surfaceTintColor: Colors.transparent,
       headerBackgroundColor: AppColors.navy,
       headerForegroundColor: AppColors.arena,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     timePickerTheme: TimePickerThemeData(
-      backgroundColor: AppColors.superficie,
-      dialBackgroundColor: AppColors.rellenoInput,
-      hourMinuteColor: AppColors.rellenoInput,
+      backgroundColor: paleta.superficie,
+      dialBackgroundColor: paleta.relleno,
+      hourMinuteColor: paleta.relleno,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     expansionTileTheme: const ExpansionTileThemeData(
       shape: Border(),
       collapsedShape: Border(),
     ),
-    dividerTheme: const DividerThemeData(color: AppColors.bordeTarjeta),
+    dividerTheme: DividerThemeData(color: paleta.borde),
   );
 }

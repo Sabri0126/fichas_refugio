@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
+import '../models/dosis_avisada.dart';
 import '../models/notificacion_registro_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
@@ -18,6 +19,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
   final HistorialNotificacionesController _historial = HistorialNotificacionesController();
   late final Stream<List<NotificacionRegistroModel>> _stream = _historial.observarHistorial();
   Set<String> _noLeidasAlAbrir = {};
+  final Set<String> _vistas = {};
   final Set<String> _ocultasAhora = {};
   bool _puntosListos = false;
   bool _marque = false;
@@ -35,8 +37,26 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
   }
 
   bool _mostrarPunto(NotificacionRegistroModel item) {
+    if (_vistas.contains(item.id)) return false;
     if (!_puntosListos) return !item.leida;
     return _noLeidasAlAbrir.contains(item.id) || !item.leida;
+  }
+
+  void _marcarVista(NotificacionRegistroModel item) {
+    setState(() {
+      _vistas.add(item.id);
+      _noLeidasAlAbrir.remove(item.id);
+    });
+    if (item.tipo == 'clima' || item.idPerro == null) return;
+    final dosis = item.idTratamiento != null && item.dia != null
+        ? DosisAvisada(idTratamiento: item.idTratamiento!, dia: item.dia!)
+        : null;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FichaDetallePerro(idDocumento: item.idPerro!, dosisAvisada: dosis),
+      ),
+    );
   }
 
   void _marcarAlMostrar(List<NotificacionRegistroModel> lista) {
@@ -158,14 +178,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
           clipBehavior: Clip.antiAlias,
           color: noLeida ? AppColors.terracota.withValues(alpha: 0.08) : null,
           child: InkWell(
-            onTap: item.tipo == 'clima' || item.idPerro == null
-                ? null
-                : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => FichaDetallePerro(idDocumento: item.idPerro!),
-                      ),
-                    ),
+            onTap: () => _marcarVista(item),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -190,14 +203,14 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
                         Text(
                           item.cuerpo,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textoSecundario,
+                            color: context.paleta.textoSuave,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           _formatearFecha(item.fecha),
                           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: AppColors.textoSecundario,
+                            color: context.paleta.textoSuave,
                           ),
                         ),
                       ],
@@ -284,19 +297,19 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
               color: AppColors.navy.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.notifications_none_rounded, size: 30, color: AppColors.navy),
+            child: Icon(Icons.notifications_none_rounded, size: 30, color: context.paleta.lienzo),
           ),
           const SizedBox(height: 12),
           Text(
             error ? 'No se pudo cargar el historial.' : 'No hay notificaciones por ahora.',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textoSecundario),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzoSuave),
           ),
           const SizedBox(height: 8),
           Text(
             error ? 'Probá de nuevo en un rato.' : 'Se guardan hasta 30 días.',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.lienzoSuave),
           ),
         ],
       ),
@@ -304,7 +317,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
   }
 
   Widget _ayudaAvisos() {
-    final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
+    final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -338,7 +351,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         const SizedBox(height: 12),
         Text(
           'Datos del clima: Open-Meteo.com',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.lienzoSuave),
         ),
       ],
     );

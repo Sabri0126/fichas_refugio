@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../main.dart';
+import '../models/dosis_avisada.dart';
 import '../theme/app_colors.dart';
 import 'ficha_detalle_perro.dart';
 import 'pantalla_menu.dart';
@@ -53,9 +54,14 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
           MaterialPageRoute(builder: (_) => const PantallaMenu()),
         );
         if (idPendiente != null && idPendiente.isNotEmpty) {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => FichaDetallePerro(idDocumento: idPendiente)),
-          );
+          final aviso = AvisoFicha.desdePayload(idPendiente);
+          if (aviso != null) {
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (_) => FichaDetallePerro(idDocumento: aviso.idPerro, dosisAvisada: aviso.dosis),
+              ),
+            );
+          }
         }
       }
     } catch (e) {

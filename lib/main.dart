@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
+import 'theme/tema_app.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'services/mensajeria_service.dart';
 import 'services/notificaciones_service.dart';
@@ -32,6 +33,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await TemaApp.cargar();
   await _capturarNotificacionDeInicio();
   final idPush = await MensajeriaService.instance.prepararToques();
   if (idPush != null && idPush.isNotEmpty) {
@@ -54,7 +56,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: TemaApp.modo,
+      builder: (context, modo, _) => MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Fichas Refugio',
       localizationsDelegates: const [
@@ -65,6 +69,8 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [Locale('es')],
       locale: const Locale('es'),
       theme: buildAppTheme(),
+      darkTheme: buildAppTheme(oscuro: true),
+      themeMode: modo,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
@@ -79,6 +85,7 @@ class MyApp extends StatelessWidget {
           return const PantallaLogin();
         },
       ),
+    ),
     );
   }
 }

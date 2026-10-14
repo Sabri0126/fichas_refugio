@@ -5,7 +5,9 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/calendario_general_controller.dart';
 import '../controllers/perro_controller.dart';
+import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
+import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
@@ -22,6 +24,7 @@ class PantallaCalendarioGeneral extends StatefulWidget {
 
 class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   final PerroController _perroController = PerroController();
+  final TratamientoController _tratamientoController = TratamientoController();
   late final Stream<List<PerroModel>> _streamPerros = _perroController
       .observarPerros();
   late final Future<void> _localeListo;
@@ -75,6 +78,33 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   void _cambiarFormato(CalendarFormat formato) {
     if (_formato == formato) return;
     setState(() => _formato = formato);
+  }
+
+  String _capitalizar(String texto) {
+    final limpio = texto.trim();
+    if (limpio.isEmpty) return limpio;
+    return limpio[0].toUpperCase() + limpio.substring(1);
+  }
+
+  Future<void> _marcarDada(ItemResumen item) async {
+    final id = item.tratamientoId;
+    if (id == null) return;
+    TratamientoModel? tratamiento;
+    for (final actual in item.perro.tratamientos) {
+      if (actual.id == id) {
+        tratamiento = actual;
+        break;
+      }
+    }
+    if (tratamiento == null) return;
+    try {
+      await _tratamientoController.toggleDosis(item.perro.id, tratamiento, _diaSeleccionado);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo marcar la dosis')),
+      );
+    }
   }
 
   String _plural(int n, String singular, String plural) {
@@ -140,7 +170,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                             const SizedBox(height: 12),
                             _calendario(perros, filtro, altoCelda: 52),
                             const SizedBox(height: 12),
-                            _leyenda(),
+                            _leyenda(perros, filtro),
                             const SizedBox(height: 20),
                             _resumen(perros, filtro),
                           ],
@@ -173,7 +203,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                                             const SizedBox(height: 12),
                                             _calendario(perros, filtro, altoCelda: altoCelda),
                                             const SizedBox(height: 12),
-                                            _leyenda(),
+                                            _leyenda(perros, filtro),
                                           ],
                                         ),
                                       ),
@@ -224,14 +254,14 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                 color: AppColors.navy.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icono, size: 30, color: AppColors.navy),
+              child: Icon(icono, size: 30, color: context.paleta.lienzo),
             ),
             const SizedBox(height: 12),
             Text(
               texto,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textoSecundario,
+                color: context.paleta.lienzoSuave,
               ),
             ),
           ],
@@ -298,7 +328,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
 
   Widget _calendario(List<PerroModel> perros, String? filtro, {required double altoCelda}) {
     final textTheme = Theme.of(context).textTheme;
-    return TableCalendar<void>(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+        child: TableCalendar<void>(
       rowHeight: altoCelda,
       locale: 'es_ES',
       firstDay: _primerDia,
@@ -325,10 +358,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       ),
       daysOfWeekStyle: DaysOfWeekStyle(
         weekdayStyle:
-            textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ??
+            textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ??
             const TextStyle(),
         weekendStyle:
-            textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ??
+            textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ??
             const TextStyle(),
       ),
       calendarStyle: const CalendarStyle(
@@ -398,11 +431,31 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       },
       onPageChanged: (enfocado) => _diaEnfocado = enfocado,
       onFormatChanged: _cambiarFormato,
+        ),
+      ),
     );
   }
 
-  Widget _leyenda() {
-    final estilo = Theme.of(context).textTheme.labelMedium;
+  Widget _leyenda(List<PerroModel> perros, String? filtro) {
+    final claves = CalendarioGeneralController.clavesEnMes(
+      perros,
+      _diaEnfocado,
+      hoy: _hoy,
+      idPerro: filtro,
+    );
+    if (claves.isEmpty) return const SizedBox.shrink();
+    const etiquetas = {
+      'diario': 'Dosis dada',
+      'pendiente': 'Pendiente',
+      'unico': 'Dosis única',
+      'higiene': 'Higiene',
+      'evento': 'Evento',
+      'veterinaria': 'Veterinaria',
+      'ingreso': 'Ingreso',
+      'deceso': 'Fallecimiento',
+      'recordatorio': 'Recordatorio',
+    };
+    final estilo = Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.texto);
     Widget punto(Color color, String etiqueta) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -418,20 +471,26 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       );
     }
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 6,
-      children: [
-        punto(CategoryColors.diario, 'Dosis dada'),
-        punto(AppColors.pendiente, 'Pendiente'),
-        punto(CategoryColors.unico, 'Dosis única'),
-        punto(CategoryColors.higiene, 'Higiene'),
-        punto(CategoryColors.evento, 'Evento'),
-        punto(CategoryColors.veterinaria, 'Veterinaria'),
-        punto(AppColors.terracota, 'Ingreso'),
-        punto(AppColors.textoSecundario, 'Fallecimiento'),
-        punto(AppColors.navy, 'Recordatorio'),
-      ],
+    return Card(
+      child: ExpansionTile(
+        initiallyExpanded: claves.length <= 4,
+        title: Text('Leyenda', style: Theme.of(context).textTheme.titleMedium),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                for (final clave in claves)
+                  if (etiquetas[clave] != null)
+                    punto(CalendarioGeneralController.colorMarcador(clave), etiquetas[clave]!),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -457,6 +516,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
           'Pendientes de hoy',
           Icons.pending_outlined,
           resumen.pendientes,
+          permitirMarcar: true,
         ),
       );
       secciones.add(
@@ -507,28 +567,28 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Resumen del día', style: textTheme.titleLarge),
+        Text('Resumen del día', style: textTheme.titleLarge?.copyWith(color: context.paleta.lienzo)),
         const SizedBox(height: 4),
         Text(
           fechaLegible,
-          style: textTheme.titleMedium?.copyWith(color: AppColors.navy),
+          style: textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
         ),
         if (visibles.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Column(
               children: [
-                const Icon(
+                Icon(
                   Icons.event_available_outlined,
                   size: 32,
-                  color: AppColors.textoSecundario,
+                  color: context.paleta.textoSuave,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'No hay registros ni pendientes para este día',
                   textAlign: TextAlign.center,
                   style: textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textoSecundario,
+                    color: context.paleta.textoSuave,
                   ),
                 ),
               ],
@@ -563,9 +623,9 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.rellenoInput,
+        color: context.paleta.relleno,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.bordeTarjeta),
+        border: Border.all(color: context.paleta.borde),
       ),
       child: Text(texto, style: Theme.of(context).textTheme.labelMedium),
     );
@@ -576,10 +636,11 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     IconData icono,
     List<ItemResumen> items, {
     Color? tinte,
+    bool permitirMarcar = false,
   }) {
     if (items.isEmpty) return const _SeccionOculta();
     final textTheme = Theme.of(context).textTheme;
-    final color = tinte ?? AppColors.navy;
+    final color = tinte ?? context.paleta.lienzo;
     return _SeccionVisible(
       child: Padding(
         padding: const EdgeInsets.only(top: 16),
@@ -607,7 +668,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
               child: Column(
                 children: [
                   for (var i = 0; i < items.length; i++)
-                    EntradaEscalonada(indice: i, child: _filaResumen(items[i])),
+                    EntradaEscalonada(
+                      indice: i,
+                      child: _filaResumen(items[i], permitirMarcar: permitirMarcar),
+                    ),
                 ],
               ),
             ),
@@ -617,7 +681,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     );
   }
 
-  Widget _filaResumen(ItemResumen item) {
+  Widget _filaResumen(ItemResumen item, {bool permitirMarcar = false}) {
     final textTheme = Theme.of(context).textTheme;
     final nombre = item.perro.nombre.isEmpty ? 'Sin nombre' : item.perro.nombre;
     final detalle = item.detalle.trim();
@@ -658,7 +722,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              item.titulo,
+                              _capitalizar(item.titulo),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: textTheme.titleMedium,
@@ -668,7 +732,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textoSecundario,
+                                color: context.paleta.textoSuave,
                               ),
                             ),
                           ],
@@ -678,7 +742,16 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                         const SizedBox(width: 8),
                         Text(item.hora!, style: textTheme.labelMedium),
                       ],
-                      const SizedBox(width: 8),
+                      if (permitirMarcar && item.tratamientoId != null) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Marcar como dada',
+                          onPressed: () => _marcarDada(item),
+                          icon: const Icon(Icons.check_circle_outline),
+                          color: context.paleta.activoTexto,
+                        ),
+                      ],
+                      const SizedBox(width: 4),
                       Container(
                         width: 28,
                         height: 28,
@@ -686,6 +759,9 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                         decoration: BoxDecoration(
                           color: visual.tinte,
                           shape: BoxShape.circle,
+                          border: item.pendiente
+                              ? Border.all(color: context.paleta.pausadoTexto, width: 1.4)
+                              : null,
                         ),
                         child: Icon(visual.icono, size: 16, color: visual.color),
                       ),
@@ -711,8 +787,15 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     if (item.categoria == 'deceso') {
       return _VisualCategoria(
         icono: Icons.local_florist,
-        color: AppColors.textoSecundario,
-        tinte: AppColors.textoSecundario.withValues(alpha: 0.12),
+        color: context.paleta.textoSuave,
+        tinte: context.paleta.textoSuave.withValues(alpha: 0.12),
+      );
+    }
+    if (item.pendiente) {
+      return _VisualCategoria(
+        icono: Icons.hourglass_bottom_rounded,
+        color: context.paleta.pausadoTexto,
+        tinte: AppColors.pausado.withValues(alpha: 0.18),
       );
     }
     if (item.esRecordatorio) {

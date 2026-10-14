@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../controllers/calendario_general_controller.dart';
 import '../controllers/historial_notificaciones_controller.dart';
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
@@ -10,6 +11,7 @@ import '../services/mensajeria_service.dart';
 import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+import '../theme/tema_app.dart';
 import 'pantalla_calendario_general.dart';
 import 'pantalla_login.dart';
 import 'pantalla_notificaciones.dart';
@@ -93,7 +95,6 @@ class _PantallaMenuState extends State<PantallaMenu> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Reemplazá NetworkImage('URL_DE_TU_IMAGEN') por AssetImage('assets/fondo.jpg') si usás un asset local
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -108,8 +109,8 @@ class _PantallaMenuState extends State<PantallaMenu> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.25),
-                  Colors.black.withValues(alpha: 0.72),
+                  Colors.black.withValues(alpha: context.temaOscuro ? 0.55 : 0.25),
+                  Colors.black.withValues(alpha: context.temaOscuro ? 0.88 : 0.72),
                 ],
               ),
             ),
@@ -153,74 +154,111 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                   stream: _perros.observarPerros(),
                                   builder: (context, snapshot) {
                                     final datos = snapshot.data;
-                                    if (datos == null) return const SizedBox.shrink();
-                                    final total = datos.where((perro) => perro.estado == 'activo').length;
-                                    final texto = total == 1
+                                    final activos = datos?.where((perro) => perro.estado == 'activo').toList() ?? const <PerroModel>[];
+                                    final enCasa = activos.where((perro) => perro.enCasa).length;
+                                    final enRefugio = activos.length - enCasa;
+                                    final difuntos = datos?.where((perro) => perro.estado == 'inactivo').length;
+                                    final adoptados = datos?.where((perro) => perro.estado == 'egresado' && perro.motivoEgreso == 'adopcion').length;
+                                    final reencontrados = datos?.where((perro) => perro.estado == 'egresado' && perro.motivoEgreso == 'familia').length;
+                                    final hoy = DateTime.now();
+                                    final pendientes = datos == null
+                                        ? 0
+                                        : CalendarioGeneralController.construirResumen(datos, hoy, hoy: hoy).pendientes.length;
+                                    final cuidado = activos.length == 1
                                         ? '1 perrito a nuestro cuidado'
-                                        : '$total perritos a nuestro cuidado';
-                                    return Text(
-                                      texto,
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Colors.white.withValues(alpha: 0.75),
-                                      ),
+                                        : '${activos.length} perritos a nuestro cuidado';
+                                    return Column(
+                                      children: [
+                                        if (datos != null)
+                                          Text(
+                                            cuidado,
+                                            textAlign: TextAlign.center,
+                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              color: Colors.white.withValues(alpha: 0.95),
+                                              shadows: const [Shadow(color: Colors.black87, blurRadius: 6)],
+                                            ),
+                                          ),
+                                        if (pendientes > 0) ...[
+                                          const SizedBox(height: 20),
+                                          _PanelDelDia(
+                                            cantidad: pendientes,
+                                            onTap: () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => const PantallaCalendarioGeneral(),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 28),
+                                        BotonMenu(
+                                          label: 'Perritos del refugio',
+                                          detalle: datos == null
+                                              ? null
+                                              : '$enRefugio en el refugio · $enCasa en casa',
+                                          icon: Icons.pets,
+                                          color: AppColors.terracota,
+                                          onTap: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const PantallaPerros(
+                                                seccion: SeccionPerros.activos,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        BotonMenu(
+                                          label: 'Difuntos',
+                                          detalle: difuntos == null
+                                              ? null
+                                              : (difuntos == 1 ? '1 en memoria' : '$difuntos en memoria'),
+                                          icon: Icons.local_florist,
+                                          color: AppColors.navy,
+                                          onTap: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const PantallaPerros(
+                                                seccion: SeccionPerros.difuntos,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        BotonMenu(
+                                          label: 'Adoptados y reencontrados',
+                                          detalle: adoptados == null
+                                              ? null
+                                              : '$adoptados adoptados · $reencontrados reencontrados',
+                                          icon: Icons.volunteer_activism,
+                                          color: AppColors.activoTexto,
+                                          onTap: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const PantallaPerros(
+                                                seccion: SeccionPerros.egresados,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        BotonMenu(
+                                          label: 'Calendario general',
+                                          detalle: pendientes == 0
+                                              ? null
+                                              : (pendientes == 1 ? '1 pendiente hoy' : '$pendientes pendientes hoy'),
+                                          icon: Icons.calendar_month_rounded,
+                                          color: CategoryColors.unicoTexto,
+                                          onTap: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const PantallaCalendarioGeneral(),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     );
                                   },
-                                ),
-                                const SizedBox(height: 48),
-                                _MenuButton(
-                                  label: 'Perritos del refugio',
-                                  icon: Icons.favorite,
-                                  color: AppColors.terracota,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const PantallaPerros(
-                                        seccion: SeccionPerros.activos,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                _MenuButton(
-                                  label: 'Difuntos',
-                                  icon: Icons.local_florist,
-                                  color: AppColors.navy,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const PantallaPerros(
-                                        seccion: SeccionPerros.difuntos,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                _MenuButton(
-                                  label: 'Adoptados y reencontrados',
-                                  icon: Icons.favorite_rounded,
-                                  color: AppColors.activoTexto,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const PantallaPerros(
-                                        seccion: SeccionPerros.egresados,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                _MenuButton(
-                                  label: 'Calendario general',
-                                  icon: Icons.calendar_month_rounded,
-                                  color: CategoryColors.unicoTexto,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const PantallaCalendarioGeneral(),
-                                    ),
-                                  ),
                                 ),
                               ],
                             ),
@@ -229,6 +267,29 @@ class _PantallaMenuState extends State<PantallaMenu> {
                       ),
                     );
                   },
+                ),
+                Positioned(
+                  top: 52,
+                  left: 16,
+                  right: 16,
+                  child: StreamBuilder<bool>(
+                    stream: _perros.observarDesdeCache(),
+                    builder: (context, snapshot) {
+                      if (snapshot.data != true) return const SizedBox.shrink();
+                      return Material(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(12),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Text(
+                            'Sin conexión. Estás viendo datos guardados en el dispositivo.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -270,6 +331,28 @@ class _PantallaMenuState extends State<PantallaMenu> {
                     icon: const Icon(Icons.logout_rounded),
                   ),
                 ),
+                Positioned(
+                  top: 0,
+                  right: esInvitado ? 8 : 60,
+                  child: PopupMenuButton<ThemeMode>(
+                    tooltip: 'Apariencia',
+                    initialValue: TemaApp.modo.value,
+                    onSelected: TemaApp.fijar,
+                    icon: Icon(
+                      TemaApp.modo.value == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.4),
+                      foregroundColor: Colors.white,
+                      fixedSize: const Size(44, 44),
+                      shape: const CircleBorder(),
+                    ),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: ThemeMode.light, child: Text('Claro')),
+                      PopupMenuItem(value: ThemeMode.dark, child: Text('Oscuro')),
+                    ],
+                  ),
+                ),
                 if (!esInvitado)
                   Positioned(
                     top: 0,
@@ -306,14 +389,17 @@ class _PantallaMenuState extends State<PantallaMenu> {
   }
 }
 
-class _MenuButton extends StatelessWidget {
+class BotonMenu extends StatelessWidget {
   final String label;
+  final String? detalle;
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
 
-  const _MenuButton({
+  const BotonMenu({
+    super.key,
     required this.label,
+    this.detalle,
     required this.icon,
     required this.color,
     required this.onTap,
@@ -321,18 +407,23 @@ class _MenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final oscuro = context.temaOscuro;
+    final fondo = oscuro ? Color.lerp(color, Colors.black, 0.35)! : color;
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: color,
+          backgroundColor: fondo,
           foregroundColor: Colors.white,
           elevation: 0,
           minimumSize: const Size(0, 64),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
+            side: oscuro
+                ? BorderSide(color: Colors.white.withValues(alpha: 0.22))
+                : BorderSide.none,
           ),
         ),
         child: Row(
@@ -348,14 +439,63 @@ class _MenuButton extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                label,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(color: Colors.white),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+                  ),
+                  if (detalle != null)
+                    Text(
+                      detalle!,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelDelDia extends StatelessWidget {
+  final int cantidad;
+  final VoidCallback onTap;
+
+  const _PanelDelDia({required this.cantidad, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = cantidad == 1 ? '1 dosis pendiente hoy' : '$cantidad dosis pendientes hoy';
+    final oscuro = context.temaOscuro;
+    final tinta = oscuro ? context.paleta.texto : AppColors.texto;
+    return Material(
+      color: oscuro ? context.paleta.superficie : Colors.white.withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.medication_outlined, color: AppColors.terracota),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  texto,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: tinta),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: oscuro ? context.paleta.textoSuave : AppColors.navy),
+            ],
+          ),
         ),
       ),
     );

@@ -51,6 +51,18 @@ class RecordatorioController {
     return resultado;
   }
 
+  /// Deja los recordatorios ya vencidos y quita los que todavía no llegaron.
+  static List<RecordatorioModel> cancelarPendientes(
+    List<RecordatorioModel> lista, {
+    DateTime? ahora,
+  }) {
+    final momento = ahora ?? DateTime.now();
+    return [
+      for (final recordatorio in lista)
+        if (!recordatorio.fechaHora.isAfter(momento)) recordatorio,
+    ];
+  }
+
   List<RecordatorioModel> vencidos(List<RecordatorioModel> lista, {DateTime? ahora}) {
     final momento = ahora ?? DateTime.now();
     final resultado = lista.where((r) => esVencido(r, ahora: momento)).toList();

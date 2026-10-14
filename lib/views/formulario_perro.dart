@@ -19,6 +19,7 @@ import '../models/recordatorio_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 
@@ -522,6 +523,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
           } catch (_) {}
         }
 
+        if (_estado == 'inactivo') {
+          tratamientosAGuardar = TratamientoController.pausarDiariosActivos(tratamientosAGuardar);
+          recordatoriosAGuardar = RecordatorioController.cancelarPendientes(recordatoriosAGuardar);
+        }
+
         final perro = PerroModel(
           id: widget.idDocumento ?? '',
           nombre: _nombreController.text.trim(),
@@ -701,9 +707,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
       child: OutlinedButton(
         onPressed: () => _mostrarDialogoAgregarTratamiento(categoria: categoria),
         style: OutlinedButton.styleFrom(
-          backgroundColor: AppColors.superficie,
+          backgroundColor: context.paleta.superficie,
           foregroundColor: colorTexto,
-          side: const BorderSide(color: AppColors.bordeTarjeta),
+          side: BorderSide(color: context.paleta.borde),
           minimumSize: const Size.fromHeight(56),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           alignment: Alignment.centerLeft,
@@ -780,9 +786,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
-        color: AppColors.rellenoInput,
+        color: context.paleta.relleno,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.bordeTarjeta),
+        border: Border.all(color: context.paleta.borde),
       ),
       child: Row(
         children: [
@@ -792,7 +798,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             child: Text(
               texto,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textoSecundario,
+                color: context.paleta.textoSuave,
               ),
             ),
           ),
@@ -801,29 +807,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
-  Widget _tituloSeccion(String titulo, int cantidad) {
-    final textTheme = Theme.of(context).textTheme;
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            titulo,
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          decoration: BoxDecoration(
-            color: AppColors.navy.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            '$cantidad',
-            style: textTheme.labelMedium?.copyWith(color: AppColors.navy),
-          ),
-        ),
-      ],
+  Widget _tituloSeccion(String titulo, int cantidad, {IconData icono = Icons.medical_services_outlined}) {
+    return EncabezadoSeccion(
+      titulo: titulo,
+      icono: icono,
+      cantidad: cantidad,
     );
   }
 
@@ -838,7 +826,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
       child: Text(
         activo ? 'Activo' : 'Pausado',
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: activo ? AppColors.activoTexto : AppColors.pausadoTexto,
+          color: activo ? context.paleta.activoTexto : context.paleta.pausadoTexto,
         ),
       ),
     );
@@ -884,11 +872,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
         : '';
     final horaRecordatorio = t.horaRecordatorio ?? '';
     final sufijo = pausado ? '' : _sufijoDuracion(t);
-    final subtitulo = pausado
-        ? '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'}'
-        : '${t.indicaciones} · ${dias > 0 ? '$dias días' : 'Indefinido'} · Desde $fechaTexto'
-            '${horaRecordatorio.isNotEmpty ? ' · Recordatorio $horaRecordatorio' : ''}'
-            '$sufijo';
+    final datos = <String>[
+      if (t.indicaciones.trim().isNotEmpty) t.indicaciones.trim(),
+      dias > 0 ? '$dias días' : 'Indefinido',
+      if (!pausado && fechaTexto.isNotEmpty) 'Desde $fechaTexto',
+      if (!pausado && horaRecordatorio.isNotEmpty) 'Recordatorio $horaRecordatorio',
+      if (sufijo.trim().isNotEmpty) sufijo.replaceFirst(RegExp(r'^ · '), ''),
+    ];
     final colorIcono = pausado ? AppColors.pausado : CategoryColors.base('diario');
 
     return AnimatedOpacity(
@@ -932,15 +922,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitulo,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textoSecundario,
-                              fontSize: 14,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [for (final dato in datos) _datoTratamiento(dato)],
                           ),
                         ],
                       ),
@@ -1007,6 +993,21 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
+  Widget _datoTratamiento(String texto) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: context.paleta.relleno,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.paleta.borde),
+      ),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave),
+      ),
+    );
+  }
+
   Widget _filaEvento(int i, TratamientoModel t) {
     final textTheme = Theme.of(context).textTheme;
     final fechaTexto = t.fechaInicio != null
@@ -1017,10 +1018,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: AppColors.superficie,
+        color: context.paleta.superficie,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppColors.bordeTarjeta),
+          side: BorderSide(color: context.paleta.borde),
         ),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
@@ -1037,14 +1038,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          isThreeLine: true,
           subtitle: Text(
             '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
-            '${t.indicaciones.isNotEmpty ? ' · ${t.indicaciones}' : ''}',
+            '${t.indicaciones.isNotEmpty ? '\n${t.indicaciones}' : ''}',
             style: textTheme.bodyMedium?.copyWith(
-              color: AppColors.textoSecundario,
+              color: context.paleta.textoSuave,
               fontSize: 13,
             ),
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
           trailing: Row(
@@ -1053,7 +1055,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               IconButton(
                 icon: const Icon(Icons.edit_outlined, size: 20),
                 tooltip: 'Editar',
-                color: AppColors.textoSecundario,
+                color: context.paleta.textoSuave,
                 onPressed: () => _mostrarDialogoEditarTratamiento(i),
               ),
               IconButton(
@@ -1142,7 +1144,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _tituloSeccion('Recordatorios', proximos.length),
+        _tituloSeccion('Recordatorios', proximos.length, icono: Icons.alarm_rounded),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
@@ -1155,7 +1157,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         const SizedBox(height: 8),
         Text(
           'Se guarda al tocar Guardar Cambios.',
-          style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+          style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
         ),
         const SizedBox(height: 12),
         if (proximos.isEmpty && vencidos.isEmpty)
@@ -1182,15 +1184,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
               tilePadding: EdgeInsets.zero,
               shape: const Border(),
               collapsedShape: const Border(),
-              collapsedIconColor: AppColors.textoSecundario,
-              iconColor: AppColors.textoSecundario,
+              collapsedIconColor: context.paleta.textoSuave,
+              iconColor: context.paleta.textoSuave,
               title: Row(
                 children: [
-                  const Icon(Icons.history_rounded, size: 20, color: AppColors.textoSecundario),
+                  Icon(Icons.history_rounded, size: 20, color: context.paleta.textoSuave),
                   const SizedBox(width: 8),
                   Text(
                     'Vencidos (${vencidos.length})',
-                    style: textTheme.titleMedium?.copyWith(color: AppColors.textoSecundario),
+                    style: textTheme.titleMedium?.copyWith(color: context.paleta.textoSuave),
                   ),
                 ],
               ),
@@ -1230,10 +1232,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final fila = Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: AppColors.superficie,
+        color: context.paleta.superficie,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppColors.bordeTarjeta),
+          side: BorderSide(color: context.paleta.borde),
         ),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
@@ -1253,7 +1255,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           subtitle: Text(
             nota.isEmpty ? cuando : '$cuando · $nota',
             style: textTheme.bodyMedium?.copyWith(
-              color: AppColors.textoSecundario,
+              color: context.paleta.textoSuave,
               fontSize: 13,
             ),
             maxLines: 2,
@@ -1265,7 +1267,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               IconButton(
                 icon: const Icon(Icons.edit_outlined, size: 20),
                 tooltip: 'Editar',
-                color: AppColors.textoSecundario,
+                color: context.paleta.textoSuave,
                 onPressed: () => _mostrarDialogoRecordatorio(indice: indice),
               ),
               IconButton(
@@ -1792,11 +1794,29 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ),
           TextButton(
             onPressed: () {
+              final quitado = _tratamientos[indice];
               setState(() {
                 _tratamientos.removeAt(indice);
                 _hayCambios = true;
               });
               Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Se eliminó ${_capitalizarPrimera(quitado.medicacion)}'),
+                  action: SnackBarAction(
+                    label: 'Deshacer',
+                    textColor: AppColors.arena,
+                    onPressed: () {
+                      if (!mounted) return;
+                      setState(() {
+                        final destino = indice.clamp(0, _tratamientos.length);
+                        _tratamientos.insert(destino, quitado);
+                        _hayCambios = true;
+                      });
+                    },
+                  ),
+                ),
+              );
             },
             child: Text(
               esDiario ? 'Eliminar definitivamente' : 'Eliminar',
@@ -1970,7 +1990,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   const SizedBox(height: 16),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('¿Ya está castrado?'),
+                    title: Text(_sexo == 'hembra' ? '¿Ya está castrada?' : '¿Ya está castrado?'),
                     value: _estaCastrado,
                     onChanged: (valor) => setState(() => _estaCastrado = valor),
                   ),
@@ -1980,29 +2000,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     children: [
                       Text('Estado', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ChoiceChip(
-                            label: const Text('Activo'),
-                            selected: _estado == 'activo',
-                            onSelected: (_) => setState(() => _estado = 'activo'),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Inactivo'),
-                            selected: _estado == 'inactivo',
-                            onSelected: (_) => setState(() => _estado = 'inactivo'),
-                          ),
-                          ChoiceChip(
-                            label: const Text('Egresado'),
-                            selected: _estado == 'egresado',
-                            onSelected: (_) => setState(() {
-                              _estado = 'egresado';
-                              _motivoEgreso ??= 'adopcion';
-                            }),
-                          ),
-                        ],
+                      SelectorEstadoPerro(
+                        estado: _estado,
+                        onChanged: (valor) => setState(() {
+                          _estado = valor;
+                          if (valor == 'egresado') _motivoEgreso ??= 'adopcion';
+                        }),
                       ),
                     ],
                   ),
@@ -2094,7 +2097,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                                 Text(
                                   'Los datos del egreso quedan guardados en el historial de la ficha.',
                                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textoSecundario,
+                                    color: context.paleta.textoSuave,
                                   ),
                                 ),
                               ],
@@ -2144,7 +2147,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     Text(
                       'Sin familiares registrados.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textoSecundario,
+                        color: context.paleta.textoSuave,
                       ),
                     )
                   else
@@ -2233,20 +2236,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Gestión de salud ---
                   const Divider(height: 32),
-                  Align(
+                  const Align(
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.favorite_outline, color: AppColors.navy),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Gestión de Salud',
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                      ],
+                    child: EncabezadoSeccion(
+                      titulo: 'Gestión de Salud',
+                      icono: Icons.favorite_outline,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2255,7 +2249,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       Expanded(
                         child: Text(
                           'Ficha médica',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
                         ),
                       ),
                       Wrap(
@@ -2263,6 +2257,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         children: [
                           IconButton(
                             tooltip: 'Negrita',
+                            color: context.paleta.lienzo,
                             onPressed: () => _insertarFormatoTexto(
                               _fichaMedicaController,
                               '**',
@@ -2272,6 +2267,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           ),
                           IconButton(
                             tooltip: 'Cursiva',
+                            color: context.paleta.lienzo,
                             onPressed: () => _insertarFormatoTexto(
                               _fichaMedicaController,
                               '*',
@@ -2281,6 +2277,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           ),
                           IconButton(
                             tooltip: 'Agregar viñeta',
+                            color: context.paleta.lienzo,
                             onPressed: () =>
                                 _insertarBulletTexto(_fichaMedicaController),
                             icon: const Icon(Icons.format_list_bulleted),
@@ -2304,7 +2301,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Agregar registro médico',
-                      style: Theme.of(context).textTheme.titleLarge,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: context.paleta.lienzo),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2431,8 +2428,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
                               tilePadding: EdgeInsets.zero,
                               shape: const Border(),
                               collapsedShape: const Border(),
-                              collapsedIconColor: AppColors.textoSecundario,
-                              iconColor: AppColors.textoSecundario,
+                              collapsedIconColor: context.paleta.textoSuave,
+                              iconColor: context.paleta.textoSuave,
                               title: Row(
                                 children: [
                                   const Icon(
@@ -2444,7 +2441,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                                   Text(
                                     'Pausados (${diariosPausados.length})',
                                     style: textTheme.titleMedium?.copyWith(
-                                      color: AppColors.textoSecundario,
+                                      color: context.paleta.textoSuave,
                                     ),
                                   ),
                                 ],
@@ -2555,9 +2552,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
         ),
         // --- SECCIÓN: Acción de guardado (barra inferior fija) ---
         bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.superficie,
-            border: Border(top: BorderSide(color: AppColors.bordeTarjeta)),
+          decoration: BoxDecoration(
+            color: context.paleta.superficie,
+            border: Border(top: BorderSide(color: context.paleta.borde)),
           ),
           child: SafeArea(
             top: false,
@@ -2585,5 +2582,38 @@ class _FormularioPerroState extends State<FormularioPerro> {
         ),
       ), // cierra Scaffold
     ); // cierra PopScope
+  }
+}
+
+/// Activo, fallecido o egresado, en un control que ocupa el ancho
+/// y no corta la etiqueta.
+class SelectorEstadoPerro extends StatelessWidget {
+  final String estado;
+  final ValueChanged<String> onChanged;
+
+  const SelectorEstadoPerro({
+    super.key,
+    required this.estado,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actual = switch (estado) {
+      'inactivo' => 'inactivo',
+      'egresado' => 'egresado',
+      _ => 'activo',
+    };
+    return SegmentedButton<String>(
+      expandedInsets: EdgeInsets.zero,
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: 'activo', label: Text('Activo', overflow: TextOverflow.ellipsis)),
+        ButtonSegment(value: 'inactivo', label: Text('Fallecido', overflow: TextOverflow.ellipsis)),
+        ButtonSegment(value: 'egresado', label: Text('Egresado', overflow: TextOverflow.ellipsis)),
+      ],
+      selected: {actual},
+      onSelectionChanged: (seleccion) => onChanged(seleccion.first),
+    );
   }
 }

@@ -40,8 +40,12 @@ export const enviarNotificaciones = onSchedule(
     const dispositivos = await db.collection('dispositivos').get();
     const tokens = dispositivos.docs.map((doc) => doc.id);
     let enviados = 0;
+    let marcadas = 0;
     const tokensMalos = new Set<string>();
     for (const alarma of nuevas) {
+      if (alarma.idTratamiento && alarma.dia) {
+        marcadas += await marcarDosis(db, alarma.idPerro, alarma.idTratamiento, alarma.dia);
+      }
       const resultado = await enviarAlarma(tokens, alarma);
       enviados += resultado.enviados;
       for (const token of resultado.invalidos) tokensMalos.add(token);
@@ -62,6 +66,7 @@ export const enviarNotificaciones = onSchedule(
     logger.info('enviarNotificaciones', {
       alarmas: alarmas.length,
       enviados,
+      marcadas,
       tokensEliminados: tokensMalos.size,
       pausas,
     });
@@ -150,6 +155,35 @@ function inicioDeVentana(ultima: unknown, ahora: DateTime): DateTime {
   const fecha = aZona(ultima);
   if (!fecha) return ahora.minus({ minutes: 5 });
   return fecha > piso ? fecha : piso;
+}
+
+async function marcarDosis(
+  db: Firestore,
+  idPerro: string,
+  idTratamiento: string,
+  dia: string,
+): Promise<number> {
+  return db.runTransaction(async (tx) => {
+    const ref = db.collection('perros').doc(idPerro);
+    const snap = await tx.get(ref);
+    if (!snap.exists) return 0;
+    const tratamientos = snap.get('tratamientos');
+    if (!Array.isArray(tratamientos)) return 0;
+    let cambios = 0;
+    const actualizados = tratamientos.map((item) => {
+      if (typeof item !== 'object' || item == null) return item;
+      const tratamiento = item as { id?: string; registro_dosis?: unknown };
+      if ((tratamiento.id?.toString() ?? '') !== idTratamiento) return item;
+      const registro = Array.isArray(tratamiento.registro_dosis)
+        ? tratamiento.registro_dosis.map((fecha) => fecha?.toString() ?? '')
+        : [];
+      if (registro.includes(dia)) return item;
+      cambios += 1;
+      return { ...tratamiento, registro_dosis: [...registro, dia] };
+    });
+    if (cambios > 0) tx.update(ref, { tratamientos: actualizados });
+    return cambios;
+  });
 }
 
 async function pausarTratamientos(

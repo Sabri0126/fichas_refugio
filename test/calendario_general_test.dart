@@ -1,4 +1,5 @@
 import 'package:fichas_refugio/controllers/calendario_general_controller.dart';
+import 'package:fichas_refugio/controllers/recordatorio_controller.dart';
 import 'package:fichas_refugio/controllers/tratamiento_controller.dart';
 import 'package:fichas_refugio/models/perro_model.dart';
 import 'package:fichas_refugio/models/recordatorio_model.dart';
@@ -298,7 +299,7 @@ void main() {
     expect(resumen(lista, manana).recordatorios, isEmpty);
   });
 
-  test('un perro que no está activo se ignora', () {
+  test('un egresado no aparece y un fallecido conserva las dosis dadas', () {
     final tratamiento = diario(dosis: [iso(hoy)]);
     final lista = [
       perro(id: 'activo', nombre: 'Luna', tratamientos: [tratamiento]),
@@ -318,7 +319,33 @@ void main() {
 
     final dia = resumen(lista, hoy);
 
-    expect(dia.dadas.map((item) => item.perro.nombre), ['Luna']);
+    expect(dia.dadas.map((item) => item.perro.nombre), ['Luna', 'Sol']);
+  });
+
+  test('un fallecido muestra eventos médicos y no recordatorios ni dosis futuras', () {
+    final sol = perro(
+      id: 'sol',
+      nombre: 'Sol',
+      estado: 'inactivo',
+      tratamientos: [
+        diario(id: 'dada', medicacion: 'Dada', dosis: [iso(hoy)]),
+        diario(id: 'futura', medicacion: 'Futura'),
+        evento(categoria: 'veterinaria', medicacion: 'Control', dia: hoy, id: 'vet'),
+      ],
+      recordatorios: [
+        recordatorio(fechaHora: DateTime(2026, 6, 15, 18, 0), id: 'hoy'),
+      ],
+    );
+
+    final dia = resumen([sol], hoy);
+    final futuro = resumen([sol], manana);
+
+    expect(dia.dadas.map((item) => item.titulo), ['Dada']);
+    expect(dia.eventos.map((item) => item.titulo), ['Control']);
+    expect(dia.pendientes, isEmpty);
+    expect(dia.recordatorios, isEmpty);
+    expect(futuro.programadas, isEmpty);
+    expect(futuro.dadas, isEmpty);
   });
 
   test('el filtro por idPerro restringe el resumen y los marcadores', () {
@@ -498,9 +525,40 @@ void main() {
     expect(diaDeceso.hitos.map((item) => item.titulo), ['Falleció Zanca']);
     expect(diaDeceso.dadas, isEmpty);
     expect(diaDeceso.pendientes, isEmpty);
+    expect(diaDeceso.programadas, isEmpty);
     expect(marcadores([zanca], ayer), ['deceso']);
 
     final filtrado = resumen([pampa, zanca], hoy, idPerro: 'zanca');
     expect(filtrado.hitos, isEmpty);
+  });
+
+  test('pasar a difuntos pausa los diarios activos y cancela recordatorios pendientes', () {
+    final ahora = DateTime(2026, 6, 15, 12);
+    final diarioActivo = diario(id: 'activo', medicacion: 'Pastilla');
+    final diarioPausado = diario(id: 'pausado', activo: false);
+    final visita = evento(
+      categoria: 'veterinaria',
+      medicacion: 'Control',
+      dia: DateTime(2026, 6, 10),
+      id: 'vet',
+    );
+
+    final tratamientos = TratamientoController.pausarDiariosActivos([
+      diarioActivo,
+      diarioPausado,
+      visita,
+    ]);
+    expect(tratamientos[0].activo, isFalse);
+    expect(tratamientos[1].activo, isFalse);
+    expect(tratamientos[2].activo, isTrue);
+    expect(tratamientos[2].medicacion, 'Control');
+
+    final vencido = recordatorio(id: 'viejo', fechaHora: DateTime(2026, 6, 14, 9));
+    final pendiente = recordatorio(id: 'nuevo', fechaHora: DateTime(2026, 6, 16, 9));
+    final restantes = RecordatorioController.cancelarPendientes(
+      [vencido, pendiente],
+      ahora: ahora,
+    );
+    expect(restantes.map((item) => item.id), ['viejo']);
   });
 }

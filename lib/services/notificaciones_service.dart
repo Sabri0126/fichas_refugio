@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../models/dosis_avisada.dart';
 import '../theme/app_colors.dart';
 import '../views/ficha_detalle_perro.dart';
 
@@ -87,11 +88,12 @@ class NotificacionesService {
     abrirDesdePayload(respuesta.payload);
   }
 
-  void abrirDesdePayload(String? idPerro) {
-    if (idPerro == null || idPerro.isEmpty) return;
+  void abrirDesdePayload(String? payload) {
+    final aviso = AvisoFicha.desdePayload(payload);
+    if (aviso == null) return;
     _navigatorKey?.currentState?.push(
       MaterialPageRoute(
-        builder: (_) => FichaDetallePerro(idDocumento: idPerro),
+        builder: (_) => FichaDetallePerro(idDocumento: aviso.idPerro, dosisAvisada: aviso.dosis),
       ),
     );
   }

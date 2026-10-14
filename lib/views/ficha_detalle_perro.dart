@@ -17,21 +17,26 @@ import 'package:table_calendar/table_calendar.dart';
 import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/tratamiento_controller.dart';
+import '../models/dosis_avisada.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/tratamiento_model.dart';
+import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
+import '../theme/encabezado_seccion.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import 'formulario_perro.dart';
+import 'pantalla_tarjeta_perro.dart';
 
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
+  final DosisAvisada? dosisAvisada;
 
-  const FichaDetallePerro({super.key, required this.idDocumento});
+  const FichaDetallePerro({super.key, required this.idDocumento, this.dosisAvisada});
 
   @override
   State<FichaDetallePerro> createState() => _FichaDetallePerroState();
@@ -49,24 +54,136 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   int _paginaActual = 0;
   double _escalaTexto = 1.3;
   List<Map<String, dynamic>> _fotosReordenar = [];
+  bool _hojaDosisMostrada = false;
 
   String _formatearFecha(DateTime? fecha) => _perroController.formatearFecha(fecha);
 
   String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
-  Future<void> _toggleDosis(TratamientoModel tratamiento, DateTime fecha) async {
+  Future<void> _compartirFicha(PerroModel perro) async {
+    try {
+      await ExportarFicha.compartir(perro, edad: _formatearEdadTexto(perro));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo compartir la ficha')),
+      );
+    }
+  }
+
+  Future<bool> _toggleDosis(TratamientoModel tratamiento, DateTime fecha) async {
     try {
       await _tratamientoController.toggleDosis(widget.idDocumento, tratamiento, fecha);
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No se pudo actualizar el tratamiento')),
         );
       }
+      return false;
     }
   }
 
-  String _formatearEdadTexto(PerroModel perro) => _perroController.formatearEdadTexto(perro);
+  void _prepararHojaDosis(PerroModel perro) {
+    final aviso = widget.dosisAvisada;
+    if (aviso == null || _hojaDosisMostrada) return;
+    _hojaDosisMostrada = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mostrarHojaDosis(perro, aviso);
+    });
+  }
+
+  void _mostrarHojaDosis(PerroModel perro, DosisAvisada aviso) {
+    TratamientoModel? tratamiento;
+    for (final item in perro.tratamientos) {
+      if (item.id == aviso.idTratamiento) {
+        tratamiento = item;
+        break;
+      }
+    }
+    if (tratamiento == null) return;
+    final marcada = tratamiento.registroDosis.contains(aviso.dia);
+    final medicacion = tratamiento.medicacion.trim().isEmpty ? 'La medicación' : tratamiento.medicacion.trim();
+    final hora = tratamiento.horaRecordatorio?.trim() ?? '';
+    final texto = marcada
+        ? 'Quedó marcada como dada${hora.isEmpty ? '.' : ' a las $hora.'}'
+        : 'Está pendiente.';
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$medicacion de hoy', style: Theme.of(sheetContext).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(texto),
+                const SizedBox(height: 16),
+                if (marcada) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child: const Text('Sí, se la di'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _dejarPendiente(tratamiento!, aviso);
+                      },
+                      child: const Text('No se la di, dejar pendiente'),
+                    ),
+                  ),
+                ] else
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _marcarDadaDesdeAviso(tratamiento!, aviso);
+                      },
+                      child: const Text('Marcar como dada'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _dejarPendiente(TratamientoModel tratamiento, DosisAvisada aviso) async {
+    if (!tratamiento.registroDosis.contains(aviso.dia)) return;
+    final fecha = DateTime.tryParse(aviso.dia);
+    if (fecha == null) return;
+    final ok = await _toggleDosis(tratamiento, fecha);
+    if (!ok || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quedó pendiente')));
+  }
+
+  Future<void> _marcarDadaDesdeAviso(TratamientoModel tratamiento, DosisAvisada aviso) async {
+    if (tratamiento.registroDosis.contains(aviso.dia)) return;
+    final fecha = DateTime.tryParse(aviso.dia);
+    if (fecha == null) return;
+    await _toggleDosis(tratamiento, fecha);
+  }
+
+  String _formatearEdadTexto(PerroModel perro) => PerroController.formatearEdadTexto(perro);
 
   Widget _construirTextoFormateado(String texto, double escala) {
     final textoLimpio = texto.trim();
@@ -108,32 +225,47 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       MaterialPageRoute(
         builder: (_) => StatefulBuilder(
           builder: (context, setStateLocal) => Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.surface,
+            backgroundColor: Colors.black,
+            extendBodyBehindAppBar: true,
             appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
+              backgroundColor: Colors.black.withValues(alpha: 0.35),
               elevation: 0,
+              foregroundColor: Colors.white,
               leading: IconButton(
-                icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
               ),
               actions: [
                 procesando
                     ? const Padding(
                         padding: EdgeInsets.all(16),
-                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        ),
                       )
                     : IconButton(
-                        icon: Icon(Icons.crop, color: Theme.of(context).colorScheme.onSurface),
+                        tooltip: 'Recortar foto',
+                        icon: const Icon(Icons.crop, color: Colors.white),
                         onPressed: () => _recortarFotoExistente(url, context, setStateLocal, (valor) => procesando = valor),
                       ),
               ],
             ),
-            body: Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Image.network(url, fit: BoxFit.contain),
-              ),
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                return InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  clipBehavior: Clip.none,
+                  boundaryMargin: const EdgeInsets.all(double.infinity),
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                    child: Image.network(url, fit: BoxFit.contain),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -337,18 +469,39 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
     if (!mounted) return;
 
+    final texto = (foto['texto'] ?? foto['descripcion'] ?? '').toString();
     setState(() => _subiendoFoto = true);
     try {
       final urlFoto = estudios
           ? await _perroController.eliminarFotoDeEstudios(widget.idDocumento, index)
           : await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
 
-      if (urlFoto != null) {
-        try {
-          final refStorage = FirebaseStorage.instance.refFromURL(urlFoto);
-          await refStorage.delete();
-        } catch (_) {}
-      }
+      if (!mounted || urlFoto == null) return;
+      var deshecha = false;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+            SnackBar(
+              content: Text(estudios ? 'Estudio eliminado' : 'Foto eliminada'),
+              action: SnackBarAction(
+                label: 'Deshacer',
+                textColor: AppColors.arena,
+                onPressed: () {
+                  deshecha = true;
+                  final restaurar = estudios
+                      ? _perroController.agregarFotoAEstudios(widget.idDocumento, urlFoto, texto)
+                      : _perroController.agregarFotoAGaleria(widget.idDocumento, urlFoto, texto);
+                  restaurar.catchError((_) {});
+                },
+              ),
+            ),
+          )
+          .closed
+          .then((_) async {
+            if (deshecha) return;
+            try {
+              await FirebaseStorage.instance.refFromURL(urlFoto).delete();
+            } catch (_) {}
+          });
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo eliminar la foto')));
@@ -473,102 +626,106 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  String _fechaISO(DateTime fecha) {
-    return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
-  }
-
   TextScaler get _escala => TextScaler.linear(_escalaTexto);
 
   static const _inicialesDia = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
   static const _nombresDia = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
   Widget _buildHistorialDosis(TratamientoModel tratamiento, bool esInvitado) {
-    final registroDosis = tratamiento.registroDosis;
-    final fechaInicio = tratamiento.fechaInicio;
-    final inicioDia = fechaInicio == null
-        ? null
-        : DateTime(fechaInicio.year, fechaInicio.month, fechaInicio.day);
     final textTheme = Theme.of(context).textTheme;
+    final hoy = DateTime.now();
+    final hoyFecha = DateTime(hoy.year, hoy.month, hoy.day);
+    final marcas = TratamientoController.marcasDosisRecientes(tratamiento, hoy: hoy);
+    if (marcas.isEmpty) return const SizedBox.shrink();
 
-    final circulos = <Widget>[];
-    for (int i = 4; i >= 0; i--) {
-      final dia = DateTime.now().subtract(Duration(days: i));
-      final diaSoloFecha = DateTime(dia.year, dia.month, dia.day);
-      final antesDeInicio = inicioDia != null && diaSoloFecha.isBefore(inicioDia);
-      final esHoy = i == 0;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        for (final marca in marcas)
+          _puntoDosis(
+            tratamiento: tratamiento,
+            marca: marca,
+            esHoy: marca.dia == hoyFecha,
+            esInvitado: esInvitado,
+            textTheme: textTheme,
+          ),
+      ],
+    );
+  }
 
-      Color fondo;
-      IconData? icono;
-      String estado;
-      if (antesDeInicio) {
-        fondo = AppColors.pendiente.withValues(alpha: 0.35);
-        estado = 'antes del inicio del tratamiento';
-      } else if (registroDosis.contains(_fechaISO(diaSoloFecha))) {
+  Widget _puntoDosis({
+    required TratamientoModel tratamiento,
+    required MarcaDiaDosis marca,
+    required bool esHoy,
+    required bool esInvitado,
+    required TextTheme textTheme,
+  }) {
+    final Color fondo;
+    final IconData? icono;
+    final String estado;
+    switch (marca.estado) {
+      case EstadoMarcaDosis.dada:
         fondo = AppColors.dosisDada;
         icono = Icons.check;
         estado = 'dosis dada';
-      } else if (esHoy) {
+      case EstadoMarcaDosis.pendiente:
         fondo = AppColors.pendiente;
+        icono = null;
         estado = 'dosis pendiente';
-      } else {
+      case EstadoMarcaDosis.pausa:
+        fondo = AppColors.pausado;
+        icono = Icons.pause;
+        estado = 'tratamiento en pausa';
+      case EstadoMarcaDosis.olvidada:
         fondo = AppColors.dosisOlvidada;
         icono = Icons.close;
         estado = 'dosis olvidada';
-      }
+    }
+    final habilitado = !esInvitado;
 
-      final habilitado = !(esInvitado || antesDeInicio);
-
-      circulos.add(
-        Semantics(
-          button: habilitado,
-          label: '${esHoy ? 'Hoy' : _nombresDia[diaSoloFecha.weekday - 1]} ${diaSoloFecha.day}: $estado',
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: habilitado
-                ? () {
-                    HapticFeedback.selectionClick();
-                    _toggleDosis(tratamiento, diaSoloFecha);
-                  }
-                : null,
-            child: SizedBox(
-              width: 40,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 40,
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: fondo,
-                          shape: BoxShape.circle,
-                          border: esHoy ? Border.all(color: AppColors.navy, width: 2) : null,
-                        ),
-                        child: icono == null ? null : Icon(icono, size: 14, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    _inicialesDia[diaSoloFecha.weekday - 1],
-                    style: textTheme.labelMedium?.copyWith(
-                      color: esHoy ? AppColors.navy : AppColors.textoSecundario,
-                      fontWeight: esHoy ? FontWeight.w800 : FontWeight.w600,
-                    ),
-                  ),
-                ],
+    return Semantics(
+      button: habilitado,
+      label: '${esHoy ? 'Hoy' : _nombresDia[marca.dia.weekday - 1]} ${marca.dia.day}: $estado',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: habilitado
+            ? () {
+                HapticFeedback.selectionClick();
+                _toggleDosis(tratamiento, marca.dia);
+              }
+            : null,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: fondo,
+                  shape: BoxShape.circle,
+                  border: esHoy ? Border.all(color: AppColors.navy, width: 2) : null,
+                ),
+                child: icono == null ? null : Icon(icono, size: 14, color: Colors.white),
               ),
-            ),
+              Text(
+                _inicialesDia[marca.dia.weekday - 1],
+                style: textTheme.labelMedium?.copyWith(
+                  color: esHoy ? AppColors.navy : context.paleta.textoSuave,
+                  fontWeight: esHoy ? FontWeight.w800 : FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
+            ],
           ),
         ),
-      );
-    }
-
-    return Row(mainAxisAlignment: MainAxisAlignment.start, children: circulos);
+      ),
+    );
   }
 
   Widget _tarjetaSeccion({required String titulo, required IconData icono, required List<Widget> children}) {
@@ -604,61 +761,22 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Widget _encabezadoGrupo(String titulo, IconData icono) {
-    return Semantics(
-      header: true,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.navy.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icono, size: 20, color: AppColors.navy),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    titulo,
-                    textScaler: _escala,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              height: 3,
-              width: 40,
-              decoration: BoxDecoration(
-                color: AppColors.terracota,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return EncabezadoSeccion(titulo: titulo, icono: icono, textScaler: _escala);
+  }
+
+  String _capitalizar(String texto) {
+    final limpio = texto.trim();
+    if (limpio.isEmpty) return limpio;
+    return limpio[0].toUpperCase() + limpio.substring(1);
   }
 
   Widget _chipDato(IconData icono, String texto) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.rellenoInput,
+        color: context.paleta.relleno,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.bordeTarjeta),
+        border: Border.all(color: context.paleta.borde),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -681,13 +799,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(etiqueta, textScaler: _escala, style: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario)),
+        Text(etiqueta, textScaler: _escala, style: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave)),
         const SizedBox(height: 2),
         Text(
           valor,
           textScaler: _escala,
           style: sinDato
-              ? textTheme.bodyLarge?.copyWith(color: AppColors.textoSecundario, fontStyle: FontStyle.italic)
+              ? textTheme.bodyLarge?.copyWith(color: context.paleta.textoSuave, fontStyle: FontStyle.italic)
               : textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
         ),
       ],
@@ -716,7 +834,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 _chipDato(Icons.cake_outlined, edadChip),
                 _chipDato(
                   perro.castrado ? Icons.check_circle_outline : Icons.remove_circle_outline,
-                  perro.castrado ? 'Castrado' : 'No castrado',
+                  PerroController.formatearCastracion(perro),
                 ),
               ],
             ),
@@ -742,10 +860,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.08) : AppColors.rellenoInput,
+        color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.08) : context.paleta.relleno,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.4) : AppColors.bordeTarjeta,
+          color: marcadoHoy ? AppColors.dosisDada.withValues(alpha: 0.4) : context.paleta.borde,
         ),
       ),
       child: Padding(
@@ -772,12 +890,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                               duration: const Duration(milliseconds: 200),
                               curve: Curves.easeOutCubic,
                               style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
-                                color: marcadoHoy ? AppColors.textoSecundario : AppColors.texto,
+                                color: marcadoHoy ? context.paleta.textoSuave : context.paleta.texto,
                                 decoration: marcadoHoy ? TextDecoration.lineThrough : TextDecoration.none,
-                                decorationColor: AppColors.textoSecundario,
+                                decorationColor: context.paleta.textoSuave,
                               ),
                               child: Text(
-                                t.medicacion,
+                                _capitalizar(t.medicacion),
                                 textScaler: _escala,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -787,7 +905,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                             Text(
                               '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
                               textScaler: _escala,
-                              style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                              style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                             ),
                             _progresoDuracion(t),
                           ],
@@ -850,7 +968,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   Widget _contenidoDuracion(EstadoDuracion estado) {
     final textTheme = Theme.of(context).textTheme;
-    final secundario = textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
+    final secundario = textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
     switch (estado.fase) {
       case FaseTratamiento.enCurso:
         return Column(
@@ -875,11 +993,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 6,
                 children: [
-                  const Icon(Icons.flag_rounded, size: 16, color: AppColors.pausadoTexto),
+                  Icon(Icons.flag_rounded, size: 16, color: context.paleta.pausadoTexto),
                   Text(
                     'Último día de medicación',
                     textScaler: _escala,
-                    style: textTheme.labelMedium?.copyWith(color: AppColors.pausadoTexto),
+                    style: textTheme.labelMedium?.copyWith(color: context.paleta.pausadoTexto),
                   ),
                 ],
               ),
@@ -909,7 +1027,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         minHeight: 6,
         value: valor,
         color: color,
-        backgroundColor: AppColors.bordeTarjeta,
+        backgroundColor: context.paleta.borde,
       ),
     );
   }
@@ -964,7 +1082,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             child: Text(
               'No hay tratamientos diarios actuales.',
               textScaler: _escala,
-              style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+              style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
             ),
           ),
         AnimatedSize(
@@ -1018,7 +1136,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             Text(
               'y $resto más',
               textScaler: _escala,
-              style: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario),
+              style: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave),
             ),
         ],
       ),
@@ -1055,7 +1173,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 textScaler: _escala,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
               ),
             ],
           ),
@@ -1091,14 +1209,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.activoTexto.withValues(alpha: 0.10),
+        color: context.paleta.activoTexto.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.activoTexto.withValues(alpha: 0.30)),
+        border: Border.all(color: context.paleta.activoTexto.withValues(alpha: 0.30)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icono, color: AppColors.activoTexto),
+          Icon(icono, color: context.paleta.activoTexto),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1107,7 +1225,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 Text(
                   motivo,
                   textScaler: _escala,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.activoTexto),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.activoTexto),
                 ),
                 if (perro.fechaEgreso != null) ...[
                   const SizedBox(height: 4),
@@ -1168,10 +1286,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.activoTexto.withValues(alpha: 0.12),
+            color: context.paleta.activoTexto.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
-          child: Icon(icono, size: 20, color: AppColors.activoTexto),
+          child: Icon(icono, size: 20, color: context.paleta.activoTexto),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1189,7 +1307,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   'Egreso: sin fecha',
                   textScaler: _escala,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textoSecundario,
+                    color: context.paleta.textoSuave,
                     fontStyle: FontStyle.italic,
                   ),
                 )
@@ -1197,14 +1315,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 Text(
                   'Egreso: ${_perroController.formatearFecha(egreso.fechaEgreso)}',
                   textScaler: _escala,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                 ),
               if (egreso.fechaRegreso != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   'Regreso: ${_perroController.formatearFecha(egreso.fechaRegreso)}',
                   textScaler: _escala,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                 ),
               ],
               if (nota != null && nota.isNotEmpty) ...[
@@ -1212,7 +1330,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 Text(
                   nota,
                   textScaler: _escala,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                 ),
               ],
             ],
@@ -1225,7 +1343,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               IconButton(
                 icon: const Icon(Icons.edit_outlined, size: 20),
                 tooltip: 'Editar egreso',
-                color: AppColors.textoSecundario,
+                color: context.paleta.textoSuave,
                 style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 onPressed: _egresoEnCurso == indice ? null : () => _editarEgreso(indice, egreso),
               ),
@@ -1313,7 +1431,18 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ),
             if (!esInvitado)
               OutlinedButton.icon(
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: context.temaOscuro
+                      ? Colors.transparent
+                      : Color.lerp(AppColors.arena, AppColors.navy, 0.14),
+                  foregroundColor: context.paleta.texto,
+                  side: BorderSide(
+                    color: context.temaOscuro
+                        ? context.paleta.borde
+                        : Color.lerp(AppColors.arena, AppColors.navy, 0.28)!,
+                  ),
+                  minimumSize: const Size(48, 48),
+                ),
                 onPressed: _subiendoFoto || _modoReordenar
                     ? null
                     : () async {
@@ -1362,7 +1491,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   final relacion = familiar['relacion']?.toString() ?? '';
                   final idDoc = familiar['id_documento']?.toString() ?? '';
                   return ActionChip(
-                    backgroundColor: AppColors.rellenoInput,
+                    backgroundColor: context.paleta.relleno,
                     avatar: const Icon(Icons.pets, size: 18, color: AppColors.navy),
                     label: Text('$nombre ($relacion)', textScaler: _escala),
                     onPressed: idDoc.isEmpty
@@ -1400,7 +1529,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   Widget _buildEstudios(PerroModel perro, bool esInvitado) {
     final fotos = perro.galeriaEstudios;
-    final estiloVacio = Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario);
+    final estiloVacio = Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
     return _tarjetaSeccion(
       titulo: 'Estudios y registros',
       icono: Icons.grid_view_rounded,
@@ -1441,17 +1570,17 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         children: [
           Positioned.fill(
             child: Material(
-              color: AppColors.rellenoInput,
+              color: context.paleta.relleno,
               clipBehavior: Clip.antiAlias,
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 onTap: url.isEmpty ? null : () => _abrirFotoPantallaCompleta(url),
                 child: url.isEmpty
-                    ? const Icon(Icons.broken_image_outlined, color: AppColors.textoSecundario)
+                    ? Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave)
                     : Image.network(
                         url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: AppColors.textoSecundario),
+                        errorBuilder: (_, _, _) => Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave),
                       ),
               ),
             ),
@@ -1491,10 +1620,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.black.withValues(alpha: 0.45),
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(28, 28),
-                  fixedSize: const Size(28, 28),
-                  padding: EdgeInsets.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: const Size(48, 48),
+                  fixedSize: const Size(48, 48),
                 ),
                 onSelected: (accion) {
                   switch (accion) {
@@ -1627,7 +1754,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 const SizedBox(height: 4),
                 Text(
                   'Tocá el ícono de cámara arriba para agregar una.',
-                  style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                  style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -1664,14 +1791,21 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                       ),
                     ),
                     if (foto['texto'] != null && foto['texto'].toString().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.paleta.borde),
+                        ),
                         child: Text(
                           foto['texto'],
                           textScaler: TextScaler.linear(_escalaTexto),
-                          style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                          style: Theme.of(context).textTheme.bodyMedium,
                           textAlign: TextAlign.center,
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1682,36 +1816,49 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: Row(
-                      children: [
-                        IconButton.filled(
-                          tooltip: 'Editar descripción de la foto',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            foregroundColor: Colors.white,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Opciones de la foto',
+                      icon: const Icon(Icons.more_horiz),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withValues(alpha: 0.55),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(48, 48),
+                        fixedSize: const Size(48, 48),
+                      ),
+                      onSelected: (accion) {
+                        switch (accion) {
+                          case 'editar':
+                            _editarFotoAGaleria(foto, index);
+                          case 'mover':
+                            _moverFoto(desde: 'galeria', indice: index);
+                          case 'eliminar':
+                            _eliminarFotoAGaleria(foto, index);
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'editar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.notes_rounded),
+                            title: Text('Editar descripción'),
                           ),
-                          icon: const Icon(Icons.notes_rounded, size: 20),
-                          onPressed: () => _editarFotoAGaleria(foto, index),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: 'Mover a estudios',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            foregroundColor: Colors.white,
+                        PopupMenuItem(
+                          value: 'mover',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.drive_file_move_outlined),
+                            title: Text('Mover a estudios'),
                           ),
-                          icon: const Icon(Icons.drive_file_move_outlined, size: 20),
-                          onPressed: () => _moverFoto(desde: 'galeria', indice: index),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: 'Eliminar foto',
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            foregroundColor: Colors.white,
+                        PopupMenuItem(
+                          value: 'eliminar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Eliminar foto'),
                           ),
-                          icon: const Icon(Icons.delete, size: 20),
-                          onPressed: () => _eliminarFotoAGaleria(foto, index),
                         ),
                       ],
                     ),
@@ -1724,9 +1871,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Positioned(
             left: 8,
             child: IconButton.filled(
+              tooltip: 'Foto anterior',
               style: IconButton.styleFrom(
                 backgroundColor: Colors.black.withValues(alpha: 0.5),
                 foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
               ),
               icon: const Icon(Icons.arrow_back),
               onPressed: _moverIzquierda,
@@ -1736,9 +1885,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Positioned(
             right: 8,
             child: IconButton.filled(
+              tooltip: 'Foto siguiente',
               style: IconButton.styleFrom(
                 backgroundColor: Colors.black.withValues(alpha: 0.5),
                 foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
               ),
               icon: const Icon(Icons.arrow_forward),
               onPressed: _moverDerecha,
@@ -1785,6 +1936,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         // --- SECCIÓN: Datos del perro y auto-archivado de tratamientos vencidos ---
         final perro = _procesarAutoArchivado(snapshot.data!);
         final galeria = perro.galeria;
+        _prepararHojaDosis(perro);
 
         return Scaffold(
           // --- SECCIÓN: AppBar (título y acciones de galería/accesibilidad) ---
@@ -1820,41 +1972,51 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     onPressed: _agregarFotoAGaleria,
                   ),
                 ],
-                PopupMenuButton<void>(
+                PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Más opciones',
+                  onSelected: (accion) async {
+                    switch (accion) {
+                      case 'achicar':
+                        setState(() => _escalaTexto -= 0.15);
+                      case 'agrandar':
+                        setState(() => _escalaTexto += 0.15);
+                      case 'compartir':
+                        await Future<void>.delayed(Duration.zero);
+                        if (!mounted) return;
+                        await _compartirFicha(perro);
+                      case 'imagen':
+                        await Future<void>.delayed(Duration.zero);
+                        if (!context.mounted) return;
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => PantallaTarjetaPerro(perro: perro)),
+                        );
+                      case 'reordenar':
+                        _activarModoReordenar(perro);
+                    }
+                  },
                   itemBuilder: (context) => [
-                    PopupMenuItem<void>(
+                    PopupMenuItem<String>(
+                      value: 'achicar',
                       enabled: _escalaTexto > 1.0,
-                      onTap: () => setState(() => _escalaTexto -= 0.15),
-                      child: const ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.zoom_out),
-                        title: Text('Achicar texto'),
-                      ),
+                      child: const _OpcionMenu(icono: Icons.zoom_out, texto: 'Achicar texto'),
                     ),
-                    PopupMenuItem<void>(
-                      onTap: () => setState(() => _escalaTexto += 0.15),
-                      child: const ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.zoom_in),
-                        title: Text('Agrandar texto'),
-                      ),
+                    const PopupMenuItem<String>(
+                      value: 'agrandar',
+                      child: _OpcionMenu(icono: Icons.zoom_in, texto: 'Agrandar texto'),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'compartir',
+                      child: _OpcionMenu(icono: Icons.picture_as_pdf_outlined, texto: 'Compartir ficha (PDF)'),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'imagen',
+                      child: _OpcionMenu(icono: Icons.image_outlined, texto: 'Compartir como imagen'),
                     ),
                     if (!esInvitado && !_modoReordenar)
-                      PopupMenuItem<void>(
-                        onTap: () async {
-                          if (_modoReordenar) {
-                            await _confirmarOrdenFotos();
-                          } else {
-                            _activarModoReordenar(perro);
-                          }
-                        },
-                        child: const ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.reorder),
-                          title: Text('Reordenar fotos'),
-                        ),
+                      const PopupMenuItem<String>(
+                        value: 'reordenar',
+                        child: _OpcionMenu(icono: Icons.reorder, texto: 'Reordenar fotos'),
                       ),
                   ],
                 ),
@@ -1910,8 +2072,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                       SizedBox(
                         height: 220,
                         child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            color: AppColors.superficie,
+                          decoration: BoxDecoration(
+                            color: context.paleta.superficie,
                             borderRadius: BorderRadius.all(Radius.circular(24)),
                             boxShadow: [
                               BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
@@ -1972,9 +2134,9 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.rellenoInput,
+          color: context.paleta.relleno,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.bordeTarjeta),
+          border: Border.all(color: context.paleta.borde),
         ),
         child: Row(
           children: [
@@ -2052,8 +2214,8 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                       rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.navy),
                     ),
                     daysOfWeekStyle: DaysOfWeekStyle(
-                      weekdayStyle: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ?? const TextStyle(),
-                      weekendStyle: textTheme.labelMedium?.copyWith(color: AppColors.textoSecundario) ?? const TextStyle(),
+                      weekdayStyle: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ?? const TextStyle(),
+                      weekendStyle: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ?? const TextStyle(),
                     ),
                     calendarStyle: CalendarStyle(
                       selectedDecoration: const BoxDecoration(
@@ -2118,7 +2280,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                   const SizedBox(height: 8),
                   Text(
                     'No hay registros médicos para este día',
-                    style: textTheme.bodyMedium?.copyWith(color: AppColors.textoSecundario),
+                    style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -2302,6 +2464,24 @@ class _DialogoEditarEgresoState extends State<_DialogoEditarEgreso> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         FilledButton(onPressed: _guardar, child: const Text('Guardar')),
+      ],
+    );
+  }
+}
+
+class _OpcionMenu extends StatelessWidget {
+  final IconData icono;
+  final String texto;
+
+  const _OpcionMenu({required this.icono, required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icono, size: 22, color: context.paleta.texto),
+        const SizedBox(width: 12),
+        Expanded(child: Text(texto)),
       ],
     );
   }
