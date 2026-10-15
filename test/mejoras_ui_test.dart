@@ -9,6 +9,7 @@ import 'package:fichas_refugio/services/exportar_ficha.dart';
 import 'package:fichas_refugio/theme/app_colors.dart';
 import 'package:fichas_refugio/theme/app_theme.dart';
 import 'package:fichas_refugio/theme/encabezado_seccion.dart';
+import 'package:fichas_refugio/views/ficha_detalle_perro.dart';
 import 'package:fichas_refugio/views/formulario_perro.dart';
 import 'package:fichas_refugio/views/pantalla_menu.dart';
 import 'package:fichas_refugio/views/pantalla_perros.dart';
@@ -517,6 +518,70 @@ void main() {
       PerroController.formatearCastracion(PerroModel(id: 'h2', nombre: 'Uma', sexo: 'hembra', castrado: false)),
       'No castrada',
     );
+  });
+
+  test('el resumen de filtros nombra lo activo y cuenta el resultado', () {
+    expect(resumenFiltros(const [], 4), isNull);
+    expect(resumenFiltros(const ['En casa'], 4), 'En casa (4)');
+    expect(resumenFiltros(const ['En casa', 'Hembra'], 2), 'En casa · Hembra (2)');
+  });
+
+  test('la edad se ordena del más joven al más viejo', () {
+    final anio = DateTime.now().year;
+    PerroModel perro({required String id, required int edad, int meses = 0}) {
+      return PerroModel(
+        id: id,
+        nombre: id,
+        edad: edad,
+        meses: meses,
+        edadAnioBase: anio,
+      );
+    }
+
+    final cachorro = perro(id: 'c', edad: 0, meses: 4);
+    final joven = perro(id: 'j', edad: 2, meses: 1);
+    final mayor = perro(id: 'm', edad: 2, meses: 8);
+
+    expect(compararEdadListado(cachorro, joven), lessThan(0));
+    expect(compararEdadListado(joven, mayor), lessThan(0));
+    expect(compararEdadListado(mayor, cachorro), greaterThan(0));
+  });
+
+  testWidgets('el visor muestra la descripción y oculta la que no dice nada', (tester) async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    );
+    Future<void> mostrar(String? descripcion) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VisorFoto(
+              url: 'https://example.invalid/foto.jpg',
+              descripcion: descripcion,
+              imagen: MemoryImage(png),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await mostrar('Radiografía de cadera');
+    expect(find.text('Radiografía de cadera'), findsOneWidget);
+
+    await mostrar(null);
+    expect(find.text('Radiografía de cadera'), findsNothing);
+
+    await mostrar('Sin descripción');
+    expect(find.text('Sin descripción'), findsNothing);
+    expect(find.text('Radiografía de cadera'), findsNothing);
+  });
+
+  test('la descripción visible prefiere el texto y descarta el marcador vacío', () {
+    expect(descripcionFotoVisible('En el parque', 'otra'), 'En el parque');
+    expect(descripcionFotoVisible('  ', 'Radiografía'), 'Radiografía');
+    expect(descripcionFotoVisible('Sin descripción', 'Radiografía'), 'Radiografía');
+    expect(descripcionFotoVisible('Sin descripción'), isNull);
+    expect(descripcionFotoVisible(null, '  '), isNull);
   });
 
   test('el botón de nuevo ingreso cambia de color en oscuro', () {

@@ -32,6 +32,75 @@ import '../theme/recordatorio_tipos.dart';
 import 'formulario_perro.dart';
 import 'pantalla_tarjeta_perro.dart';
 
+/// Texto que se lee al abrir la foto. Vacío y «Sin descripción» no se muestran.
+String? descripcionFotoVisible(String? texto, [String? alternativa]) {
+  for (final candidato in [texto, alternativa]) {
+    final limpio = candidato?.trim() ?? '';
+    if (limpio.isNotEmpty && limpio != 'Sin descripción') return limpio;
+  }
+  return null;
+}
+
+/// Foto a pantalla completa, con la descripción debajo y fuera del zoom.
+class VisorFoto extends StatelessWidget {
+  final String url;
+  final String? descripcion;
+
+  /// Imagen ya cargada. La usa el test para no salir a la red.
+  final ImageProvider? imagen;
+
+  const VisorFoto({super.key, required this.url, this.descripcion, this.imagen});
+
+  @override
+  Widget build(BuildContext context) {
+    final pie = descripcionFotoVisible(descripcion);
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                clipBehavior: Clip.none,
+                boundaryMargin: const EdgeInsets.all(double.infinity),
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: Image(
+                    image: imagen ?? NetworkImage(url),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        if (pie != null)
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.3),
+            child: ColoredBox(
+              color: const Color(0xB8000000),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: SafeArea(
+                  top: false,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      pie,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class FichaDetallePerro extends StatefulWidget {
   final String idDocumento;
   final DosisAvisada? dosisAvisada;
@@ -217,7 +286,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   void _moverIzquierda() => _controladorCarrusel.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
   void _moverDerecha() => _controladorCarrusel.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
 
-  void _abrirFotoPantallaCompleta(String url) {
+  void _abrirFotoPantallaCompleta(String url, {String? descripcion}) {
     bool procesando = false;
 
     Navigator.push(
@@ -252,21 +321,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                       ),
               ],
             ),
-            body: LayoutBuilder(
-              builder: (context, constraints) {
-                return InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  clipBehavior: Clip.none,
-                  boundaryMargin: const EdgeInsets.all(double.infinity),
-                  child: SizedBox(
-                    width: constraints.maxWidth,
-                    height: constraints.maxHeight,
-                    child: Image.network(url, fit: BoxFit.contain),
-                  ),
-                );
-              },
-            ),
+            body: VisorFoto(url: url, descripcion: descripcion),
           ),
         ),
       ),
@@ -1576,7 +1631,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               clipBehavior: Clip.antiAlias,
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
-                onTap: url.isEmpty ? null : () => _abrirFotoPantallaCompleta(url),
+                onTap: url.isEmpty
+                    ? null
+                    : () => _abrirFotoPantallaCompleta(
+                          url,
+                          descripcion: descripcionFotoVisible(
+                            foto['texto']?.toString(),
+                            foto['descripcion']?.toString(),
+                          ),
+                        ),
                 child: url.isEmpty
                     ? Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave)
                     : Image.network(
@@ -1783,7 +1846,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         child: Center(
                           child: GestureDetector(
-                            onTap: () => _abrirFotoPantallaCompleta(foto['url']?.toString() ?? ''),
+                            onTap: () => _abrirFotoPantallaCompleta(
+                              foto['url']?.toString() ?? '',
+                              descripcion: descripcionFotoVisible(
+                                foto['texto']?.toString(),
+                                foto['descripcion']?.toString(),
+                              ),
+                            ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: Image.network(foto['url'] ?? '', fit: BoxFit.contain),

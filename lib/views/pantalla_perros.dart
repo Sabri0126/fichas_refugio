@@ -43,6 +43,21 @@ IconData iconoVista(ModoVista modo) {
   };
 }
 
+/// «En casa (4)» o «En casa · Hembra (2)». Null si no hay filtros.
+String? resumenFiltros(List<String> etiquetas, int cantidad) {
+  if (etiquetas.isEmpty) return null;
+  return '${etiquetas.join(' · ')} ($cantidad)';
+}
+
+/// Del más joven al más viejo: primero los años, después los meses.
+int compararEdadListado(PerroModel a, PerroModel b) {
+  final porEdad = PerroController.calcularEdadEstimada(a).compareTo(
+    PerroController.calcularEdadEstimada(b),
+  );
+  if (porEdad != 0) return porEdad;
+  return a.meses.compareTo(b.meses);
+}
+
 enum SeccionPerros { activos, difuntos, egresados }
 
 /// Hay un diario en curso: activo, sin pausa y todavía no finalizado.
@@ -693,15 +708,20 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     );
   }
 
-  bool get _hayFiltrosExtra {
-    final ubicacionActiva = widget.seccion == SeccionPerros.egresados
-        ? _filtroEgreso != 'Todos'
-        : _filtroUbicacion != 'Todos';
-    return ubicacionActiva ||
-        _filtroSexo != 'Todos' ||
-        _filtroCastrado != 'Todos' ||
-        _soloConTratamiento ||
-        _soloTratamientoActivo;
+  bool get _hayFiltrosExtra => _etiquetasFiltro().isNotEmpty;
+
+  List<String> _etiquetasFiltro() {
+    final etiquetas = <String>[];
+    if (widget.seccion == SeccionPerros.egresados) {
+      if (_filtroEgreso != 'Todos') etiquetas.add(_filtroEgreso);
+    } else if (_filtroUbicacion != 'Todos') {
+      etiquetas.add(_filtroUbicacion);
+    }
+    if (_filtroSexo != 'Todos') etiquetas.add(_filtroSexo);
+    if (_filtroCastrado != 'Todos') etiquetas.add(_filtroCastrado);
+    if (_soloConTratamiento) etiquetas.add('Con dosis pendiente hoy');
+    if (_soloTratamientoActivo) etiquetas.add('Con tratamiento activo');
+    return etiquetas;
   }
 
   Future<void> _abrirFiltros() async {
@@ -868,11 +888,6 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             }
           }).toList();
 
-          final totalEnCasa = perrosPorEstado.where((p) => p.enCasa).length;
-          final totalRefugio = perrosPorEstado.length - totalEnCasa;
-          final totalAdoptados = perrosPorEstado.where((p) => p.motivoEgreso == 'adopcion').length;
-          final totalFamilia = perrosPorEstado.where((p) => p.motivoEgreso == 'familia').length;
-
           final perros = perrosPorEstado.where((perro) {
             if (widget.seccion == SeccionPerros.egresados) {
               if (_filtroEgreso == 'Adoptados') return perro.motivoEgreso == 'adopcion';
@@ -902,11 +917,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               case OrdenListado.nombre:
                 return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
               case OrdenListado.edad:
-                final porEdad = PerroController.calcularEdadEstimada(b).compareTo(
-                  PerroController.calcularEdadEstimada(a),
-                );
-                if (porEdad != 0) return porEdad;
-                return b.meses.compareTo(a.meses);
+                return compararEdadListado(a, b);
               case OrdenListado.antiguo:
                 return _compararFechaDesc(b.fechaIngreso, a.fechaIngreso);
               case OrdenListado.reciente:
@@ -918,12 +929,14 @@ class _PantallaPerrosState extends State<PantallaPerros> {
             }
           });
 
-          if (perros.isEmpty) {
-            return _estadoVacio(
-              _textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : _textoVacioSeccion(),
-              icono: _textoBusqueda.isNotEmpty ? Icons.search_off : Icons.pets,
-            );
-          }
+          final resumen = resumenFiltros(_etiquetasFiltro(), perros.length);
+          final vacio = perros.isEmpty
+              ? _estadoVacio(
+                  _textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : _textoVacioSeccion(),
+                  icono: _textoBusqueda.isNotEmpty ? Icons.search_off : Icons.pets,
+                )
+              : null;
+          if (vacio != null && resumen == null) return vacio;
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -936,32 +949,31 @@ class _PantallaPerrosState extends State<PantallaPerros> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.seccion == SeccionPerros.egresados
-                                ? 'Adoptados ($totalAdoptados) | Reencontrados ($totalFamilia)'
-                                : 'Perritos del refugio ($totalRefugio) | En casa ($totalEnCasa)',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
+                  if (resumen != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              resumen,
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
+                            ),
                           ),
-                        ),
-                        if (_hayFiltrosExtra)
                           TextButton(
                             onPressed: _quitarFiltros,
                             child: const Text('Quitar filtros'),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                   Expanded(
-                    child: switch (_modoVista) {
-                      ModoVista.grande => _grillaGrande(perros, crossAxisCount),
-                      ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth),
-                      ModoVista.lista => _vistaLista(perros),
-                    },
+                    child: vacio ??
+                        switch (_modoVista) {
+                          ModoVista.grande => _grillaGrande(perros, crossAxisCount),
+                          ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth),
+                          ModoVista.lista => _vistaLista(perros),
+                        },
                   ),
                 ],
               );
