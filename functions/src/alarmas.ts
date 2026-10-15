@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 export const ZONA = 'America/Argentina/Buenos_Aires';
 
-export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'legacy';
+export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'seguimiento' | 'legacy';
 
 export interface Alarma {
   clave: string;
@@ -36,12 +36,23 @@ export interface RecordatorioEntrada {
   fecha_hora?: unknown;
 }
 
+export interface SeguimientoEntrada {
+  id?: string;
+  motivo?: string;
+  detalle?: string;
+  hora?: string;
+  fecha_inicio?: unknown;
+  dias_duracion?: number | string;
+  activo?: boolean;
+}
+
 export interface PerroEntrada {
   id?: string;
   estado?: string;
   nombre?: string;
   tratamientos?: unknown;
   recordatorios?: unknown;
+  seguimientos?: unknown;
 }
 
 interface Hora {
@@ -104,6 +115,10 @@ export function calcularAlarmas(perro: PerroEntrada, desde: DateTime, hasta: Dat
   for (const recordatorio of listaDe<RecordatorioEntrada>(perro.recordatorios)) {
     const agendado = alarmaRecordatorio(recordatorio, idPerro, nombre, inicioVentana, finVentana);
     if (agendado) alarmas.push(agendado);
+  }
+
+  for (const seguimiento of listaDe<SeguimientoEntrada>(perro.seguimientos)) {
+    alarmas.push(...alarmaSeguimiento(seguimiento, idPerro, nombre, inicioVentana, finVentana));
   }
 
   alarmas.sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis() || a.clave.localeCompare(b.clave));
@@ -212,6 +227,80 @@ function alarmaLegacy(
     idPerro,
     fecha,
   };
+}
+
+function alarmaSeguimiento(
+  seguimiento: SeguimientoEntrada,
+  idPerro: string,
+  nombre: string,
+  desde: DateTime,
+  hasta: DateTime,
+): Alarma[] {
+  if (seguimiento.activo !== true) return [];
+  const idItem = seguimiento.id?.toString() ?? '';
+  if (idItem === '') return [];
+  const hora = horaValida(seguimiento.hora);
+  if (!hora) return [];
+  const inicio = diaDe(seguimiento.fecha_inicio);
+  if (!inicio) return [];
+
+  const dias = leerDias(seguimiento.dias_duracion);
+  const ultimoDia = dias > 0 ? inicio.plus({ days: dias - 1 }) : null;
+  const motivo = seguimiento.motivo?.toString() ?? '';
+  const detalle = seguimiento.detalle?.toString().trim() ?? '';
+  const alarmas: Alarma[] = [];
+
+  for (const dia of diasDeVentana(desde, hasta)) {
+    if (dia < inicio) continue;
+    if (ultimoDia && dia > ultimoDia) continue;
+    const ocurrencia = dia.set({
+      hour: hora.hora,
+      minute: hora.minuto,
+      second: 0,
+      millisecond: 0,
+    });
+    if (!enVentana(ocurrencia, desde, hasta)) continue;
+
+    const esUltimo = ultimoDia != null && dia.hasSame(ultimoDia, 'day');
+    alarmas.push({
+      clave: armarClave(idPerro, 'seguimiento', idItem, ocurrencia),
+      tipo: 'seguimiento',
+      titulo: `Seguimiento de ${nombre}`,
+      cuerpo: cuerpoSeguimiento(motivo, nombre, detalle, esUltimo),
+      categoria: 'seguimiento',
+      idPerro,
+      fecha: ocurrencia,
+    });
+  }
+
+  return alarmas;
+}
+
+function cuerpoSeguimiento(motivo: string, nombre: string, detalle: string, esUltimo: boolean): string {
+  const frase = fraseSeguimiento(motivo, nombre);
+  const limpio = detalle.replace(/\.+$/, '');
+  const base = limpio === '' ? frase : `${frase.slice(0, -1)} (${limpio}).`;
+  if (!esUltimo) return base;
+  return `${base} Es el último día de seguimiento: si no mejora, extendelo o consultá al veterinario.`;
+}
+
+function fraseSeguimiento(motivo: string, nombre: string): string {
+  switch (motivo) {
+    case 'ojo':
+      return `Recordá revisarle el ojo a ${nombre}.`;
+    case 'herida':
+      return `No olvides controlar la lastimadura de ${nombre}.`;
+    case 'animo':
+      return `Supervisá el estado de ánimo de ${nombre}.`;
+    case 'pata':
+      return `Fijate cómo apoya la pata ${nombre}.`;
+    case 'una':
+      return `Chequeá la uña de ${nombre}.`;
+    case 'comportamiento':
+      return `Recordá observar el comportamiento de ${nombre}.`;
+    default:
+      return `Recordá hacerle el seguimiento a ${nombre}.`;
+  }
 }
 
 function alarmaRecordatorio(

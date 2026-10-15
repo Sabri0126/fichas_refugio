@@ -16,12 +16,14 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
+import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/dosis_avisada.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
 import '../models/recordatorio_model.dart';
+import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
@@ -29,6 +31,7 @@ import '../theme/encabezado_seccion.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
+import '../theme/seguimiento_tipos.dart';
 import 'formulario_perro.dart';
 import 'pantalla_tarjeta_perro.dart';
 
@@ -115,6 +118,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
+  final SeguimientoController _seguimientoController = SeguimientoController();
+  final Set<String> _cerrandoSeguimiento = {};
   final PageController _controladorCarrusel = PageController();
   final ImagePicker _picker = ImagePicker();
   bool _subiendoFoto = false;
@@ -1173,6 +1178,102 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
+  List<Widget> _seguimientosEnCurso(PerroModel perro) {
+    final vigentes = _seguimientoController.vigentes(perro.seguimientos);
+    if (vigentes.isEmpty) return const [];
+    return [
+      const SizedBox(height: 12),
+      _tarjetaSeccion(
+        titulo: 'En seguimiento',
+        icono: Icons.visibility_outlined,
+        children: [
+          for (var i = 0; i < vigentes.length; i++) ...[
+            _filaSeguimientoFicha(vigentes[i]),
+            if (i != vigentes.length - 1) const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    ];
+  }
+
+  Widget _filaSeguimientoFicha(SeguimientoModel seguimiento) {
+    final visual = SeguimientoTipos.de(seguimiento.motivo);
+    final detalle = seguimiento.detalle.trim();
+    final plazo = _seguimientoController.describirPlazo(seguimiento);
+    final textTheme = Theme.of(context).textTheme;
+    final cerrando = _cerrandoSeguimiento.contains(seguimiento.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: visual.color.withValues(alpha: 0.12),
+              child: Icon(visual.icono, size: 20, color: visual.color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    visual.etiqueta,
+                    textScaler: _escala,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleMedium,
+                  ),
+                  Text(
+                    detalle.isEmpty ? '$plazo · ${seguimiento.hora} h' : '$plazo · ${seguimiento.hora} h · $detalle',
+                    textScaler: _escala,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: cerrando ? null : () => _cerrarSeguimiento(seguimiento),
+            child: const Text('Cerrar seguimiento'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _cerrarSeguimiento(SeguimientoModel seguimiento) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Cerrar el seguimiento?'),
+        content: const Text('Deja de avisar por este motivo. Podés crear uno nuevo si hace falta.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Cerrar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    setState(() => _cerrandoSeguimiento.add(seguimiento.id));
+    try {
+      await _perroController.cerrarSeguimiento(widget.idDocumento, seguimiento.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cerrar el seguimiento')),
+      );
+    } finally {
+      if (mounted) setState(() => _cerrandoSeguimiento.remove(seguimiento.id));
+    }
+  }
+
   List<Widget> _proximosRecordatorios(PerroModel perro) {
     final proximos = _recordatorioController.proximos(perro.recordatorios);
     if (proximos.isEmpty) return const [];
@@ -1576,7 +1677,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           const SizedBox(height: 12),
           tratamientos,
         ],
-        if (!esInvitado) ..._proximosRecordatorios(perro),
+        if (!esInvitado) ...[
+          ..._seguimientosEnCurso(perro),
+          ..._proximosRecordatorios(perro),
+        ],
         const SizedBox(height: 12),
         _buildEstudios(perro, esInvitado),
         const SizedBox(height: 24),

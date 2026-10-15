@@ -222,6 +222,138 @@ describe('calcularAlarmas', () => {
     expect(alarmas).toHaveLength(0);
   });
 
+  it('avisa el seguimiento a la hora elegida, dentro de los días, y marca el último', () => {
+    const base = perro({
+      tratamientos: [],
+      seguimientos: [
+        {
+          id: 'ojo-1',
+          motivo: 'ojo',
+          detalle: 'ojo izquierdo',
+          hora: '18:00',
+          fecha_inicio: ba('2026-01-10T12:00:00'),
+          dias_duracion: 3,
+          activo: true,
+        },
+      ],
+    });
+
+    const primero = calcularAlarmas(base, ba('2026-01-10T17:00:00'), ba('2026-01-10T19:00:00'));
+    expect(primero).toHaveLength(1);
+    expect(primero[0].tipo).toBe('seguimiento');
+    expect(primero[0].categoria).toBe('seguimiento');
+    expect(primero[0].titulo).toBe('Seguimiento de Canelo');
+    expect(primero[0].cuerpo).toBe('Recordá revisarle el ojo a Canelo (ojo izquierdo).');
+    expect(primero[0].fecha.setZone(ZONA).toFormat('yyyy-MM-dd HH:mm')).toBe('2026-01-10 18:00');
+    expect(primero[0].clave).toBe('canelo_seguimiento_ojo-1_202601101800');
+    expect(calcularAlarmas(base, ba('2026-01-10T17:00:00'), ba('2026-01-10T19:00:00'))[0].clave).toBe(primero[0].clave);
+
+    const fuera = calcularAlarmas(base, ba('2026-01-09T17:00:00'), ba('2026-01-09T19:00:00'));
+    expect(fuera).toHaveLength(0);
+
+    const ultimo = calcularAlarmas(base, ba('2026-01-12T17:00:00'), ba('2026-01-12T19:00:00'));
+    expect(ultimo[0].cuerpo).toBe(
+      'Recordá revisarle el ojo a Canelo (ojo izquierdo). Es el último día de seguimiento: si no mejora, extendelo o consultá al veterinario.',
+    );
+
+    const despues = calcularAlarmas(base, ba('2026-01-13T17:00:00'), ba('2026-01-13T19:00:00'));
+    expect(despues).toHaveLength(0);
+  });
+
+  it('un seguimiento sin fin sigue, y uno cerrado o sin id no avisa', () => {
+    const ventana = [ba('2027-06-01T17:00:00'), ba('2027-06-01T19:00:00')] as const;
+    const abierto = calcularAlarmas(
+      perro({
+        tratamientos: [],
+        seguimientos: [
+          {
+            id: 'pata-1',
+            motivo: 'pata',
+            detalle: '',
+            hora: '18:00',
+            fecha_inicio: ba('2026-01-10T12:00:00'),
+            dias_duracion: 0,
+            activo: true,
+          },
+        ],
+      }),
+      ...ventana,
+    );
+    expect(abierto[0].cuerpo).toBe('Fijate cómo apoya la pata Canelo.');
+
+    const cerrado = calcularAlarmas(
+      perro({
+        tratamientos: [],
+        seguimientos: [
+          {
+            id: 'pata-1',
+            motivo: 'pata',
+            hora: '18:00',
+            fecha_inicio: ba('2026-01-10T12:00:00'),
+            dias_duracion: 0,
+            activo: false,
+          },
+        ],
+      }),
+      ...ventana,
+    );
+    expect(cerrado).toHaveLength(0);
+
+    const sinId = calcularAlarmas(
+      perro({
+        tratamientos: [],
+        seguimientos: [
+          {
+            motivo: 'una',
+            hora: '18:00',
+            fecha_inicio: ba('2026-01-10T12:00:00'),
+            dias_duracion: 0,
+            activo: true,
+          },
+        ],
+      }),
+      ...ventana,
+    );
+    expect(sinId).toHaveLength(0);
+  });
+
+  it('arma la frase según el motivo y no repite la clave entre seguimientos', () => {
+    const frases: [string, string][] = [
+      ['ojo', 'Recordá revisarle el ojo a Canelo.'],
+      ['herida', 'No olvides controlar la lastimadura de Canelo.'],
+      ['animo', 'Supervisá el estado de ánimo de Canelo.'],
+      ['pata', 'Fijate cómo apoya la pata Canelo.'],
+      ['una', 'Chequeá la uña de Canelo.'],
+      ['comportamiento', 'Recordá observar el comportamiento de Canelo.'],
+      ['otro', 'Recordá hacerle el seguimiento a Canelo.'],
+    ];
+    const desde = ba('2026-01-10T17:00:00');
+    const hasta = ba('2026-01-10T19:00:00');
+    const claves = new Set<string>();
+    for (const [motivo, cuerpo] of frases) {
+      const alarmas = calcularAlarmas(
+        perro({
+          tratamientos: [],
+          seguimientos: [
+            {
+              id: motivo,
+              motivo,
+              hora: '18:00',
+              fecha_inicio: ba('2026-01-10T08:00:00'),
+              dias_duracion: 5,
+              activo: true,
+            },
+          ],
+        }),
+        desde,
+        hasta,
+      );
+      expect(alarmas[0].cuerpo).toBe(cuerpo);
+      claves.add(alarmas[0].clave);
+    }
+    expect(claves.size).toBe(frases.length);
+  });
+
   it('la alarma diaria trae el tratamiento y el día', () => {
     const alarmas = calcularAlarmas(perro(), ba('2026-01-10T08:00:00'), ba('2026-01-10T10:00:00'));
     expect(alarmas[0].idTratamiento).toBe('doxi');

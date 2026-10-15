@@ -202,6 +202,30 @@ class PerroController {
     return null;
   }
 
+  /// Pone `activo` en false en el seguimiento indicado, sin tocar el resto del array.
+  Future<void> cerrarSeguimiento(String idPerro, String idSeguimiento) async {
+    final ref = _perrosRef.doc(idPerro);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      if (data == null) return;
+      final crudos = data['seguimientos'];
+      if (crudos is! List) return;
+      var huboCambio = false;
+      final actualizados = crudos.map((item) {
+        if (item is! Map) return item;
+        final mapa = Map<String, dynamic>.from(item);
+        if (mapa['id']?.toString() == idSeguimiento && mapa['activo'] == true) {
+          mapa['activo'] = false;
+          huboCambio = true;
+        }
+        return mapa;
+      }).toList();
+      if (!huboCambio) return;
+      tx.update(ref, {'seguimientos': actualizados});
+    });
+  }
+
   /// Reemplaza o quita una entrada solo si sigue igual a [esperado].
   /// [nuevo] null la elimina. Escribe `[]` si no queda ninguna.
   Future<void> actualizarHistorialEgresos(

@@ -131,8 +131,14 @@ async function consultarOpenMeteo(latitud: number, longitud: number): Promise<un
   url.searchParams.set('longitude', String(longitud));
   url.searchParams.set('timezone', ZONA);
   url.searchParams.set('forecast_days', '2');
-  url.searchParams.set('hourly', 'temperature_2m,precipitation_probability,precipitation');
-  url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum');
+  url.searchParams.set(
+    'hourly',
+    'temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m',
+  );
+  url.searchParams.set(
+    'daily',
+    'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code,wind_speed_10m_max,wind_gusts_10m_max',
+  );
 
   let ultimo: unknown;
   for (let intento = 0; intento < 2; intento += 1) {

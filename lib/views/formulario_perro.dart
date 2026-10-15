@@ -11,17 +11,20 @@ import 'package:path_provider/path_provider.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
+import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
 import '../models/recordatorio_model.dart';
+import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
+import '../theme/seguimiento_tipos.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -37,6 +40,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
+  final SeguimientoController _seguimientoController = SeguimientoController();
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
@@ -68,6 +72,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final Set<String> _idsInicialesTratamientos = {};
   List<RecordatorioModel> _recordatorios = [];
   final Set<String> _idsInicialesRecordatorios = {};
+  List<SeguimientoModel> _seguimientos = [];
+  final Set<String> _idsInicialesSeguimientos = {};
 
   bool _hayCambios = false;
 
@@ -102,6 +108,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _recordatorios = List<RecordatorioModel>.from(perro.recordatorios);
       _idsInicialesRecordatorios.addAll(
         perro.recordatorios.map((recordatorio) => recordatorio.id).where((id) => id.isNotEmpty),
+      );
+      _seguimientos = List<SeguimientoModel>.from(perro.seguimientos);
+      _idsInicialesSeguimientos.addAll(
+        perro.seguimientos.map((seguimiento) => seguimiento.id).where((id) => id.isNotEmpty),
       );
       _historialEgresos = List<EgresoModel>.from(perro.historialEgresos);
 
@@ -494,6 +504,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
         var tratamientosAGuardar = _tratamientos;
         var recordatoriosAGuardar = _recordatorios;
+        var seguimientosAGuardar = _seguimientos;
         var altasConservadas = 0;
         final idDocumento = widget.idDocumento;
         if (idDocumento != null && idDocumento.isNotEmpty) {
@@ -515,10 +526,17 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 remoto: remoto.recordatorios,
                 idsIniciales: _idsInicialesRecordatorios,
               );
+              final seguimientosFusionados = SeguimientoController.fusionarAltasRemotas(
+                local: _seguimientos,
+                remoto: remoto.seguimientos,
+                idsIniciales: _idsInicialesSeguimientos,
+              );
               altasConservadas = (tratamientosFusionados.length - tratamientosAGuardar.length) +
-                  (recordatoriosFusionados.length - _recordatorios.length);
+                  (recordatoriosFusionados.length - _recordatorios.length) +
+                  (seguimientosFusionados.length - _seguimientos.length);
               tratamientosAGuardar = tratamientosFusionados;
               recordatoriosAGuardar = recordatoriosFusionados;
+              seguimientosAGuardar = seguimientosFusionados;
             }
           } catch (_) {}
         }
@@ -526,6 +544,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         if (_estado == 'inactivo') {
           tratamientosAGuardar = TratamientoController.pausarDiariosActivos(tratamientosAGuardar);
           recordatoriosAGuardar = RecordatorioController.cancelarPendientes(recordatoriosAGuardar);
+          seguimientosAGuardar = SeguimientoController.cerrarActivos(seguimientosAGuardar);
         }
 
         final perro = PerroModel(
@@ -564,6 +583,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           parientes: parientesNormalizados,
           tratamientos: tratamientosAGuardar,
           recordatorios: recordatoriosAGuardar,
+          seguimientos: seguimientosAGuardar,
         );
 
         await _perroController.guardarPerro(perro);
@@ -1134,6 +1154,317 @@ class _FormularioPerroState extends State<FormularioPerro> {
         const SnackBar(content: Text('No se pudo actualizar el estado del tratamiento')),
       );
     }
+  }
+
+  Widget _seccionSeguimientos() {
+    final vigentes = _seguimientoController.vigentes(_seguimientos);
+    final cerrados = _seguimientoController.cerrados(_seguimientos);
+    final textTheme = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _tituloSeccion('Seguimientos', vigentes.length, icono: Icons.visibility_outlined),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonalIcon(
+            onPressed: () => _mostrarDialogoSeguimiento(),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Agregar seguimiento'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Avisa todos los días a la hora elegida, hasta que pasen los días o lo cierres. Se guarda al tocar Guardar Cambios.',
+          style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+        ),
+        const SizedBox(height: 12),
+        if (vigentes.isEmpty && cerrados.isEmpty)
+          _estadoVacioSalud(Icons.visibility_off_outlined, 'No hay seguimientos.')
+        else ...[
+          if (vigentes.isNotEmpty)
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              clipBehavior: Clip.none,
+              child: Column(
+                children: [
+                  for (var n = 0; n < vigentes.length; n++)
+                    EntradaEscalonada(
+                      indice: n,
+                      child: _filaSeguimiento(_indiceSeguimiento(vigentes[n]), cerrado: false),
+                    ),
+                ],
+              ),
+            ),
+          if (cerrados.isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              shape: const Border(),
+              collapsedShape: const Border(),
+              collapsedIconColor: context.paleta.textoSuave,
+              iconColor: context.paleta.textoSuave,
+              title: Row(
+                children: [
+                  Icon(Icons.history_rounded, size: 20, color: context.paleta.textoSuave),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Cerrados (${cerrados.length})',
+                    style: textTheme.titleMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
+                ],
+              ),
+              children: [
+                for (var n = 0; n < cerrados.length; n++)
+                  _filaSeguimiento(_indiceSeguimiento(cerrados[n]), cerrado: true),
+              ],
+            ),
+        ],
+      ],
+    );
+  }
+
+  int _indiceSeguimiento(SeguimientoModel seguimiento) {
+    return _seguimientos.indexWhere((item) => item.id == seguimiento.id);
+  }
+
+  Widget _filaSeguimiento(int indice, {required bool cerrado}) {
+    final seguimiento = _seguimientos[indice];
+    final visual = SeguimientoTipos.de(seguimiento.motivo);
+    final textTheme = Theme.of(context).textTheme;
+    final plazo = _seguimientoController.describirPlazo(seguimiento);
+    final detalle = seguimiento.detalle.trim();
+    final subtitulo = detalle.isEmpty
+        ? '$plazo · ${seguimiento.hora} h'
+        : '$plazo · ${seguimiento.hora} h · $detalle';
+    final fila = Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: context.paleta.superficie,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: context.paleta.borde),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: () => _mostrarDialogoSeguimiento(indice: indice),
+          contentPadding: const EdgeInsets.only(left: 12, right: 4),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: visual.color.withValues(alpha: 0.12),
+            child: Icon(visual.icono, size: 20, color: visual.color),
+          ),
+          title: Text(
+            visual.etiqueta,
+            style: textTheme.titleMedium?.copyWith(fontSize: 15),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            subtitulo,
+            style: textTheme.bodyMedium?.copyWith(
+              color: context.paleta.textoSuave,
+              fontSize: 13,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Editar',
+                color: context.paleta.textoSuave,
+                onPressed: () => _mostrarDialogoSeguimiento(indice: indice),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Eliminar',
+                color: AppColors.error,
+                onPressed: () {
+                  setState(() {
+                    _seguimientos.removeAt(indice);
+                    _hayCambios = true;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!cerrado) return fila;
+    return AnimatedOpacity(
+      opacity: 0.65,
+      duration: const Duration(milliseconds: 200),
+      child: fila,
+    );
+  }
+
+  Future<void> _mostrarDialogoSeguimiento({int? indice}) async {
+    final actual = indice == null ? null : _seguimientos[indice];
+    var motivo = actual?.motivo ?? 'ojo';
+    if (SeguimientoTipos.de(motivo).motivo != motivo) motivo = 'otro';
+    final detalleController = TextEditingController(text: actual?.detalle ?? '');
+    var dias = actual?.diasDuracion ?? 5;
+    const duraciones = <(int, String)>[
+      (3, '3 días'),
+      (5, '5 días'),
+      (7, '7 días'),
+      (14, '14 días'),
+      (0, 'Hasta que lo cierre'),
+    ];
+    if (!duraciones.any((opcion) => opcion.$1 == dias)) dias = 5;
+    var hora = _horaDeTexto(actual?.hora ?? '18:00');
+
+    final guardado = await showDialog<SeguimientoModel>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final horaTexto =
+              '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+          return AlertDialog(
+            scrollable: true,
+            title: Text(actual == null ? 'Agregar seguimiento' : 'Editar seguimiento'),
+            content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final visual in SeguimientoTipos.todos)
+                        ChoiceChip(
+                          avatar: Icon(visual.icono, size: 18, color: visual.colorTexto),
+                          label: Text(visual.etiqueta),
+                          selected: motivo == visual.motivo,
+                          onSelected: (seleccionado) {
+                            if (!seleccionado) return;
+                            setDialogState(() => motivo = visual.motivo);
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: detalleController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Detalle (opcional)',
+                      helperText: 'Por ejemplo: ojo izquierdo irritado',
+                      helperMaxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Duración', style: Theme.of(ctx).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final opcion in duraciones)
+                        ChoiceChip(
+                          label: Text(opcion.$2),
+                          selected: dias == opcion.$1,
+                          onSelected: (seleccionado) {
+                            if (!seleccionado) return;
+                            setDialogState(() => dias = opcion.$1);
+                          },
+                        ),
+                    ],
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Hora del aviso: $horaTexto'),
+                    trailing: const Icon(Icons.access_time),
+                    onTap: () async {
+                      final seleccionada = await showTimePicker(
+                        context: ctx,
+                        initialTime: hora,
+                        builder: (BuildContext context, Widget? child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (seleccionada == null) return;
+                      setDialogState(() => hora = seleccionada);
+                    },
+                  ),
+                  Text(
+                    'Si la hora de hoy ya pasó, el primer aviso llega mañana.',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
+                  if (actual != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      actual.activo
+                          ? 'Los días se cuentan desde el día en que lo creaste.'
+                          : 'Está cerrado. Guardar no lo vuelve a abrir.',
+                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                    ),
+                  ],
+                ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  FocusScope.of(ctx).unfocus();
+                  final horaTextoGuardada =
+                      '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+                  final resultado = actual == null
+                      ? _seguimientoController.crear(
+                          motivo: motivo,
+                          detalle: detalleController.text,
+                          hora: horaTextoGuardada,
+                          fechaInicio: DateTime.now(),
+                          diasDuracion: dias,
+                        )
+                      : _seguimientoController.editar(
+                          actual,
+                          motivo: motivo,
+                          detalle: detalleController.text,
+                          hora: horaTextoGuardada,
+                          diasDuracion: dias,
+                        );
+                  Navigator.pop(ctx, resultado);
+                },
+                child: Text(actual == null ? 'Agregar' : 'Guardar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => detalleController.dispose());
+    if (!mounted || guardado == null) return;
+    setState(() {
+      if (indice == null) {
+        _seguimientos.add(guardado);
+      } else {
+        _seguimientos[indice] = guardado;
+      }
+      _hayCambios = true;
+    });
+  }
+
+  TimeOfDay _horaDeTexto(String hora) {
+    final partes = hora.split(':');
+    var horas = int.tryParse(partes[0]) ?? 18;
+    var minutos = partes.length > 1 ? int.tryParse(partes[1]) ?? 0 : 0;
+    if (horas < 0 || horas > 23) horas = 18;
+    if (minutos < 0 || minutos > 59) minutos = 0;
+    return TimeOfDay(hour: horas, minute: minutos);
   }
 
   Widget _seccionRecordatorios() {
@@ -2364,6 +2695,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       );
                     },
                   ),
+                  const SizedBox(height: 32),
+                  _seccionSeguimientos(),
                   const SizedBox(height: 32),
                   _seccionRecordatorios(),
                   const SizedBox(height: 32),

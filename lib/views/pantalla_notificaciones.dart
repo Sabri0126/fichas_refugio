@@ -243,11 +243,74 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         fondo: AppColors.pausado.withValues(alpha: 0.12),
       );
     }
+    if (item.categoria == 'seguimiento') {
+      return (
+        icono: Icons.visibility_outlined,
+        color: AppColors.terracota,
+        fondo: AppColors.terracota.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'llovizna') {
+      return (
+        icono: Icons.grain,
+        color: CategoryColors.higieneTexto,
+        fondo: CategoryColors.higieneTexto.withValues(alpha: 0.12),
+      );
+    }
     if (item.categoria == 'lluvia') {
       return (
         icono: Icons.umbrella_rounded,
         color: CategoryColors.unicoTexto,
         fondo: CategoryColors.unicoTexto.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'lluvia_fuerte') {
+      return (
+        icono: Icons.water_drop,
+        color: AppColors.navy,
+        fondo: AppColors.navy.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'tormenta') {
+      return (
+        icono: Icons.thunderstorm,
+        color: CategoryColors.eventoTexto,
+        fondo: CategoryColors.eventoTexto.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'granizo') {
+      return (
+        icono: Icons.storm,
+        color: AppColors.navy,
+        fondo: AppColors.navy.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'viento') {
+      return (
+        icono: Icons.air,
+        color: CategoryColors.diarioTexto,
+        fondo: CategoryColors.diarioTexto.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'nublado') {
+      return (
+        icono: Icons.cloud,
+        color: AppColors.textoSecundario,
+        fondo: AppColors.textoSecundario.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'frio_dia') {
+      return (
+        icono: Icons.thermostat,
+        color: CategoryColors.higieneTexto,
+        fondo: CategoryColors.higieneTexto.withValues(alpha: 0.12),
+      );
+    }
+    if (item.categoria == 'lindo') {
+      return (
+        icono: Icons.wb_sunny_outlined,
+        color: AppColors.activoTexto,
+        fondo: AppColors.activo.withValues(alpha: 0.12),
       );
     }
     if (item.categoria == 'calor') {

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'egreso_model.dart';
 import 'recordatorio_model.dart';
+import 'seguimiento_model.dart';
 import 'tratamiento_model.dart';
 
 /// Convierte un valor proveniente de Firestore (Timestamp, DateTime o String)
@@ -127,6 +128,9 @@ class PerroModel {
   /// Recordatorios agendados. La clave Firestore es `recordatorios`.
   final List<RecordatorioModel> recordatorios;
 
+  /// Observaciones diarias. La clave Firestore es `seguimientos`.
+  final List<SeguimientoModel> seguimientos;
+
   /// Crea una instancia inmutable de [PerroModel].
   PerroModel({
     required this.id,
@@ -154,6 +158,7 @@ class PerroModel {
     this.galeriaEstudios = const [],
     this.tratamientos = const [],
     this.recordatorios = const [],
+    this.seguimientos = const [],
   });
 
   /// Construye un [PerroModel] a partir del mapa `data` de un documento de
@@ -243,6 +248,7 @@ class PerroModel {
       galeriaEstudios: _fotosOpcionales(data['galeria_estudios']),
       tratamientos: tratamientos,
       recordatorios: recordatoriosDesdeValor(data['recordatorios']),
+      seguimientos: seguimientosDesdeValor(data['seguimientos']),
     );
   }
 
@@ -275,6 +281,7 @@ class PerroModel {
       'galeria_estudios': galeriaEstudios,
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
       'recordatorios': recordatorios.map((r) => r.toMap()).toList(),
+      'seguimientos': seguimientos.map((s) => s.toMap()).toList(),
     };
   }
 
@@ -283,6 +290,7 @@ class PerroModel {
   /// de tratamientos) sin reconstruir manualmente todos los campos.
   PerroModel copyWith({
     List<TratamientoModel>? tratamientos,
+    List<SeguimientoModel>? seguimientos,
     List<Map<String, dynamic>>? parientes,
     List<Map<String, dynamic>>? galeria,
     List<Map<String, dynamic>>? galeriaEstudios,
@@ -314,6 +322,7 @@ class PerroModel {
       galeriaEstudios: galeriaEstudios ?? this.galeriaEstudios,
       tratamientos: tratamientos ?? this.tratamientos,
       recordatorios: recordatorios,
+      seguimientos: seguimientos ?? this.seguimientos,
     );
   }
 }
