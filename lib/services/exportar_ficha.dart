@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
+import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/tratamiento_model.dart';
 
@@ -110,6 +111,7 @@ abstract final class ExportarFicha {
           _seccion('Historia', perro.historia.trim().isEmpty ? 'Sin historia cargada.' : perro.historia.trim()),
           if (_textoFamiliares(perro.parientes) case final familiares?) _seccion('Familiares', familiares),
           _seccion('Ficha médica', perro.fichaMedica.trim().isEmpty ? 'Sin ficha médica.' : perro.fichaMedica.trim()),
+          if (perro.pesos.isNotEmpty) _pesos(perro.pesos),
           if (perro.tratamientos.isNotEmpty) _tratamientos(perro.tratamientos),
           if (perro.recordatorios.isNotEmpty) _recordatorios(perro.recordatorios),
           if (perro.estado == 'egresado' || perro.historialEgresos.isNotEmpty) _egresos(perro),
@@ -223,6 +225,43 @@ abstract final class ExportarFicha {
         pw.Container(width: 36, height: 2, color: _terracota),
       ],
     );
+  }
+
+  static pw.Widget _pesos(List<PesoModel> pesos) {
+    final ordenados = [...pesos]..sort((a, b) => b.fecha.compareTo(a.fecha));
+    final ultimo = ordenados.first;
+    final aprox = ultimo.estimado ? ' (aprox.)' : '';
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 14),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _titulo('Peso'),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            'Último: ${formatearKg(ultimo.kg)} kg$aprox  ·  ${_fecha(ultimo.fecha)}',
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _texto),
+          ),
+          pw.SizedBox(height: 6),
+          for (final peso in ordenados)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 3),
+              child: pw.Text(
+                _lineaPeso(peso),
+                style: const pw.TextStyle(fontSize: 11, color: _texto),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _lineaPeso(PesoModel peso) {
+    final nota = peso.nota.trim();
+    final aprox = peso.estimado ? ' (aprox.)' : '';
+    final base = '${_fecha(peso.fecha)}   ${formatearKg(peso.kg)} kg$aprox';
+    if (nota.isEmpty) return base;
+    return '$base   $nota';
   }
 
   static pw.Widget _tratamientos(List<TratamientoModel> tratamientos) {

@@ -14,6 +14,8 @@ import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import 'ficha_detalle_perro.dart';
 
+enum _VistaCalendario { mes, dosSemanas, lista }
+
 class PantallaCalendarioGeneral extends StatefulWidget {
   const PantallaCalendarioGeneral({super.key});
 
@@ -34,8 +36,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
 
   DateTime _diaSeleccionado = DateTime.now();
   DateTime _diaEnfocado = DateTime.now();
-  CalendarFormat _formato = CalendarFormat.month;
+  _VistaCalendario _vista = _VistaCalendario.mes;
   String? _idPerroFiltro;
+  String? _filtroTipo;
+  final TextEditingController _busqueda = TextEditingController();
   final ScrollController _scrollCalendario = ScrollController();
   final ScrollController _scrollResumen = ScrollController();
 
@@ -49,6 +53,9 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     _primerDia = _fechaEnAnio(_hoy, -2);
     _ultimoDia = _fechaEnAnio(_hoy, 1);
     _localeListo = initializeDateFormatting('es_ES');
+    _busqueda.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   DateTime _fechaEnAnio(DateTime base, int deltaAnios) {
@@ -63,6 +70,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
 
   @override
   void dispose() {
+    _busqueda.dispose();
     _scrollCalendario.dispose();
     _scrollResumen.dispose();
     super.dispose();
@@ -72,12 +80,14 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     setState(() {
       _diaSeleccionado = _hoy;
       _diaEnfocado = _hoy;
+      if (_vista == _VistaCalendario.lista) _vista = _VistaCalendario.mes;
     });
   }
 
   void _cambiarFormato(CalendarFormat formato) {
-    if (_formato == formato) return;
-    setState(() => _formato = formato);
+    final vista = formato == CalendarFormat.twoWeeks ? _VistaCalendario.dosSemanas : _VistaCalendario.mes;
+    if (_vista == vista) return;
+    setState(() => _vista = vista);
   }
 
   String _capitalizar(String texto) {
@@ -160,6 +170,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                         return const Center(child: CircularProgressIndicator());
                       }
                       final filtroPerro = _filtroPerro(activos, filtro);
+                      final esLista = _vista == _VistaCalendario.lista;
                       if (!ancho) {
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -168,12 +179,40 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                             const SizedBox(height: 12),
                             _selectorFormato(),
                             const SizedBox(height: 12),
-                            _calendario(perros, filtro, altoCelda: 52),
-                            const SizedBox(height: 12),
-                            _leyenda(perros, filtro),
-                            const SizedBox(height: 20),
-                            _resumen(perros, filtro),
+                            if (esLista)
+                              _panelLista(perros, filtro)
+                            else ...[
+                              _calendario(perros, filtro, altoCelda: 52),
+                              const SizedBox(height: 12),
+                              _leyenda(perros, filtro),
+                              const SizedBox(height: 20),
+                              _resumen(perros, filtro),
+                            ],
                           ],
+                        );
+                      }
+                      if (esLista) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _conScroll(
+                            _scrollCalendario,
+                            Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 720),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    filtroPerro,
+                                    const SizedBox(height: 12),
+                                    _selectorFormato(),
+                                    const SizedBox(height: 12),
+                                    _panelLista(perros, filtro),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       }
                       return Padding(
@@ -240,6 +279,243 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     );
   }
 
+  static const _ordenTipos = [
+    'diario',
+    'unico',
+    'higiene',
+    'evento',
+    'veterinaria',
+    'recordatorio',
+    'ingreso',
+    'deceso',
+  ];
+
+  static const _etiquetasTipo = {
+    'diario': 'Tratamiento diario',
+    'unico': 'Dosis única',
+    'higiene': 'Higiene',
+    'evento': 'Evento',
+    'veterinaria': 'Veterinaria',
+    'recordatorio': 'Recordatorio',
+    'ingreso': 'Ingreso',
+    'deceso': 'Fallecimiento',
+  };
+
+  Widget _panelLista(List<PerroModel> perros, String? filtro) {
+    final todas = CalendarioGeneralController.construirLista(
+      perros,
+      desde: _primerDia,
+      hasta: _ultimoDia,
+      idPerro: filtro,
+    );
+    final consulta = _busqueda.text.trim().toLowerCase();
+    final filtradas = [
+      for (final entrada in todas)
+        if (_filtroTipo == null || entrada.categoria == _filtroTipo)
+          if (consulta.isEmpty || _coincideLista(entrada, consulta)) entrada,
+    ];
+    final categorias = [
+      for (final categoria in _ordenTipos)
+        if (todas.any((entrada) => entrada.categoria == categoria)) categoria,
+    ];
+    final textTheme = Theme.of(context).textTheme;
+    final estiloVacio = textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _busqueda,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Buscar perro, medicación o nota',
+            prefixIcon: Icon(Icons.search),
+          ),
+        ),
+        if (categorias.length > 1) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Todas'),
+                selected: _filtroTipo == null,
+                onSelected: (seleccionado) {
+                  if (!seleccionado) return;
+                  setState(() => _filtroTipo = null);
+                },
+              ),
+              for (final categoria in categorias)
+                ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: CalendarioGeneralController.colorMarcador(categoria),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(_etiquetasTipo[categoria] ?? categoria),
+                    ],
+                  ),
+                  selected: _filtroTipo == categoria,
+                  onSelected: (seleccionado) {
+                    setState(() => _filtroTipo = seleccionado ? categoria : null);
+                  },
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        if (todas.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text('No hay registros en este período.', style: estiloVacio),
+          )
+        else if (filtradas.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text('Ningún registro coincide.', style: estiloVacio),
+          )
+        else
+          for (final grupo in _agruparLista(filtradas)) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: Text(grupo.$1, style: textTheme.titleMedium),
+            ),
+            for (final entrada in grupo.$2) _filaLista(entrada),
+          ],
+      ],
+    );
+  }
+
+  bool _coincideLista(EntradaListaGeneral entrada, String consulta) {
+    return entrada.perro.nombre.toLowerCase().contains(consulta) ||
+        entrada.titulo.toLowerCase().contains(consulta) ||
+        entrada.detalle.toLowerCase().contains(consulta);
+  }
+
+  List<(String, List<EntradaListaGeneral>)> _agruparLista(List<EntradaListaGeneral> entradas) {
+    final grupos = <String, List<EntradaListaGeneral>>{};
+    final orden = <String>[];
+    for (final entrada in entradas) {
+      final clave = _tituloMes(entrada.fecha);
+      if (!grupos.containsKey(clave)) orden.add(clave);
+      grupos.putIfAbsent(clave, () => []).add(entrada);
+    }
+    return [
+      for (final clave in orden) (clave, grupos[clave]!),
+    ];
+  }
+
+  String _tituloMes(DateTime fecha) {
+    final texto = DateFormat('MMMM y', 'es_ES').format(fecha);
+    if (texto.isEmpty) return texto;
+    return texto[0].toUpperCase() + texto.substring(1);
+  }
+
+  String _fechaCorta(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
+  }
+
+  String _resumenLista(EntradaListaGeneral entrada) {
+    final nombre = entrada.perro.nombre.trim().isEmpty ? 'Sin nombre' : entrada.perro.nombre.trim();
+    final fin = _fechaCorta(entrada.fecha);
+    final desde = entrada.desde;
+    final mismoDia = desde != null &&
+        desde.year == entrada.fecha.year &&
+        desde.month == entrada.fecha.month &&
+        desde.day == entrada.fecha.day;
+    final rango = desde == null || mismoDia ? fin : '${_fechaCorta(desde)} – $fin';
+    if (entrada.categoria != 'diario') return '$nombre · $rango';
+    if (entrada.cantidadDosis <= 0) return '$nombre · $rango · sin dosis registradas';
+    final dosis = entrada.cantidadDosis == 1 ? '1 dosis' : '${entrada.cantidadDosis} dosis';
+    return '$nombre · $rango · $dosis';
+  }
+
+  (IconData, Color) _iconoLista(EntradaListaGeneral entrada) {
+    if (entrada.categoria == 'ingreso') {
+      return (Icons.login_rounded, AppColors.terracota);
+    }
+    if (entrada.categoria == 'deceso') {
+      return (Icons.local_florist, context.paleta.textoSuave);
+    }
+    if (entrada.categoria == 'recordatorio') {
+      final tipo = RecordatorioTipos.de(entrada.tipoRecordatorio ?? '');
+      return (tipo.icono, tipo.color);
+    }
+    return (CategoryColors.icono(entrada.categoria), CategoryColors.base(entrada.categoria));
+  }
+
+  Widget _filaLista(EntradaListaGeneral entrada) {
+    final textTheme = Theme.of(context).textTheme;
+    final visual = _iconoLista(entrada);
+    final detalle = entrada.detalle.trim();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => setState(() {
+          _vista = _VistaCalendario.mes;
+          _diaSeleccionado = entrada.fecha;
+          _diaEnfocado = entrada.fecha;
+        }),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: visual.$2.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(visual.$1, size: 20, color: visual.$2),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _capitalizar(entrada.titulo),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _resumenLista(entrada),
+                      style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                    ),
+                    if (detalle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detalle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _estadoMensaje(String texto, {IconData icono = Icons.pets}) {
     return Center(
       child: Padding(
@@ -286,18 +562,19 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       alignment: Alignment.centerRight,
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        child: SegmentedButton<CalendarFormat>(
+        child: SegmentedButton<_VistaCalendario>(
           style: const ButtonStyle(
             visualDensity: VisualDensity.compact,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           showSelectedIcon: false,
           segments: const [
-            ButtonSegment(value: CalendarFormat.month, label: Text('Mes')),
-            ButtonSegment(value: CalendarFormat.twoWeeks, label: Text('2 semanas')),
+            ButtonSegment(value: _VistaCalendario.mes, label: Text('Mes')),
+            ButtonSegment(value: _VistaCalendario.dosSemanas, label: Text('2 semanas')),
+            ButtonSegment(value: _VistaCalendario.lista, label: Text('Lista')),
           ],
-          selected: {_formato},
-          onSelectionChanged: (seleccion) => _cambiarFormato(seleccion.first),
+          selected: {_vista},
+          onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
         ),
       ),
     );
@@ -338,7 +615,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       lastDay: _ultimoDia,
       focusedDay: _diaEnfocado,
       currentDay: _hoy,
-      calendarFormat: _formato,
+      calendarFormat: _vista == _VistaCalendario.dosSemanas ? CalendarFormat.twoWeeks : CalendarFormat.month,
       startingDayOfWeek: StartingDayOfWeek.monday,
       availableCalendarFormats: const {
         CalendarFormat.month: 'Mes',

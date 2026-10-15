@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/perro_controller.dart';
+import '../controllers/peso_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
@@ -22,6 +23,7 @@ import '../models/dosis_avisada.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
+import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
@@ -32,6 +34,8 @@ import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
+import '../widgets/grafico_peso.dart';
+import 'dialogo_peso.dart';
 import 'formulario_perro.dart';
 import 'pantalla_tarjeta_perro.dart';
 
@@ -119,7 +123,9 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
   final SeguimientoController _seguimientoController = SeguimientoController();
+  final PesoController _pesoController = PesoController();
   final Set<String> _cerrandoSeguimiento = {};
+  bool _guardandoPeso = false;
   final PageController _controladorCarrusel = PageController();
   final ImagePicker _picker = ImagePicker();
   bool _subiendoFoto = false;
@@ -790,7 +796,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _tarjetaSeccion({required String titulo, required IconData icono, required List<Widget> children}) {
+  Widget _tarjetaSeccion({
+    required String titulo,
+    required IconData icono,
+    required List<Widget> children,
+    Widget? accion,
+  }) {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -812,6 +823,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                     ),
                   ),
                 ),
+                ?accion,
               ],
             ),
             const SizedBox(height: 12),
@@ -900,11 +912,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            _filaDato('Fecha de ingreso', _formatearFecha(perro.fechaIngreso)),
-            if (perro.fechaFallecimiento != null) ...[
-              const SizedBox(height: 12),
-              _filaDato('Fecha de fallecimiento', _formatearFecha(perro.fechaFallecimiento)),
+            if (perro.fechaIngreso != null || perro.fechaFallecimiento != null) ...[
+              const SizedBox(height: 16),
+              if (perro.fechaIngreso != null)
+                _filaDato('Fecha de ingreso', _formatearFecha(perro.fechaIngreso)),
+              if (perro.fechaFallecimiento != null) ...[
+                if (perro.fechaIngreso != null) const SizedBox(height: 12),
+                _filaDato('Fecha de fallecimiento', _formatearFecha(perro.fechaFallecimiento)),
+              ],
             ],
           ],
         ),
@@ -1113,40 +1128,26 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return perro.copyWith(tratamientos: actualizados);
   }
 
-  Widget _buildFichaMedica(PerroModel perro) {
+  Widget? _buildFichaMedica(PerroModel perro) {
+    if (perro.fichaMedica.trim().isEmpty) return null;
     return _tarjetaSeccion(
       titulo: 'Ficha médica',
       icono: Icons.favorite_outline,
       children: [
-        _construirTextoFormateado(
-          perro.fichaMedica.isNotEmpty ? perro.fichaMedica : 'No hay ficha médica registrada.',
-          _escalaTexto,
-        ),
+        _construirTextoFormateado(perro.fichaMedica, _escalaTexto),
       ],
     );
   }
 
   Widget? _buildTratamientosActuales(PerroModel perro, bool esInvitado) {
-    final tratamientos = perro.tratamientos;
-    if (tratamientos.isEmpty) return null;
+    final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(perro.tratamientos);
+    if (tratamientosActivos.isEmpty) return null;
     final fechaHoy = _fechaHoyISO();
-    // Las dosis únicas y visitas veterinarias no requieren seguimiento diario con checkbox.
-    final tratamientosActivos = _tratamientoController.obtenerActivosDiarios(tratamientos);
-    final textTheme = Theme.of(context).textTheme;
 
     return _tarjetaSeccion(
       titulo: 'Tratamientos actuales',
       icono: Icons.medication_outlined,
       children: [
-        if (tratamientosActivos.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'No hay tratamientos diarios actuales.',
-              textScaler: _escala,
-              style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-            ),
-          ),
         AnimatedSize(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
@@ -1165,25 +1166,104 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.tonalIcon(
-            icon: const Icon(Icons.calendar_month_outlined),
-            label: Text('Ver Historial Médico', textScaler: _escala),
-            onPressed: () => _mostrarHistorialCompleto(tratamientos),
-          ),
-        ),
       ],
     );
   }
 
-  List<Widget> _seguimientosEnCurso(PerroModel perro) {
+  Widget _botonHistorial(List<TratamientoModel> tratamientos) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.tonalIcon(
+        icon: const Icon(Icons.calendar_month_outlined),
+        label: Text('Ver historial médico', textScaler: _escala),
+        onPressed: () => _mostrarHistorialCompleto(tratamientos),
+      ),
+    );
+  }
+
+  Widget? _buildPeso(PerroModel perro, bool esInvitado) {
+    if (perro.pesos.isEmpty) return null;
+    final ultimo = _pesoController.ultimo(perro.pesos);
+    if (ultimo == null) return null;
+    final variacion = _pesoController.variacion(perro.pesos);
+    final textTheme = Theme.of(context).textTheme;
+    final aprox = ultimo.estimado ? ' aprox.' : '';
+    final nota = ultimo.nota.trim();
+
+    return _tarjetaSeccion(
+      titulo: 'Peso',
+      icono: Icons.monitor_weight_outlined,
+      accion: esInvitado
+          ? null
+          : IconButton(
+              tooltip: 'Agregar peso',
+              onPressed: _guardandoPeso ? null : _agregarPesoRapido,
+              icon: const Icon(Icons.add),
+            ),
+      children: [
+        Text(
+          '${formatearKg(ultimo.kg)} kg$aprox',
+          textScaler: _escala,
+          style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          PesoController.formatearFecha(ultimo.fecha),
+          textScaler: _escala,
+          style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+        ),
+        if (variacion != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              if (variacion.diferenciaKg.abs() >= 0.05) ...[
+                Icon(
+                  variacion.diferenciaKg > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 18,
+                  color: context.paleta.texto,
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                _pesoController.describirVariacion(variacion),
+                textScaler: _escala,
+                style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ],
+        if (nota.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(nota, textScaler: _escala, style: textTheme.bodyMedium),
+        ],
+        if (perro.pesos.length >= 2) ...[
+          const SizedBox(height: 12),
+          GraficoPeso(pesos: perro.pesos),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _agregarPesoRapido() async {
+    final peso = await mostrarDialogoPeso(context, controller: _pesoController);
+    if (peso == null || !mounted) return;
+    setState(() => _guardandoPeso = true);
+    try {
+      await _perroController.agregarPeso(widget.idDocumento, peso);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar el peso')),
+      );
+    } finally {
+      if (mounted) setState(() => _guardandoPeso = false);
+    }
+  }
+
+  Widget? _seguimientosEnCurso(PerroModel perro) {
     final vigentes = _seguimientoController.vigentes(perro.seguimientos);
-    if (vigentes.isEmpty) return const [];
-    return [
-      const SizedBox(height: 12),
-      _tarjetaSeccion(
+    if (vigentes.isEmpty) return null;
+    return _tarjetaSeccion(
         titulo: 'En seguimiento',
         icono: Icons.visibility_outlined,
         children: [
@@ -1192,8 +1272,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             if (i != vigentes.length - 1) const SizedBox(height: 8),
           ],
         ],
-      ),
-    ];
+      );
   }
 
   Widget _filaSeguimientoFicha(SeguimientoModel seguimiento) {
@@ -1274,15 +1353,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  List<Widget> _proximosRecordatorios(PerroModel perro) {
+  Widget? _proximosRecordatorios(PerroModel perro) {
     final proximos = _recordatorioController.proximos(perro.recordatorios);
-    if (proximos.isEmpty) return const [];
+    if (proximos.isEmpty) return null;
     final visibles = proximos.take(3).toList();
     final resto = proximos.length - visibles.length;
     final textTheme = Theme.of(context).textTheme;
-    return [
-      const SizedBox(height: 12),
-      _tarjetaSeccion(
+    return _tarjetaSeccion(
         titulo: 'Próximos recordatorios',
         icono: Icons.alarm_rounded,
         children: [
@@ -1297,8 +1374,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               style: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave),
             ),
         ],
-      ),
-    ];
+      );
   }
 
   Widget _filaRecordatorioFicha(RecordatorioModel recordatorio) {
@@ -1342,6 +1418,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   void _mostrarHistorialCompleto(List<TratamientoModel> tratamientos) {
     final eventosCalendario = _tratamientoController.construirEventosCalendario(tratamientos);
+    final historial = _tratamientoController.construirHistorialLista(tratamientos);
 
     showModalBottomSheet<void>(
       context: context,
@@ -1353,7 +1430,10 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         maxChildSize: 0.95,
         builder: (ctx, controladorScroll) => PrimaryScrollController(
           controller: controladorScroll,
-          child: CalendarioHistorialWidget(eventosCalendario: eventosCalendario),
+          child: CalendarioHistorialWidget(
+            eventosCalendario: eventosCalendario,
+            historial: historial,
+          ),
         ),
       ),
     );
@@ -1570,7 +1650,21 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Column _buildInfoContenido(PerroModel perro, bool esInvitado) {
+    final fichaMedica = _buildFichaMedica(perro);
+    final peso = _buildPeso(perro, esInvitado);
     final tratamientos = _buildTratamientosActuales(perro, esInvitado);
+    final seguimiento = esInvitado ? null : _seguimientosEnCurso(perro);
+    final recordatorios = esInvitado ? null : _proximosRecordatorios(perro);
+    final estudios = _buildEstudios(perro, esInvitado);
+    final bloquesMedicos = <Widget>[
+      ?fichaMedica,
+      ?peso,
+      ?tratamientos,
+      if (perro.tratamientos.isNotEmpty) _botonHistorial(perro.tratamientos),
+      ?seguimiento,
+      ?recordatorios,
+      ?estudios,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1627,14 +1721,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         const SizedBox(height: 16),
         _encabezadoGrupo('Perfil general', Icons.pets_rounded),
         _buildDatosBasicos(perro),
-        const SizedBox(height: 12),
-        _tarjetaSeccion(
-          titulo: 'Historia y observaciones',
-          icono: Icons.menu_book_outlined,
-          children: [
-            _construirTextoFormateado(perro.historia.isNotEmpty ? perro.historia : 'No hay historia registrada.', _escalaTexto),
-          ],
-        ),
+        if (perro.historia.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _tarjetaSeccion(
+            titulo: 'Historia y observaciones',
+            icono: Icons.menu_book_outlined,
+            children: [
+              _construirTextoFormateado(perro.historia, _escalaTexto),
+            ],
+          ),
+        ],
         if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 12),
           _tarjetaSeccion(
@@ -1670,54 +1766,129 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           const SizedBox(height: 12),
           _historialEgresos(perro, esInvitado),
         ],
-        const SizedBox(height: 28),
-        _encabezadoGrupo('Información médica', Icons.medical_services_outlined),
-        _buildFichaMedica(perro),
-        if (tratamientos != null) ...[
-          const SizedBox(height: 12),
-          tratamientos,
+        if (bloquesMedicos.isNotEmpty) ...[
+          const SizedBox(height: 28),
+          _encabezadoGrupo('Información médica', Icons.medical_services_outlined),
+          for (var i = 0; i < bloquesMedicos.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            bloquesMedicos[i],
+          ],
         ],
-        if (!esInvitado) ...[
-          ..._seguimientosEnCurso(perro),
-          ..._proximosRecordatorios(perro),
-        ],
-        const SizedBox(height: 12),
-        _buildEstudios(perro, esInvitado),
+        if (!esInvitado && perro.galeriaEstudios.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _filaAgregarEstudio(),
+          ),
         const SizedBox(height: 24),
       ],
     );
   }
 
-  Widget _buildEstudios(PerroModel perro, bool esInvitado) {
+  Widget? _buildEstudios(PerroModel perro, bool esInvitado) {
     final fotos = perro.galeriaEstudios;
-    final estiloVacio = Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
+    if (fotos.isEmpty) return null;
     return _tarjetaSeccion(
       titulo: 'Estudios y registros',
       icono: Icons.grid_view_rounded,
       children: [
-        if (fotos.isEmpty)
-          Text('Todavía no hay estudios.', style: estiloVacio)
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (var index = 0; index < fotos.length; index++)
-                _miniaturaEstudio(fotos[index], index, esInvitado),
-            ],
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var index = 0; index < fotos.length; index++)
+              _miniaturaEstudio(fotos[index], index, esInvitado),
+          ],
+        ),
         if (!esInvitado) ...[
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: const Text('Agregar estudio'),
-            ),
+            child: _botonAgregarEstudio(),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _botonAgregarEstudio() {
+    return TextButton.icon(
+      onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
+      icon: const Icon(Icons.add_a_photo_outlined),
+      label: const Text('Agregar estudio'),
+    );
+  }
+
+  Widget _filaAgregarEstudio() {
+    final textTheme = Theme.of(context).textTheme;
+    final habilitado = !_subiendoFoto && !_modoReordenar;
+    return Material(
+      color: context.paleta.superficie,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: context.paleta.borde),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: habilitado ? () => _agregarFoto(estudios: true) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.document_scanner_outlined, color: context.paleta.lienzo),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Agregar un estudio', textScaler: _escala, style: textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Radiografías, análisis u otros registros.',
+                      textScaler: _escala,
+                      style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _zonaPrimeraFoto() {
+    final textTheme = Theme.of(context).textTheme;
+    final habilitado = !_subiendoFoto && !_modoReordenar;
+    final colorBorde = context.paleta.lienzo.withValues(alpha: 0.45);
+    return Material(
+      color: context.paleta.superficie,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: habilitado ? _agregarFotoAGaleria : null,
+        child: CustomPaint(
+          painter: _BordePunteado(color: colorBorde),
+          child: SizedBox(
+            height: 140,
+            width: double.infinity,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_a_photo_outlined, size: 32, color: context.paleta.lienzo),
+                const SizedBox(height: 8),
+                Text('Agregar la primera foto', textScaler: _escala, style: textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(
+                  'Tocá acá para subirla',
+                  textScaler: _escala,
+                  style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1901,36 +2072,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
 
     if (galeria.isEmpty) {
-      final textTheme = Theme.of(context).textTheme;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.navy.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.photo_camera_outlined, size: 30, color: AppColors.navy),
-              ),
-              const SizedBox(height: 12),
-              Text('Aún no hay fotos en la galería', style: textTheme.titleMedium, textAlign: TextAlign.center),
-              if (!esInvitado) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Tocá el ícono de cámara arriba para agregar una.',
-                  style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
+      if (esInvitado) return const SizedBox.shrink();
+      return _zonaPrimeraFoto();
     }
     return Stack(
       alignment: Alignment.center,
@@ -2202,38 +2345,47 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 700;
-                // --- SECCIÓN: Galería de fotos (carrusel o modo reordenar) ---
-                final galeriaWidget = _buildGaleria(galeria, esInvitado, perro);
+                final mostrarCaja = galeria.isNotEmpty || _modoReordenar;
+                final panelInfo = Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(20),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 450),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+                        child: _buildInfoContenido(perro, esInvitado),
+                      ),
+                    ),
+                  ),
+                );
 
                 if (isWide) {
+                  if (!mostrarCaja && esInvitado) return panelInfo;
                   return Row(
                     children: [
-                      // --- SECCIÓN: Panel de información (layout ancho) ---
-                      // Panel de info: ancho acotado, centrado, con margen para que respire
-                      Center(
-                        child: Container(
-                          margin: const EdgeInsets.all(20),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 450),
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-                              child: _buildInfoContenido(perro, esInvitado),
-                            ),
-                          ),
-                        ),
-                      ),
+                      panelInfo,
                       Expanded(
                         flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: _rotuloFotos(),
-                            ),
-                            Expanded(child: galeriaWidget),
-                          ],
-                        ),
+                        child: mostrarCaja
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                    child: _rotuloFotos(),
+                                  ),
+                                  Expanded(child: _buildGaleria(galeria, esInvitado, perro)),
+                                ],
+                              )
+                            : Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 420),
+                                    child: _zonaPrimeraFoto(),
+                                  ),
+                                ),
+                              ),
                       ),
                     ],
                   );
@@ -2243,24 +2395,29 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rotuloFotos(),
-                      SizedBox(
-                        height: 220,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: context.paleta.superficie,
-                            borderRadius: BorderRadius.all(Radius.circular(24)),
-                            boxShadow: [
-                              BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.all(Radius.circular(24)),
-                            child: galeriaWidget,
+                      if (mostrarCaja) ...[
+                        _rotuloFotos(),
+                        SizedBox(
+                          height: 220,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: context.paleta.superficie,
+                              borderRadius: BorderRadius.all(Radius.circular(24)),
+                              boxShadow: [
+                                BoxShadow(color: AppColors.sombra, blurRadius: 16, offset: Offset(0, 4)),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.all(Radius.circular(24)),
+                              child: _buildGaleria(galeria, esInvitado, perro),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 20),
+                      ] else if (!esInvitado) ...[
+                        _zonaPrimeraFoto(),
+                        const SizedBox(height: 16),
+                      ],
                       _buildInfoContenido(perro, esInvitado),
                     ],
                   ),
@@ -2274,10 +2431,51 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 }
 
+class _BordePunteado extends CustomPainter {
+  final Color color;
+
+  const _BordePunteado({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pintura = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    final camino = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+          const Radius.circular(20),
+        ),
+      );
+    for (final tramo in camino.computeMetrics()) {
+      const dash = 7.0;
+      const espacio = 5.0;
+      var distancia = 0.0;
+      while (distancia < tramo.length) {
+        final fin = (distancia + dash).clamp(0.0, tramo.length);
+        canvas.drawPath(tramo.extractPath(distancia, fin), pintura);
+        distancia += dash + espacio;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BordePunteado anterior) => anterior.color != color;
+}
+
+enum _VistaHistorial { calendario, lista }
+
 class CalendarioHistorialWidget extends StatefulWidget {
   final Map<DateTime, List<Map<String, dynamic>>> eventosCalendario;
+  final List<EntradaHistorial> historial;
 
-  const CalendarioHistorialWidget({super.key, required this.eventosCalendario});
+  const CalendarioHistorialWidget({
+    super.key,
+    required this.eventosCalendario,
+    required this.historial,
+  });
 
   @override
   State<CalendarioHistorialWidget> createState() => _CalendarioHistorialWidgetState();
@@ -2287,11 +2485,25 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   DateTime _selectedDay = DateTime.now();
   DateTime _focusedDay = DateTime.now();
   late final Future<void> _localeListo;
+  _VistaHistorial _vista = _VistaHistorial.calendario;
+  String? _filtroCategoria;
+  final TextEditingController _busqueda = TextEditingController();
+
+  static const _ordenCategorias = ['diario', 'unico', 'higiene', 'evento', 'veterinaria'];
 
   @override
   void initState() {
     super.initState();
     _localeListo = initializeDateFormatting('es_ES');
+    _busqueda.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _busqueda.dispose();
+    super.dispose();
   }
 
   List<Map<String, dynamic>> _eventosDelDia(DateTime dia) {
@@ -2359,6 +2571,27 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
         children: [
           Text('Historial médico', style: textTheme.titleLarge),
           const SizedBox(height: 12),
+          SegmentedButton<_VistaHistorial>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: _VistaHistorial.calendario,
+                label: Text('Calendario'),
+                icon: Icon(Icons.calendar_month_outlined),
+              ),
+              ButtonSegment(
+                value: _VistaHistorial.lista,
+                label: Text('Lista'),
+                icon: Icon(Icons.view_list_outlined),
+              ),
+            ],
+            selected: {_vista},
+            onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
+          ),
+          const SizedBox(height: 16),
+          if (_vista == _VistaHistorial.lista)
+            _panelLista()
+          else ...[
           // --- SECCIÓN: Calendario Histórico ---
           FutureBuilder<void>(
             future: _localeListo,
@@ -2477,7 +2710,205 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                 ],
               ),
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _panelLista() {
+    return FutureBuilder<void>(
+      future: _localeListo,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final filtradas = _entradasFiltradas();
+        final categorias = [
+          for (final categoria in _ordenCategorias)
+            if (widget.historial.any((entrada) => entrada.categoria == categoria)) categoria,
+        ];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _busqueda,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Buscar medicación o indicación',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            if (categorias.length > 1) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Todas'),
+                    selected: _filtroCategoria == null,
+                    onSelected: (seleccionado) {
+                      if (!seleccionado) return;
+                      setState(() => _filtroCategoria = null);
+                    },
+                  ),
+                  for (final categoria in categorias)
+                    ChoiceChip(
+                      label: Text(CategoryColors.etiqueta(categoria)),
+                      selected: _filtroCategoria == categoria,
+                      onSelected: (seleccionado) {
+                        setState(() => _filtroCategoria = seleccionado ? categoria : null);
+                      },
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            if (filtradas.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Ningún registro coincide.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                ),
+              )
+            else
+              for (final grupo in _agrupar(filtradas)) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, top: 4),
+                  child: Text(grupo.$1, style: Theme.of(context).textTheme.titleMedium),
+                ),
+                for (final entrada in grupo.$2) _filaHistorial(entrada),
+              ],
+          ],
+        );
+      },
+    );
+  }
+
+  List<EntradaHistorial> _entradasFiltradas() {
+    final consulta = _busqueda.text.trim().toLowerCase();
+    return [
+      for (final entrada in widget.historial)
+        if (_filtroCategoria == null || entrada.categoria == _filtroCategoria)
+          if (consulta.isEmpty ||
+              entrada.titulo.toLowerCase().contains(consulta) ||
+              entrada.indicaciones.toLowerCase().contains(consulta))
+            entrada,
+    ];
+  }
+
+  List<(String, List<EntradaHistorial>)> _agrupar(List<EntradaHistorial> entradas) {
+    final grupos = <String, List<EntradaHistorial>>{};
+    final orden = <String>[];
+    for (final entrada in entradas) {
+      final fecha = entrada.fechaFin ?? entrada.fechaInicio;
+      final clave = fecha == null ? 'Sin fecha' : _tituloMes(fecha);
+      if (!grupos.containsKey(clave)) orden.add(clave);
+      grupos.putIfAbsent(clave, () => []).add(entrada);
+    }
+    return [
+      for (final clave in orden) (clave, grupos[clave]!),
+    ];
+  }
+
+  String _tituloMes(DateTime fecha) {
+    final texto = DateFormat('MMMM y', 'es_ES').format(fecha);
+    if (texto.isEmpty) return texto;
+    return texto[0].toUpperCase() + texto.substring(1);
+  }
+
+  String _fechaCortaHistorial(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
+  }
+
+  String _resumenHistorial(EntradaHistorial entrada) {
+    final inicio = entrada.fechaInicio;
+    final fin = entrada.fechaFin;
+    if (inicio == null && fin == null) return 'Sin fecha';
+    final desde = _fechaCortaHistorial(inicio ?? fin!);
+    final rango = fin == null ? desde : '$desde – ${_fechaCortaHistorial(fin)}';
+    if (entrada.categoria == 'diario') {
+      if (entrada.cantidadDosis <= 0) return '$rango · sin dosis registradas';
+      final dosis = entrada.cantidadDosis == 1 ? '1 dosis' : '${entrada.cantidadDosis} dosis';
+      return '$rango · $dosis';
+    }
+    if (entrada.cantidadDosis > 1) return '$rango · ${entrada.cantidadDosis} dosis';
+    return rango;
+  }
+
+  Widget _filaHistorial(EntradaHistorial entrada) {
+    final textTheme = Theme.of(context).textTheme;
+    final fecha = entrada.fechaInicio ?? entrada.fechaFin;
+    final enCurso = entrada.activo && entrada.categoria == 'diario';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: context.paleta.relleno,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: context.paleta.borde),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: fecha == null
+              ? null
+              : () => setState(() {
+                    _vista = _VistaHistorial.calendario;
+                    _selectedDay = fecha;
+                    _focusedDay = fecha;
+                  }),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: CategoryColors.tinte(entrada.categoria),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CategoryColors.icono(entrada.categoria),
+                    size: 20,
+                    color: CategoryColors.base(entrada.categoria),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entrada.titulo, style: textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(
+                        enCurso ? '${_resumenHistorial(entrada)} · En curso' : _resumenHistorial(entrada),
+                        style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                      ),
+                      if (entrada.indicaciones.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          entrada.indicaciones,
+                          style: textTheme.bodyMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'egreso_model.dart';
+import 'peso_model.dart';
 import 'recordatorio_model.dart';
 import 'seguimiento_model.dart';
 import 'tratamiento_model.dart';
@@ -131,6 +132,9 @@ class PerroModel {
   /// Observaciones diarias. La clave Firestore es `seguimientos`.
   final List<SeguimientoModel> seguimientos;
 
+  /// Mediciones de peso. La clave Firestore es `pesos`. Vacío si nunca se pesó.
+  final List<PesoModel> pesos;
+
   /// Crea una instancia inmutable de [PerroModel].
   PerroModel({
     required this.id,
@@ -159,6 +163,7 @@ class PerroModel {
     this.tratamientos = const [],
     this.recordatorios = const [],
     this.seguimientos = const [],
+    this.pesos = const [],
   });
 
   /// Construye un [PerroModel] a partir del mapa `data` de un documento de
@@ -249,6 +254,7 @@ class PerroModel {
       tratamientos: tratamientos,
       recordatorios: recordatoriosDesdeValor(data['recordatorios']),
       seguimientos: seguimientosDesdeValor(data['seguimientos']),
+      pesos: pesosDesdeValor(data['pesos']),
     );
   }
 
@@ -282,6 +288,7 @@ class PerroModel {
       'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
       'recordatorios': recordatorios.map((r) => r.toMap()).toList(),
       'seguimientos': seguimientos.map((s) => s.toMap()).toList(),
+      'pesos': pesos.map((peso) => peso.toMap()).toList(),
     };
   }
 
@@ -291,6 +298,7 @@ class PerroModel {
   PerroModel copyWith({
     List<TratamientoModel>? tratamientos,
     List<SeguimientoModel>? seguimientos,
+    List<PesoModel>? pesos,
     List<Map<String, dynamic>>? parientes,
     List<Map<String, dynamic>>? galeria,
     List<Map<String, dynamic>>? galeriaEstudios,
@@ -323,6 +331,7 @@ class PerroModel {
       tratamientos: tratamientos ?? this.tratamientos,
       recordatorios: recordatorios,
       seguimientos: seguimientos ?? this.seguimientos,
+      pesos: pesos ?? this.pesos,
     );
   }
 }

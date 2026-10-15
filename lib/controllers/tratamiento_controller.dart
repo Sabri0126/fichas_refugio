@@ -553,4 +553,78 @@ class TratamientoController {
 
     return eventosCalendario;
   }
+
+  /// Una fila por tratamiento, de más nuevo a más viejo.
+  /// Los diarios usan el rango de dosis; el resto, su fecha.
+  List<EntradaHistorial> construirHistorialLista(List<TratamientoModel> tratamientos) {
+    final entradas = <EntradaHistorial>[];
+    for (final tratamiento in tratamientos) {
+      final dosis = <DateTime>[];
+      for (final texto in tratamiento.registroDosis) {
+        final fecha = DateTime.tryParse(texto);
+        if (fecha == null) continue;
+        dosis.add(DateTime(fecha.year, fecha.month, fecha.day));
+      }
+      dosis.sort();
+
+      DateTime? inicio = tratamiento.fechaInicio == null
+          ? null
+          : DateTime(
+              tratamiento.fechaInicio!.year,
+              tratamiento.fechaInicio!.month,
+              tratamiento.fechaInicio!.day,
+            );
+      if (dosis.isNotEmpty && (inicio == null || dosis.first.isBefore(inicio))) {
+        inicio = dosis.first;
+      }
+      DateTime? fin;
+      if (dosis.isNotEmpty && inicio != null && !_mismoDia(inicio, dosis.last)) {
+        fin = dosis.last;
+      }
+
+      final titulo = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
+      entradas.add(
+        EntradaHistorial(
+          categoria: tratamiento.categoria,
+          titulo: titulo,
+          indicaciones: tratamiento.indicaciones.trim(),
+          fechaInicio: inicio,
+          fechaFin: fin,
+          cantidadDosis: tratamiento.registroDosis.length,
+          activo: tratamiento.activo,
+          origen: tratamiento,
+        ),
+      );
+    }
+    entradas.sort((a, b) => b.fechaReferencia.compareTo(a.fechaReferencia));
+    return entradas;
+  }
+
+  bool _mismoDia(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// Una fila del historial médico en lista.
+class EntradaHistorial {
+  final String categoria;
+  final String titulo;
+  final String indicaciones;
+  final DateTime? fechaInicio;
+  final DateTime? fechaFin;
+  final int cantidadDosis;
+  final bool activo;
+  final TratamientoModel origen;
+
+  const EntradaHistorial({
+    required this.categoria,
+    required this.titulo,
+    required this.indicaciones,
+    required this.fechaInicio,
+    required this.fechaFin,
+    required this.cantidadDosis,
+    required this.activo,
+    required this.origen,
+  });
+
+  /// Fecha para ordenar y agrupar: la última dosis, o el inicio.
+  DateTime get fechaReferencia => fechaFin ?? fechaInicio ?? DateTime.fromMillisecondsSinceEpoch(0);
 }

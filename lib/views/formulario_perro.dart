@@ -10,12 +10,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../controllers/perro_controller.dart';
+import '../controllers/peso_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
+import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
@@ -25,6 +27,7 @@ import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
+import 'dialogo_peso.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -41,6 +44,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
   final SeguimientoController _seguimientoController = SeguimientoController();
+  final PesoController _pesoController = PesoController();
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
@@ -74,6 +78,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   final Set<String> _idsInicialesRecordatorios = {};
   List<SeguimientoModel> _seguimientos = [];
   final Set<String> _idsInicialesSeguimientos = {};
+  List<PesoModel> _pesos = [];
+  final Set<String> _idsInicialesPesos = {};
 
   bool _hayCambios = false;
 
@@ -112,6 +118,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
       _seguimientos = List<SeguimientoModel>.from(perro.seguimientos);
       _idsInicialesSeguimientos.addAll(
         perro.seguimientos.map((seguimiento) => seguimiento.id).where((id) => id.isNotEmpty),
+      );
+      _pesos = List<PesoModel>.from(perro.pesos);
+      _idsInicialesPesos.addAll(
+        perro.pesos.map((peso) => peso.id).where((id) => id.isNotEmpty),
       );
       _historialEgresos = List<EgresoModel>.from(perro.historialEgresos);
 
@@ -505,6 +515,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         var tratamientosAGuardar = _tratamientos;
         var recordatoriosAGuardar = _recordatorios;
         var seguimientosAGuardar = _seguimientos;
+        var pesosAGuardar = _pesos;
         var altasConservadas = 0;
         final idDocumento = widget.idDocumento;
         if (idDocumento != null && idDocumento.isNotEmpty) {
@@ -531,12 +542,19 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 remoto: remoto.seguimientos,
                 idsIniciales: _idsInicialesSeguimientos,
               );
+              final pesosFusionados = PesoController.fusionarAltasRemotas(
+                local: _pesos,
+                remoto: remoto.pesos,
+                idsIniciales: _idsInicialesPesos,
+              );
               altasConservadas = (tratamientosFusionados.length - tratamientosAGuardar.length) +
                   (recordatoriosFusionados.length - _recordatorios.length) +
-                  (seguimientosFusionados.length - _seguimientos.length);
+                  (seguimientosFusionados.length - _seguimientos.length) +
+                  (pesosFusionados.length - _pesos.length);
               tratamientosAGuardar = tratamientosFusionados;
               recordatoriosAGuardar = recordatoriosFusionados;
               seguimientosAGuardar = seguimientosFusionados;
+              pesosAGuardar = pesosFusionados;
             }
           } catch (_) {}
         }
@@ -584,6 +602,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           tratamientos: tratamientosAGuardar,
           recordatorios: recordatoriosAGuardar,
           seguimientos: seguimientosAGuardar,
+          pesos: pesosAGuardar,
         );
 
         await _perroController.guardarPerro(perro);
@@ -1154,6 +1173,138 @@ class _FormularioPerroState extends State<FormularioPerro> {
         const SnackBar(content: Text('No se pudo actualizar el estado del tratamiento')),
       );
     }
+  }
+
+  Widget _seccionPeso() {
+    final visibles = [..._pesos]..sort((a, b) => b.fecha.compareTo(a.fecha));
+    final textTheme = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _tituloSeccion('Peso', visibles.length, icono: Icons.monitor_weight_outlined),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonalIcon(
+            onPressed: () => _mostrarDialogoPeso(),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Agregar peso'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Cada medición queda con su fecha. Si es un aproximado, marcalo como estimado. Se guarda al tocar Guardar Cambios.',
+          style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+        ),
+        if (visibles.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          for (var n = 0; n < visibles.length; n++)
+            EntradaEscalonada(
+              indice: n,
+              child: _filaPeso(visibles[n]),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _filaPeso(PesoModel peso) {
+    final textTheme = Theme.of(context).textTheme;
+    final nota = peso.nota.trim();
+    final partes = <String>[
+      PesoController.formatearFecha(peso.fecha),
+      if (peso.estimado) 'aprox.',
+      if (nota.isNotEmpty) nota,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: context.paleta.superficie,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: context.paleta.borde),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: () => _mostrarDialogoPeso(actual: peso),
+          contentPadding: const EdgeInsets.only(left: 12, right: 4),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.navy.withValues(alpha: 0.12),
+            child: Icon(
+              peso.estimado ? Icons.straighten : Icons.monitor_weight_outlined,
+              size: 20,
+              color: AppColors.navy,
+            ),
+          ),
+          title: Text(
+            '${formatearKg(peso.kg)} kg',
+            style: textTheme.titleMedium?.copyWith(fontSize: 15),
+          ),
+          subtitle: Text(
+            partes.join(' · '),
+            style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave, fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Editar',
+                color: context.paleta.textoSuave,
+                onPressed: () => _mostrarDialogoPeso(actual: peso),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: 'Eliminar',
+                color: AppColors.error,
+                onPressed: () => _eliminarPeso(peso),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mostrarDialogoPeso({PesoModel? actual}) async {
+    final guardado = await mostrarDialogoPeso(
+      context,
+      controller: _pesoController,
+      actual: actual,
+    );
+    if (!mounted || guardado == null) return;
+    setState(() {
+      if (actual == null) {
+        _pesos.add(guardado);
+      } else {
+        final indice = _pesos.indexWhere((peso) => peso.id == actual.id);
+        if (indice >= 0) _pesos[indice] = guardado;
+      }
+      _hayCambios = true;
+    });
+  }
+
+  Future<void> _eliminarPeso(PesoModel peso) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar esta medición?'),
+        content: Text('${formatearKg(peso.kg)} kg del ${PesoController.formatearFecha(peso.fecha)}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    setState(() {
+      _pesos = _pesoController.eliminar(_pesos, peso.id);
+      _hayCambios = true;
+    });
   }
 
   Widget _seccionSeguimientos() {
@@ -2695,6 +2846,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       );
                     },
                   ),
+                  const SizedBox(height: 32),
+                  _seccionPeso(),
                   const SizedBox(height: 32),
                   _seccionSeguimientos(),
                   const SizedBox(height: 32),

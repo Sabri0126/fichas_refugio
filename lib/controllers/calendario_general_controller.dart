@@ -271,6 +271,156 @@ abstract final class CalendarioGeneralController {
   static DateTime _soloFecha(DateTime fecha) =>
       DateTime(fecha.year, fecha.month, fecha.day);
 
+  /// Eventos del rango, de más nuevo a más viejo.
+  /// Un tratamiento diario es una sola fila, no una por dosis.
+  static List<EntradaListaGeneral> construirLista(
+    List<PerroModel> perros, {
+    required DateTime desde,
+    required DateTime hasta,
+    String? idPerro,
+  }) {
+    final inicio = _soloFecha(desde);
+    final fin = _soloFecha(hasta);
+    final entradas = <EntradaListaGeneral>[];
+
+    for (final perro in perros) {
+      if (idPerro != null && perro.id != idPerro) continue;
+      final ingreso = perro.fechaIngreso;
+      if (ingreso != null && _enRango(ingreso, inicio, fin)) {
+        entradas.add(EntradaListaGeneral(
+          fecha: _soloFecha(ingreso),
+          perro: perro,
+          titulo: 'Ingreso',
+          detalle: '',
+          categoria: 'ingreso',
+        ));
+      }
+      final deceso = perro.fechaFallecimiento;
+      if (deceso != null && _enRango(deceso, inicio, fin)) {
+        entradas.add(EntradaListaGeneral(
+          fecha: _soloFecha(deceso),
+          perro: perro,
+          titulo: 'Fallecimiento',
+          detalle: '',
+          categoria: 'deceso',
+        ));
+      }
+
+      for (final tratamiento in perro.tratamientos) {
+        if (tratamiento.categoria == 'diario') {
+          final fila = _filaDiaria(perro, tratamiento, inicio, fin);
+          if (fila != null) entradas.add(fila);
+        } else {
+          entradas.addAll(_filasPuntuales(perro, tratamiento, inicio, fin));
+        }
+      }
+
+      for (final recordatorio in perro.recordatorios) {
+        if (!_enRango(recordatorio.fechaHora, inicio, fin)) continue;
+        entradas.add(EntradaListaGeneral(
+          fecha: _soloFecha(recordatorio.fechaHora),
+          perro: perro,
+          titulo: recordatorio.titulo,
+          detalle: recordatorio.nota,
+          categoria: 'recordatorio',
+          tipoRecordatorio: recordatorio.tipo,
+        ));
+      }
+    }
+
+    entradas.sort((a, b) {
+      final porFecha = b.fecha.compareTo(a.fecha);
+      if (porFecha != 0) return porFecha;
+      final porNombre = a.perro.nombre.compareTo(b.perro.nombre);
+      if (porNombre != 0) return porNombre;
+      return a.titulo.compareTo(b.titulo);
+    });
+    return entradas;
+  }
+
+  static EntradaListaGeneral? _filaDiaria(
+    PerroModel perro,
+    TratamientoModel tratamiento,
+    DateTime inicio,
+    DateTime fin,
+  ) {
+    final dosis = <DateTime>[];
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      dosis.add(_soloFecha(fecha));
+    }
+    dosis.sort();
+
+    DateTime? comienzo = tratamiento.fechaInicio == null ? null : _soloFecha(tratamiento.fechaInicio!);
+    if (dosis.isNotEmpty && (comienzo == null || dosis.first.isBefore(comienzo))) {
+      comienzo = dosis.first;
+    }
+    DateTime? cierre;
+    if (dosis.isNotEmpty && comienzo != null && !_mismoDia(comienzo, dosis.last)) {
+      cierre = dosis.last;
+    }
+
+    DateTime? destino;
+    for (final dia in dosis.reversed) {
+      if (_enRango(dia, inicio, fin)) {
+        destino = dia;
+        break;
+      }
+    }
+    if (destino == null && comienzo != null && _enRango(comienzo, inicio, fin)) {
+      destino = comienzo;
+    }
+    if (destino == null) return null;
+
+    final titulo = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
+    return EntradaListaGeneral(
+      fecha: destino,
+      desde: cierre == null ? null : comienzo,
+      perro: perro,
+      titulo: titulo,
+      detalle: tratamiento.indicaciones,
+      categoria: 'diario',
+      cantidadDosis: tratamiento.registroDosis.length,
+    );
+  }
+
+  static List<EntradaListaGeneral> _filasPuntuales(
+    PerroModel perro,
+    TratamientoModel tratamiento,
+    DateTime inicio,
+    DateTime fin,
+  ) {
+    final fechas = <DateTime>[];
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha != null) fechas.add(_soloFecha(fecha));
+    }
+    if (fechas.isEmpty && tratamiento.fechaInicio != null) {
+      fechas.add(_soloFecha(tratamiento.fechaInicio!));
+    }
+    final titulo = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
+    return [
+      for (final fecha in fechas)
+        if (_enRango(fecha, inicio, fin))
+          EntradaListaGeneral(
+            fecha: fecha,
+            perro: perro,
+            titulo: titulo,
+            detalle: tratamiento.indicaciones,
+            categoria: tratamiento.categoria,
+          ),
+    ];
+  }
+
+  static bool _enRango(DateTime fecha, DateTime desde, DateTime hasta) {
+    final dia = _soloFecha(fecha);
+    return !dia.isBefore(desde) && !dia.isAfter(hasta);
+  }
+
+  static bool _mismoDia(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   static int _compararItems(ItemResumen a, ItemResumen b) {
     final aSinHora = a.hora == null;
     final bSinHora = b.hora == null;
@@ -283,4 +433,27 @@ abstract final class CalendarioGeneralController {
     if (porNombre != 0) return porNombre;
     return a.titulo.compareTo(b.titulo);
   }
+}
+
+/// Una fila de la vista de lista del calendario general.
+class EntradaListaGeneral {
+  final DateTime fecha;
+  final DateTime? desde;
+  final PerroModel perro;
+  final String titulo;
+  final String detalle;
+  final String categoria;
+  final String? tipoRecordatorio;
+  final int cantidadDosis;
+
+  const EntradaListaGeneral({
+    required this.fecha,
+    this.desde,
+    required this.perro,
+    required this.titulo,
+    required this.detalle,
+    required this.categoria,
+    this.tipoRecordatorio,
+    this.cantidadDosis = 0,
+  });
 }

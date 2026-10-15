@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
+import '../models/peso_model.dart';
 
 /// Controlador encargado de la lógica de negocio y de acceso a Firestore de
 /// los perros del refugio: lectura/escritura de fichas, validaciones de
@@ -200,6 +201,25 @@ class PerroController {
       return 'La fecha de regreso no puede ser anterior a la de egreso.';
     }
     return null;
+  }
+
+  /// Suma una medición al array `pesos` si ese id todavía no está.
+  Future<void> agregarPeso(String idPerro, PesoModel peso) async {
+    final ref = _perrosRef.doc(idPerro);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      if (data == null) return;
+      final crudos = data['pesos'];
+      final lista = crudos is List ? List<dynamic>.from(crudos) : <dynamic>[];
+      final yaEsta = lista.any((item) {
+        if (item is! Map) return false;
+        return item['id']?.toString() == peso.id;
+      });
+      if (yaEsta) return;
+      lista.add(peso.toMap());
+      tx.update(ref, {'pesos': lista});
+    });
   }
 
   /// Pone `activo` en false en el seguimiento indicado, sin tocar el resto del array.
