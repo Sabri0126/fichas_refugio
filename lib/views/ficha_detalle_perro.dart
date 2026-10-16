@@ -1171,12 +1171,31 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Widget _botonHistorial(List<TratamientoModel> tratamientos) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.tonalIcon(
-        icon: const Icon(Icons.calendar_month_outlined),
-        label: Text('Ver historial médico', textScaler: _escala),
-        onPressed: () => _mostrarHistorialCompleto(tratamientos),
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _mostrarHistorialCompleto(tratamientos),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_month_outlined, size: 22, color: AppColors.navy),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Historial médico',
+                  textScaler: _escala,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: context.paleta.textoSuave),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2489,7 +2508,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   String? _filtroCategoria;
   final TextEditingController _busqueda = TextEditingController();
 
-  static const _ordenCategorias = ['diario', 'unico', 'higiene', 'evento', 'veterinaria'];
+  static const _ordenCategorias = ['diario', 'unico', 'vacuna', 'higiene', 'evento', 'veterinaria'];
 
   @override
   void initState() {

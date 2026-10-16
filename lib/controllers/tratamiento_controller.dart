@@ -40,14 +40,15 @@ class TratamientoController {
   /// su categoría:
   /// - `'diario'`: queda `activo = true`, sin registro de dosis inicial y con
   ///   hora de recordatorio.
-  /// - `'unico'` / `'higiene'` / `'evento'` / `'veterinaria'`: se considera un
-  ///   evento puntual. Queda `activo = true` (no se pausa al crearlo) y se
-  ///   registra la propia `fechaInicio` como primera dosis (para el calendario).
+  /// - `'unico'` / `'higiene'` / `'evento'` / `'veterinaria'` / `'vacuna'`: se
+  ///   considera un evento puntual. Queda `activo = true` (no se pausa al
+  ///   crearlo) y se registra la propia `fechaInicio` como primera dosis.
   ///
   /// @param categoria tipo de tratamiento (`'diario'`, `'unico'`, `'higiene'`,
-  ///   `'evento'`, `'veterinaria'`).
-  /// @param medicacion nombre de la medicación o procedimiento.
-  /// @param indicaciones indicaciones, dosis o diagnóstico.
+  ///   `'evento'`, `'veterinaria'`, `'vacuna'`).
+  /// @param medicacion nombre de la medicación, procedimiento o vacuna.
+  /// @param indicaciones indicaciones, dosis administrada o diagnóstico.
+  /// @param notas razón de la aplicación o notas (`'unico'` y `'vacuna'`).
   /// @param fechaInicio fecha de inicio o de aplicación del evento.
   /// @param diasDuracion días de duración (solo aplica a categoría `'diario'`).
   /// @param horaRecordatorio hora `HH:mm` del recordatorio diario (solo `'diario'`).
@@ -58,6 +59,7 @@ class TratamientoController {
     required String categoria,
     required String medicacion,
     required String indicaciones,
+    String notas = '',
     required DateTime fechaInicio,
     int diasDuracion = 0,
     String? horaRecordatorio,
@@ -71,6 +73,7 @@ class TratamientoController {
         categoria: categoria,
         medicacion: medicacion,
         indicaciones: indicaciones,
+        notas: notas,
         fechaInicio: fechaInicio,
         diasDuracion: 0,
         // Se registra la fecha elegida en el formulario (no la de hoy) para que el TableCalendar la ubique.
@@ -88,6 +91,7 @@ class TratamientoController {
       categoria: categoria,
       medicacion: medicacion,
       indicaciones: indicaciones,
+      notas: notas,
       fechaInicio: fechaInicio,
       diasDuracion: diasDuracion,
       horaRecordatorio: horaRecordatorio,
@@ -111,6 +115,7 @@ class TratamientoController {
     TratamientoModel actual, {
     required String medicacion,
     required String indicaciones,
+    String? notas,
     required int diasDuracion,
     required DateTime fechaInicio,
     required String horaRecordatorio,
@@ -118,6 +123,7 @@ class TratamientoController {
     return actual.copyWith(
       medicacion: medicacion,
       indicaciones: indicaciones,
+      notas: notas,
       diasDuracion: diasDuracion,
       fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,
@@ -529,9 +535,10 @@ class TratamientoController {
     final eventosCalendario = <DateTime, List<Map<String, dynamic>>>{};
 
     for (final tratamiento in tratamientos) {
+      final texto = tratamiento.detalleVisible;
       final detalle = tratamiento.categoria == 'veterinaria'
-          ? '🏥 ${tratamiento.medicacion} - ${tratamiento.indicaciones}'
-          : '${tratamiento.medicacion} - ${tratamiento.indicaciones}';
+          ? '🏥 ${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}'
+          : '${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}';
 
       for (final fechaTexto in tratamiento.registroDosis) {
         final fecha = DateTime.tryParse(fechaTexto);
@@ -544,7 +551,7 @@ class TratamientoController {
 
         eventosCalendario.putIfAbsent(fechaNormalizada, () => []).add({
           'medicacion': tratamiento.medicacion,
-          'indicaciones': tratamiento.indicaciones,
+          'indicaciones': texto,
           'detalle': detalle,
           'categoria': tratamiento.categoria,
         });
@@ -587,7 +594,7 @@ class TratamientoController {
         EntradaHistorial(
           categoria: tratamiento.categoria,
           titulo: titulo,
-          indicaciones: tratamiento.indicaciones.trim(),
+          indicaciones: tratamiento.detalleVisible,
           fechaInicio: inicio,
           fechaFin: fin,
           cantidadDosis: tratamiento.registroDosis.length,

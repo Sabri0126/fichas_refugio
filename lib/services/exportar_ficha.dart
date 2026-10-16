@@ -293,6 +293,7 @@ abstract final class ExportarFicha {
   static pw.Widget _tarjetaTratamiento(TratamientoModel tratamiento) {
     final nombre = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
     final indicaciones = tratamiento.indicaciones.trim();
+    final notas = tratamiento.notas.trim();
     final detalle = <String>[
       _categoria(tratamiento.categoria),
       if (tratamiento.fechaInicio != null) 'Desde ${_fecha(tratamiento.fechaInicio)}',
@@ -317,6 +318,10 @@ abstract final class ExportarFicha {
           if (indicaciones.isNotEmpty) ...[
             pw.SizedBox(height: 3),
             pw.Text(indicaciones, style: const pw.TextStyle(fontSize: 11, color: _texto, lineSpacing: 2)),
+          ],
+          if (notas.isNotEmpty) ...[
+            pw.SizedBox(height: 3),
+            pw.Text(notas, style: const pw.TextStyle(fontSize: 11, color: _texto, lineSpacing: 2)),
           ],
         ],
       ),
@@ -423,6 +428,7 @@ abstract final class ExportarFicha {
       'higiene' => 'Higiene',
       'evento' => 'Evento médico',
       'veterinaria' => 'Veterinaria',
+      'vacuna' => 'Vacuna',
       _ => categoria,
     };
   }

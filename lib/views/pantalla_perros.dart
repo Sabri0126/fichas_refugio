@@ -957,10 +957,11 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                           Expanded(
                             child: Text(
                               resumen,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.lienzo),
                             ),
                           ),
                           TextButton(
+                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                             onPressed: _quitarFiltros,
                             child: const Text('Quitar filtros'),
                           ),

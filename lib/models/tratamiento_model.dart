@@ -19,15 +19,17 @@ class TratamientoModel {
   final String id;
 
   /// Tipo de tratamiento. Valores usados: `'diario'`, `'unico'`, `'higiene'`,
-  /// `'evento'` y `'veterinaria'`. Los registros anteriores solo con
-  /// `'diario'` / `'unico'` / `'veterinaria'` siguen siendo válidos.
+  /// `'evento'`, `'veterinaria'` y `'vacuna'`.
   final String categoria;
 
-  /// Nombre de la medicación o del procedimiento aplicado.
+  /// Nombre de la medicación, del procedimiento o de la vacuna.
   final String medicacion;
 
-  /// Indicaciones, dosis o diagnóstico asociado al tratamiento.
+  /// Indicaciones, dosis administrada o diagnóstico asociado al tratamiento.
   final String indicaciones;
+
+  /// Razón de la aplicación o notas. La usan la dosis única y la vacuna.
+  final String notas;
 
   /// Fecha en la que se inició el tratamiento o en la que ocurrió el evento.
   final DateTime? fechaInicio;
@@ -58,6 +60,7 @@ class TratamientoModel {
     required this.categoria,
     required this.medicacion,
     required this.indicaciones,
+    this.notas = '',
     this.fechaInicio,
     this.diasDuracion = 0,
     this.horaRecordatorio,
@@ -75,6 +78,7 @@ class TratamientoModel {
       categoria: data['categoria']?.toString() ?? 'diario',
       medicacion: data['medicacion']?.toString() ?? '',
       indicaciones: data['indicaciones']?.toString() ?? '',
+      notas: data['notas']?.toString() ?? '',
       fechaInicio: _fechaDesdeValor(data['fecha_inicio']),
       diasDuracion: int.tryParse(data['dias_duracion']?.toString() ?? '') ?? 0,
       horaRecordatorio: data['hora_recordatorio']?.toString(),
@@ -96,6 +100,7 @@ class TratamientoModel {
       'categoria': categoria,
       'medicacion': medicacion,
       'indicaciones': indicaciones,
+      'notas': notas,
       'fecha_inicio': fechaInicio != null ? Timestamp.fromDate(fechaInicio!) : null,
       'dias_duracion': diasDuracion,
       'hora_recordatorio': horaRecordatorio,
@@ -113,6 +118,7 @@ class TratamientoModel {
     String? categoria,
     String? medicacion,
     String? indicaciones,
+    String? notas,
     DateTime? fechaInicio,
     int? diasDuracion,
     String? horaRecordatorio,
@@ -125,6 +131,7 @@ class TratamientoModel {
       categoria: categoria ?? this.categoria,
       medicacion: medicacion ?? this.medicacion,
       indicaciones: indicaciones ?? this.indicaciones,
+      notas: notas ?? this.notas,
       fechaInicio: fechaInicio ?? this.fechaInicio,
       diasDuracion: diasDuracion ?? this.diasDuracion,
       horaRecordatorio: horaRecordatorio ?? this.horaRecordatorio,
@@ -132,5 +139,14 @@ class TratamientoModel {
       activo: activo ?? this.activo,
       fechaProximoRecordatorio: fechaProximoRecordatorio ?? this.fechaProximoRecordatorio,
     );
+  }
+
+  /// Dosis o indicaciones, y la razón cuando también hay texto.
+  String get detalleVisible {
+    final dosis = indicaciones.trim();
+    final extra = notas.trim();
+    if (dosis.isEmpty) return extra;
+    if (extra.isEmpty) return dosis;
+    return '$dosis · $extra';
   }
 }

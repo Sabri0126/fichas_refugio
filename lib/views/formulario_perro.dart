@@ -28,6 +28,8 @@ import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import 'dialogo_peso.dart';
+import 'dialogo_recordatorio.dart';
+import 'dialogo_tratamiento.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -719,69 +721,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
-  String _tituloDialogoAgregar(String categoria) {
-    switch (categoria) {
-      case 'unico':
-        return 'Agregar dosis única';
-      case 'higiene':
-        return 'Agregar higiene';
-      case 'evento':
-        return 'Agregar evento médico';
-      case 'veterinaria':
-        return 'Agregar visita veterinaria';
-      default:
-        return 'Agregar tratamiento diario';
-    }
-  }
-
-  Widget _botonCategoriaSalud({
-    required String etiqueta,
-    required IconData icono,
-    required Color color,
-    required String categoria,
-  }) {
-    final colorTexto = CategoryColors.texto(categoria);
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        onPressed: () => _mostrarDialogoAgregarTratamiento(categoria: categoria),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: context.paleta.superficie,
-          foregroundColor: colorTexto,
-          side: BorderSide(color: context.paleta.borde),
-          minimumSize: const Size.fromHeight(56),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          alignment: Alignment.centerLeft,
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icono, size: 20, color: color),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                etiqueta,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: colorTexto,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _tarjetaFormulario({
     String? titulo,
     IconData? icono,
@@ -888,15 +827,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
       case FaseTratamiento.indefinido:
         return '';
     }
-  }
-
-  String _helperDias(String texto, DateTime inicio) {
-    final dias = int.tryParse(texto.trim()) ?? 0;
-    if (dias <= 0) return 'Sin fecha de fin.';
-    final ultimo = DateTime(inicio.year, inicio.month, inicio.day + dias - 1);
-    final dia = ultimo.day.toString().padLeft(2, '0');
-    final mes = ultimo.month.toString().padLeft(2, '0');
-    return 'El día de inicio cuenta como día 1. Último día de medicación: $dia/$mes/${ultimo.year}';
   }
 
   Widget _tarjetaTratamientoDiario({
@@ -1080,7 +1010,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           isThreeLine: true,
           subtitle: Text(
             '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
-            '${t.indicaciones.isNotEmpty ? '\n${t.indicaciones}' : ''}',
+            '${t.detalleVisible.isNotEmpty ? '\n${t.detalleVisible}' : ''}',
             style: textTheme.bodyMedium?.copyWith(
               color: context.paleta.textoSuave,
               fontSize: 13,
@@ -1116,25 +1046,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
     return limpio[0].toUpperCase() + limpio.substring(1);
   }
 
-  String _etiquetaCategoria(String categoria) {
-    return switch (categoria) {
-      'unico' => 'Dosis única',
-      'higiene' => 'Higiene',
-      'evento' => 'Evento médico',
-      'veterinaria' => 'Veterinaria',
-      _ => 'Tratamiento diario',
-    };
-  }
+  String _etiquetaCategoria(String categoria) => CategoryColors.etiqueta(categoria);
 
-  IconData _iconoCategoria(String categoria) {
-    return switch (categoria) {
-      'unico' => Icons.vaccines,
-      'higiene' => Icons.shower,
-      'evento' => Icons.monitor_heart,
-      'veterinaria' => Icons.local_hospital,
-      _ => Icons.medication,
-    };
-  }
+  IconData _iconoCategoria(String categoria) => CategoryColors.icono(categoria);
 
   Color _colorCategoria(String categoria) => CategoryColors.base(categoria);
 
@@ -1638,7 +1552,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Se guarda al tocar Guardar Cambios.',
+          'Un aviso en el día y la hora que elijas. No se repite. Se guarda al tocar Guardar Cambios.',
           style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
         ),
         const SizedBox(height: 12),
@@ -1779,475 +1693,50 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _mostrarDialogoRecordatorio({int? indice}) async {
     final actual = indice == null ? null : _recordatorios[indice];
-    final exigirFutura = actual == null || _recordatorioController.esVencido(actual);
-    var tipo = actual?.tipo ?? 'veterinaria';
-    final tituloController = TextEditingController(
-      text: actual?.titulo ?? RecordatorioTipos.de(tipo).tituloSugerido,
+    final guardado = await mostrarDialogoRecordatorio(
+      context,
+      controller: _recordatorioController,
+      actual: actual,
     );
-    final notaController = TextEditingController(text: actual?.nota ?? '');
-    final base = actual?.fechaHora ?? _mananaALasNueve();
-    var fechaHora = DateTime(base.year, base.month, base.day, base.hour, base.minute);
-    var errorFecha = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final hoy = DateTime.now();
-          final primerDia = DateTime(hoy.year, hoy.month, hoy.day);
-          final fechaInicial = fechaHora.isBefore(primerDia) ? primerDia : fechaHora;
-          final fechaTexto =
-              '${fechaHora.day.toString().padLeft(2, '0')}/${fechaHora.month.toString().padLeft(2, '0')}/${fechaHora.year}';
-          final horaTexto =
-              '${fechaHora.hour.toString().padLeft(2, '0')}:${fechaHora.minute.toString().padLeft(2, '0')}';
-
-          return AlertDialog(
-            title: Text(actual == null ? 'Agendar recordatorio' : 'Editar recordatorio'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final visual in RecordatorioTipos.todos)
-                        ChoiceChip(
-                          avatar: Icon(visual.icono, size: 18, color: visual.colorTexto),
-                          label: Text(visual.etiqueta),
-                          selected: tipo == visual.tipo,
-                          onSelected: (seleccionado) {
-                            if (!seleccionado) return;
-                            setDialogState(() {
-                              final sugeridoAnterior = RecordatorioTipos.de(tipo).tituloSugerido;
-                              final texto = tituloController.text.trim();
-                              tipo = visual.tipo;
-                              if (texto.isEmpty || texto == sugeridoAnterior) {
-                                tituloController.text = visual.tituloSugerido;
-                              }
-                            });
-                          },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: tituloController,
-                    decoration: const InputDecoration(labelText: 'Título'),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Fecha: $fechaTexto'),
-                    trailing: const Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final seleccionada = await showDatePicker(
-                        context: ctx,
-                        initialDate: fechaInicial,
-                        firstDate: primerDia,
-                        lastDate: DateTime(2100),
-                      );
-                      if (seleccionada == null) return;
-                      setDialogState(() {
-                        fechaHora = DateTime(
-                          seleccionada.year,
-                          seleccionada.month,
-                          seleccionada.day,
-                          fechaHora.hour,
-                          fechaHora.minute,
-                        );
-                        errorFecha = false;
-                      });
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Hora: $horaTexto'),
-                    trailing: const Icon(Icons.access_time),
-                    onTap: () async {
-                      final seleccionada = await showTimePicker(
-                        context: ctx,
-                        initialTime: TimeOfDay.fromDateTime(fechaHora),
-                        builder: (BuildContext context, Widget? child) {
-                          return MediaQuery(
-                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (seleccionada == null) return;
-                      setDialogState(() {
-                        fechaHora = DateTime(
-                          fechaHora.year,
-                          fechaHora.month,
-                          fechaHora.day,
-                          seleccionada.hour,
-                          seleccionada.minute,
-                        );
-                        errorFecha = false;
-                      });
-                    },
-                  ),
-                  if (errorFecha)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Elegí una fecha y hora futuras',
-                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: AppColors.error),
-                      ),
-                    ),
-                  TextField(
-                    controller: notaController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Nota (opcional)',
-                      helperMaxLines: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final titulo = tituloController.text.trim();
-                  if (titulo.isEmpty) return;
-                  if (exigirFutura && !fechaHora.isAfter(DateTime.now())) {
-                    setDialogState(() => errorFecha = true);
-                    return;
-                  }
-                  final guardado = actual == null
-                      ? _recordatorioController.crear(
-                          tipo: tipo,
-                          titulo: titulo,
-                          nota: notaController.text,
-                          fechaHora: fechaHora,
-                        )
-                      : _recordatorioController.editar(
-                          actual,
-                          tipo: tipo,
-                          titulo: titulo,
-                          nota: notaController.text,
-                          fechaHora: fechaHora,
-                        );
-                  setState(() {
-                    if (indice == null) {
-                      _recordatorios.add(guardado);
-                    } else {
-                      _recordatorios[indice] = guardado;
-                    }
-                    _hayCambios = true;
-                  });
-                  Navigator.pop(ctx);
-                },
-                child: Text(actual == null ? 'Agregar' : 'Guardar'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  DateTime _mananaALasNueve() {
-    final manana = DateTime.now().add(const Duration(days: 1));
-    return DateTime(manana.year, manana.month, manana.day, 9, 0);
+    if (!mounted || guardado == null) return;
+    setState(() {
+      if (indice == null) {
+        _recordatorios.add(guardado);
+      } else {
+        _recordatorios[indice] = guardado;
+      }
+      _hayCambios = true;
+    });
   }
 
   Future<void> _mostrarDialogoAgregarTratamiento({
     required String categoria,
   }) async {
-    final medicacionController = TextEditingController();
-    final indicacionesController = TextEditingController();
-    final diasController = TextEditingController(text: '0');
-    DateTime fechaInicio = DateTime.now();
-    TimeOfDay horaRecordatorio = const TimeOfDay(hour: 9, minute: 0);
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final esEventoUnico = categoria != 'diario';
-          final labelPrimerCampo = switch (categoria) {
-            'veterinaria' => 'Motivo de la visita',
-            'unico' => 'Medicación / Aplicación',
-            'higiene' => 'Procedimiento / Cuidado',
-            'evento' => 'Evento / Motivo',
-            _ => 'Medicación',
-          };
-          final labelSegundoCampo = switch (categoria) {
-            'veterinaria' => 'Diagnóstico / Indicaciones',
-            'evento' => 'Notas / Indicaciones',
-            _ => 'Indicaciones',
-          };
-          final labelFecha = switch (categoria) {
-            'veterinaria' => 'Fecha de visita',
-            'unico' => 'Fecha de aplicación',
-            'higiene' => 'Fecha',
-            'evento' => 'Fecha del evento',
-            _ => 'Fecha de inicio',
-          };
-
-          return AlertDialog(
-            title: Text(_tituloDialogoAgregar(categoria)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: medicacionController,
-                    decoration: InputDecoration(
-                      labelText: labelPrimerCampo,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: indicacionesController,
-                    decoration: InputDecoration(
-                      labelText: labelSegundoCampo,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (!esEventoUnico)
-                    TextField(
-                      controller: diasController,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
-                        labelText: 'Días de duración (0 = indefinido)',
-                        helperText: _helperDias(diasController.text, fechaInicio),
-                        helperMaxLines: 2,
-                      ),
-                    ),
-                  if (!esEventoUnico) const SizedBox(height: 16),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '$labelFecha: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
-                    ),
-                    trailing: const Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final seleccionada = await showDatePicker(
-                        context: ctx,
-                        initialDate: fechaInicio,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (seleccionada != null) {
-                        setDialogState(() => fechaInicio = seleccionada);
-                      }
-                    },
-                  ),
-                  if (!esEventoUnico)
-                    InkWell(
-                      onTap: () async {
-                        final seleccionada = await showTimePicker(
-                          context: ctx,
-                          initialTime: horaRecordatorio,
-                          builder: (BuildContext context, Widget? child) {
-                            return MediaQuery(
-                              data: MediaQuery.of(
-                                context,
-                              ).copyWith(alwaysUse24HourFormat: true),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (seleccionada != null) {
-                          setDialogState(() => horaRecordatorio = seleccionada);
-                        }
-                      },
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
-                        ),
-                        trailing: const Icon(Icons.access_time),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final medicacion = medicacionController.text.trim();
-                  if (medicacion.isEmpty) return;
-
-                  final horaFormateada =
-                      '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
-
-                  final nuevoTratamiento = _tratamientoController
-                      .crearTratamiento(
-                        categoria: categoria,
-                        medicacion: medicacion,
-                        indicaciones: indicacionesController.text.trim(),
-                        fechaInicio: fechaInicio,
-                        diasDuracion:
-                            int.tryParse(diasController.text.trim()) ?? 0,
-                        horaRecordatorio: horaFormateada,
-                      );
-
-                  setState(() {
-                    _tratamientos.add(nuevoTratamiento);
-                    _hayCambios = true;
-                  });
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Agregar'),
-              ),
-            ],
-          );
-        },
-      ),
+    final nuevo = await mostrarDialogoTratamiento(
+      context,
+      controller: _tratamientoController,
+      categoria: categoria,
     );
+    if (!mounted || nuevo == null) return;
+    setState(() {
+      _tratamientos.add(nuevo);
+      _hayCambios = true;
+    });
   }
 
   Future<void> _mostrarDialogoEditarTratamiento(int indice) async {
-    final tratamiento = _tratamientos[indice];
-    final medicacionController = TextEditingController(
-      text: tratamiento.medicacion,
+    final actualizado = await mostrarDialogoEditarTratamiento(
+      context,
+      controller: _tratamientoController,
+      actual: _tratamientos[indice],
     );
-    final indicacionesController = TextEditingController(
-      text: tratamiento.indicaciones,
-    );
-    final diasController = TextEditingController(
-      text: tratamiento.diasDuracion.toString(),
-    );
-
-    DateTime fechaInicio = tratamiento.fechaInicio ?? DateTime.now();
-
-    final partesHora = (tratamiento.horaRecordatorio ?? '09:00').split(':');
-    TimeOfDay horaRecordatorio = TimeOfDay(
-      hour: int.tryParse(partesHora.isNotEmpty ? partesHora[0] : '') ?? 9,
-      minute: int.tryParse(partesHora.length > 1 ? partesHora[1] : '') ?? 0,
-    );
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Editar tratamiento'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: medicacionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Medicación',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: indicacionesController,
-                  decoration: const InputDecoration(
-                    labelText: 'Indicaciones',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: diasController,
-                  keyboardType: TextInputType.number,
-                  onChanged: tratamiento.categoria == 'diario' ? (_) => setDialogState(() {}) : null,
-                  decoration: InputDecoration(
-                    labelText: 'Días de duración (0 = indefinido)',
-                    helperText: tratamiento.categoria == 'diario'
-                        ? _helperDias(diasController.text, fechaInicio)
-                        : null,
-                    helperMaxLines: tratamiento.categoria == 'diario' ? 2 : null,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Fecha de inicio: ${fechaInicio.day.toString().padLeft(2, '0')}/${fechaInicio.month.toString().padLeft(2, '0')}/${fechaInicio.year}',
-                  ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final seleccionada = await showDatePicker(
-                      context: ctx,
-                      initialDate: fechaInicio,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (seleccionada != null) {
-                      setDialogState(() => fechaInicio = seleccionada);
-                    }
-                  },
-                ),
-                InkWell(
-                  onTap: () async {
-                    final seleccionada = await showTimePicker(
-                      context: ctx,
-                      initialTime: horaRecordatorio,
-                      builder: (BuildContext context, Widget? child) {
-                        return MediaQuery(
-                          data: MediaQuery.of(
-                            context,
-                          ).copyWith(alwaysUse24HourFormat: true),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (seleccionada != null) {
-                      setDialogState(() => horaRecordatorio = seleccionada);
-                    }
-                  },
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Hora del recordatorio: ${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}',
-                    ),
-                    trailing: const Icon(Icons.access_time),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final medicacion = medicacionController.text.trim();
-                if (medicacion.isEmpty) return;
-
-                final horaFormateada =
-                    '${horaRecordatorio.hour.toString().padLeft(2, '0')}:${horaRecordatorio.minute.toString().padLeft(2, '0')}';
-
-                setState(() {
-                  _tratamientos[indice] = _tratamientoController
-                      .editarTratamiento(
-                        tratamiento,
-                        medicacion: medicacion,
-                        indicaciones: indicacionesController.text.trim(),
-                        diasDuracion:
-                            int.tryParse(diasController.text.trim()) ?? 0,
-                        fechaInicio: fechaInicio,
-                        horaRecordatorio: horaFormateada,
-                      );
-                  _hayCambios = true;
-                });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Guardar'),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (!mounted || actualizado == null) return;
+    setState(() {
+      _tratamientos[indice] = actualizado;
+      _hayCambios = true;
+    });
   }
+
 
   Future<void> _mostrarDialogoEliminarTratamiento(int indice) async {
     final esDiario = _tratamientos[indice].categoria == 'diario';
@@ -2715,6 +2204,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     ),
                     maxLines: 6,
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Sale en la tarjeta para adoptar. La ven los visitantes.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -2779,6 +2273,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     ),
                     maxLines: 6,
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Notas clínicas. No salen en la tarjeta.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Tratamientos (activos y pausados) ---
                   Align(
@@ -2788,63 +2287,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(color: context.paleta.lienzo),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'El diario avisa cada día a la hora elegida. Los demás quedan en la fecha de la aplicación.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
                   const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      const espacio = 12.0;
-                      final anchoCelda = (constraints.maxWidth - espacio) / 2;
-                      return Wrap(
-                        spacing: espacio,
-                        runSpacing: espacio,
-                        children: [
-                          SizedBox(
-                            width: anchoCelda,
-                            child: _botonCategoriaSalud(
-                              etiqueta: 'Tratamiento Diario',
-                              icono: Icons.medication,
-                              color: CategoryColors.base('diario'),
-                              categoria: 'diario',
-                            ),
-                          ),
-                          SizedBox(
-                            width: anchoCelda,
-                            child: _botonCategoriaSalud(
-                              etiqueta: 'Dosis Única',
-                              icono: Icons.vaccines,
-                              color: CategoryColors.base('unico'),
-                              categoria: 'unico',
-                            ),
-                          ),
-                          SizedBox(
-                            width: anchoCelda,
-                            child: _botonCategoriaSalud(
-                              etiqueta: 'Higiene',
-                              icono: Icons.shower,
-                              color: CategoryColors.base('higiene'),
-                              categoria: 'higiene',
-                            ),
-                          ),
-                          SizedBox(
-                            width: anchoCelda,
-                            child: _botonCategoriaSalud(
-                              etiqueta: 'Evento Médico',
-                              icono: Icons.monitor_heart,
-                              color: CategoryColors.base('evento'),
-                              categoria: 'evento',
-                            ),
-                          ),
-                          SizedBox(
-                            width: anchoCelda,
-                            child: _botonCategoriaSalud(
-                              etiqueta: 'Veterinaria',
-                              icono: Icons.local_hospital,
-                              color: CategoryColors.base('veterinaria'),
-                              categoria: 'veterinaria',
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                  GrillaRegistrosMedicos(
+                    alElegir: (categoria) => _mostrarDialogoAgregarTratamiento(categoria: categoria),
                   ),
                   const SizedBox(height: 32),
                   _seccionPeso(),

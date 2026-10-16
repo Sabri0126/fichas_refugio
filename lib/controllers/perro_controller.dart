@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/peso_model.dart';
+import '../models/recordatorio_model.dart';
+import '../models/tratamiento_model.dart';
 
 /// Controlador encargado de la lógica de negocio y de acceso a Firestore de
 /// los perros del refugio: lectura/escritura de fichas, validaciones de
@@ -219,6 +221,39 @@ class PerroController {
       if (yaEsta) return;
       lista.add(peso.toMap());
       tx.update(ref, {'pesos': lista});
+    });
+  }
+
+  /// Suma un registro médico al array `tratamientos` si ese id todavía no está.
+  Future<void> agregarTratamiento(String idPerro, TratamientoModel tratamiento) {
+    return _agregarEnLista(idPerro, 'tratamientos', tratamiento.id, tratamiento.toMap());
+  }
+
+  /// Suma un recordatorio al array `recordatorios` si ese id todavía no está.
+  Future<void> agregarRecordatorio(String idPerro, RecordatorioModel recordatorio) {
+    return _agregarEnLista(idPerro, 'recordatorios', recordatorio.id, recordatorio.toMap());
+  }
+
+  Future<void> _agregarEnLista(
+    String idPerro,
+    String campo,
+    String id,
+    Map<String, dynamic> mapa,
+  ) async {
+    final ref = _perrosRef.doc(idPerro);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      if (data == null) return;
+      final crudos = data[campo];
+      final lista = crudos is List ? List<dynamic>.from(crudos) : <dynamic>[];
+      final yaEsta = lista.any((item) {
+        if (item is! Map) return false;
+        return item['id']?.toString() == id;
+      });
+      if (yaEsta) return;
+      lista.add(mapa);
+      tx.update(ref, {campo: lista});
     });
   }
 

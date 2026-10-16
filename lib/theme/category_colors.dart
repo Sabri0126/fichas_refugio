@@ -8,6 +8,7 @@ abstract final class CategoryColors {
   static const Color higiene = Color(0xFF00BCD4);
   static const Color evento = Color(0xFF9C27B0);
   static const Color veterinaria = Color(0xFFFF9800);
+  static const Color vacuna = Color(0xFFE91E63);
 
   /// Variantes oscurecidas para texto sobre fondo claro (contraste ≥ 4.5:1).
   static const Color diarioTexto = Color(0xFF2E7D32);
@@ -15,12 +16,14 @@ abstract final class CategoryColors {
   static const Color higieneTexto = Color(0xFF00727F);
   static const Color eventoTexto = Color(0xFF7B1FA2);
   static const Color veterinariaTexto = Color(0xFFB45309);
+  static const Color vacunaTexto = Color(0xFFAD1457);
 
   static Color base(String? categoria) => switch (categoria) {
         'unico' => unico,
         'higiene' => higiene,
         'evento' => evento,
         'veterinaria' => veterinaria,
+        'vacuna' => vacuna,
         _ => diario,
       };
 
@@ -29,6 +32,7 @@ abstract final class CategoryColors {
         'higiene' => higieneTexto,
         'evento' => eventoTexto,
         'veterinaria' => veterinariaTexto,
+        'vacuna' => vacunaTexto,
         _ => diarioTexto,
       };
 
@@ -36,10 +40,11 @@ abstract final class CategoryColors {
   static Color tinte(String? categoria) => base(categoria).withValues(alpha: 0.12);
 
   static IconData icono(String? categoria) => switch (categoria) {
-        'unico' => Icons.vaccines,
+        'unico' => Icons.medication_liquid,
         'higiene' => Icons.shower,
         'evento' => Icons.monitor_heart,
         'veterinaria' => Icons.local_hospital,
+        'vacuna' => Icons.vaccines,
         _ => Icons.medication,
       };
 
@@ -48,6 +53,7 @@ abstract final class CategoryColors {
         'higiene' => 'Higiene',
         'evento' => 'Evento médico',
         'veterinaria' => 'Veterinaria',
+        'vacuna' => 'Vacuna',
         _ => 'Tratamiento diario',
       };
 }

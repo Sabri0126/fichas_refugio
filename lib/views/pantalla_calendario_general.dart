@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/calendario_general_controller.dart';
 import '../controllers/perro_controller.dart';
+import '../controllers/recordatorio_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
@@ -12,6 +14,7 @@ import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
+import 'alta_calendario.dart';
 import 'ficha_detalle_perro.dart';
 
 enum _VistaCalendario { mes, dosSemanas, lista }
@@ -27,6 +30,7 @@ class PantallaCalendarioGeneral extends StatefulWidget {
 class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
+  final RecordatorioController _recordatorioController = RecordatorioController();
   late final Stream<List<PerroModel>> _streamPerros = _perroController
       .observarPerros();
   late final Future<void> _localeListo;
@@ -179,6 +183,8 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                             const SizedBox(height: 12),
                             _selectorFormato(),
                             const SizedBox(height: 12),
+                            _botonesAlta(activos),
+                            const SizedBox(height: 12),
                             if (esLista)
                               _panelLista(perros, filtro)
                             else ...[
@@ -206,6 +212,8 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                                     filtroPerro,
                                     const SizedBox(height: 12),
                                     _selectorFormato(),
+                                    const SizedBox(height: 12),
+                                    _botonesAlta(activos),
                                     const SizedBox(height: 12),
                                     _panelLista(perros, filtro),
                                   ],
@@ -239,6 +247,8 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                                             filtroPerro,
                                             const SizedBox(height: 12),
                                             _selectorFormato(),
+                                            const SizedBox(height: 12),
+                                            _botonesAlta(activos),
                                             const SizedBox(height: 12),
                                             _calendario(perros, filtro, altoCelda: altoCelda),
                                             const SizedBox(height: 12),
@@ -282,6 +292,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   static const _ordenTipos = [
     'diario',
     'unico',
+    'vacuna',
     'higiene',
     'evento',
     'veterinaria',
@@ -293,6 +304,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   static const _etiquetasTipo = {
     'diario': 'Tratamiento diario',
     'unico': 'Dosis única',
+    'vacuna': 'Vacuna',
     'higiene': 'Higiene',
     'evento': 'Evento',
     'veterinaria': 'Veterinaria',
@@ -557,6 +569,86 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     );
   }
 
+  Widget _botonesAlta(List<PerroModel> activos) {
+    if (FirebaseAuth.instance.currentUser == null) return const SizedBox.shrink();
+    final hayPerros = activos.isNotEmpty;
+    return Material(
+      color: context.paleta.superficie,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: context.paleta.borde),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _celdaAlta(
+                icono: Icons.medical_services_outlined,
+                texto: 'Agregar registro',
+                habilitado: hayPerros,
+                alTocar: () => abrirAltaRegistroCalendario(
+                  context,
+                  activos: activos,
+                  idPreseleccionado: _idPerroFiltro,
+                  fecha: _diaSeleccionado,
+                  tratamientos: _tratamientoController,
+                  perros: _perroController,
+                ),
+              ),
+            ),
+            VerticalDivider(width: 1, thickness: 1, color: context.paleta.borde),
+            Expanded(
+              child: _celdaAlta(
+                icono: Icons.alarm_add,
+                texto: 'Agregar recordatorio',
+                habilitado: hayPerros,
+                alTocar: () => abrirAltaRecordatorioCalendario(
+                  context,
+                  activos: activos,
+                  idPreseleccionado: _idPerroFiltro,
+                  fecha: _diaSeleccionado,
+                  recordatorios: _recordatorioController,
+                  perros: _perroController,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _celdaAlta({
+    required IconData icono,
+    required String texto,
+    required bool habilitado,
+    required VoidCallback alTocar,
+  }) {
+    final color = habilitado ? context.paleta.lienzo : context.paleta.textoSuave;
+    return InkWell(
+      onTap: habilitado ? alTocar : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icono, size: 18, color: color),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                texto,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _selectorFormato() {
     return Align(
       alignment: Alignment.centerRight,
@@ -725,6 +817,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       'diario': 'Dosis dada',
       'pendiente': 'Pendiente',
       'unico': 'Dosis única',
+      'vacuna': 'Vacuna',
       'higiene': 'Higiene',
       'evento': 'Evento',
       'veterinaria': 'Veterinaria',

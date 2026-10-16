@@ -122,7 +122,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         children: [
           _estadoVacio(error: true),
           const SizedBox(height: 12),
-          _ayudaAvisos(),
+          _creditoClima(),
         ],
       );
     }
@@ -135,7 +135,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         children: [
           _estadoVacio(),
           const SizedBox(height: 12),
-          _ayudaAvisos(),
+          _creditoClima(),
         ],
       );
     }
@@ -147,7 +147,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
           if (index != items.length - 1) const SizedBox(height: 12),
         ],
         const SizedBox(height: 12),
-        _ayudaAvisos(),
+        _creditoClima(),
       ],
     );
   }
@@ -379,44 +379,10 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
     );
   }
 
-  Widget _ayudaAvisos() {
-    final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            shape: const Border(),
-            collapsedShape: const Border(),
-            title: Text('¿No te llegan los avisos?', style: Theme.of(context).textTheme.titleMedium),
-            children: [
-              Text(
-                '1) Verificá que las notificaciones de la app estén permitidas en los ajustes del teléfono.',
-                style: estilo,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '2) Quitá la restricción de batería para la app (en Samsung: Ajustes > Batería > Límites de uso en segundo plano > quitá la app de "Apps en suspensión").',
-                style: estilo,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '3) No fuerces la detención de la app.',
-                style: estilo,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Datos del clima: Open-Meteo.com',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.lienzoSuave),
-        ),
-      ],
+  Widget _creditoClima() {
+    return Text(
+      'Datos del clima: Open-Meteo.com',
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: context.paleta.lienzoSuave),
     );
   }
 }

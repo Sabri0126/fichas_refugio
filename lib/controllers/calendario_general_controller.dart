@@ -172,7 +172,7 @@ abstract final class CalendarioGeneralController {
 
     if (resumen.pendientes.isNotEmpty) agregar('pendiente');
     if (resumen.dadas.isNotEmpty) agregar('diario');
-    const ordenEventos = ['unico', 'higiene', 'evento', 'veterinaria'];
+    const ordenEventos = ['unico', 'vacuna', 'higiene', 'evento', 'veterinaria'];
     final presentes = resumen.eventos.map((item) => item.categoria).toSet();
     for (final categoria in ordenEventos) {
       if (presentes.contains(categoria)) agregar(categoria);
@@ -236,7 +236,7 @@ abstract final class CalendarioGeneralController {
     return ItemResumen(
       perro: perro,
       titulo: tratamiento.medicacion,
-      detalle: tratamiento.indicaciones,
+      detalle: tratamiento.detalleVisible,
       hora: tratamiento.categoria == 'diario'
           ? _horaONula(tratamiento.horaRecordatorio)
           : null,
@@ -379,7 +379,7 @@ abstract final class CalendarioGeneralController {
       desde: cierre == null ? null : comienzo,
       perro: perro,
       titulo: titulo,
-      detalle: tratamiento.indicaciones,
+      detalle: tratamiento.detalleVisible,
       categoria: 'diario',
       cantidadDosis: tratamiento.registroDosis.length,
     );
@@ -407,7 +407,7 @@ abstract final class CalendarioGeneralController {
             fecha: fecha,
             perro: perro,
             titulo: titulo,
-            detalle: tratamiento.indicaciones,
+            detalle: tratamiento.detalleVisible,
             categoria: tratamiento.categoria,
           ),
     ];
