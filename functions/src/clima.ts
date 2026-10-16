@@ -45,9 +45,9 @@ export interface ConfigClima {
 
 const DEFAULTS: ConfigClima = {
   activo: true,
-  latitud: -38.9833,
-  longitud: -64.0933,
-  lugar: 'Río Colorado, Río Negro',
+  latitud: -39.00560084311861,
+  longitud: -64.05354141817675,
+  lugar: 'Refugio Milagros de Amor, Río Colorado, Río Negro',
   lluviaProbMin: 60,
   lluviaMmMin: 2,
   lluviaFuerteMm: 15,

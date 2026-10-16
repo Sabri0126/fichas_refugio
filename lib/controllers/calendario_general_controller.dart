@@ -100,7 +100,7 @@ abstract final class CalendarioGeneralController {
           } else if (diaFecha.isAfter(hoyFecha)) {
             programadas.add(_itemTratamiento(perro, tratamiento));
           }
-        } else if (tratamiento.registroDosis.contains(iso)) {
+        } else if (_eventoEnDia(tratamiento, diaFecha, iso)) {
           eventos.add(_itemTratamiento(perro, tratamiento));
         }
       }
@@ -392,12 +392,14 @@ abstract final class CalendarioGeneralController {
     DateTime fin,
   ) {
     final fechas = <DateTime>[];
-    for (final texto in tratamiento.registroDosis) {
-      final fecha = DateTime.tryParse(texto);
-      if (fecha != null) fechas.add(_soloFecha(fecha));
-    }
-    if (fechas.isEmpty && tratamiento.fechaInicio != null) {
-      fechas.add(_soloFecha(tratamiento.fechaInicio!));
+    final inicioFecha = tratamiento.fechaInicio;
+    if (inicioFecha != null) {
+      fechas.add(_soloFecha(inicioFecha));
+    } else {
+      for (final texto in tratamiento.registroDosis) {
+        final fecha = DateTime.tryParse(texto);
+        if (fecha != null) fechas.add(_soloFecha(fecha));
+      }
     }
     final titulo = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
     return [
@@ -411,6 +413,12 @@ abstract final class CalendarioGeneralController {
             categoria: tratamiento.categoria,
           ),
     ];
+  }
+
+  static bool _eventoEnDia(TratamientoModel tratamiento, DateTime dia, String iso) {
+    final inicio = tratamiento.fechaInicio;
+    if (inicio != null) return _mismoDia(_soloFecha(inicio), dia);
+    return tratamiento.registroDosis.contains(iso);
   }
 
   static bool _enRango(DateTime fecha, DateTime desde, DateTime hasta) {

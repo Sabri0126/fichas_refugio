@@ -116,9 +116,9 @@ Crearlo a mano en la consola de Firestore, colección `config`, id `clima`. Si n
 | Campo | Default | Unidad |
 | --- | --- | --- |
 | `activo` | `true` | Si es `false`, la corrida no consulta ni envía nada. |
-| `latitud` | `-38.9833` | Grados, WGS84. |
-| `longitud` | `-64.0933` | Grados, WGS84. Negativo es oeste. |
-| `lugar` | `Río Colorado, Río Negro` | Nombre de referencia. No sale en el texto del aviso. |
+| `latitud` | `-39.00560084311861` | Grados, WGS84. |
+| `longitud` | `-64.05354141817675` | Grados, WGS84. Negativo es oeste. |
+| `lugar` | `Refugio Milagros de Amor, Río Colorado, Río Negro` | Nombre de referencia. No sale en el texto del aviso. |
 | `lluvia_prob_min` | `60` | Porcentaje. Entre las 08 y las 22. Con milímetros por debajo de `lluvia_mm_min` avisa llovizna; si no hay milímetros, avisa lluvia. |
 | `lluvia_mm_min` | `2` | Milímetros. Avisa lluvia si la suma en ese tramo llega a este valor. |
 | `lluvia_fuerte_mm` | `15` | Milímetros. Avisa lluvia fuerte si la suma llega a este valor, o si el código del tiempo es lluvia fuerte. |

@@ -101,8 +101,10 @@ class TratamientoController {
   }
 
   /// Edita los campos editables de un tratamiento existente (medicación,
-  /// indicaciones, días de duración, fecha de inicio y hora de recordatorio),
-  /// preservando el resto de los datos (id, categoría, registro de dosis, etc.).
+  /// indicaciones, días de duración, fecha de inicio y hora de recordatorio).
+  /// En un evento puntual, el registro de dosis queda en el día nuevo: el
+  /// calendario lo usa para ubicar la aplicación. Un diario conserva su
+  /// historial de dosis.
   ///
   /// @param actual el tratamiento a editar.
   /// @param medicacion nuevo nombre de la medicación.
@@ -127,6 +129,7 @@ class TratamientoController {
       diasDuracion: diasDuracion,
       fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,
+      registroDosis: actual.categoria == 'diario' ? null : [formatearFechaISO(fechaInicio)],
     );
   }
 
@@ -540,15 +543,7 @@ class TratamientoController {
           ? '🏥 ${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}'
           : '${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}';
 
-      for (final fechaTexto in tratamiento.registroDosis) {
-        final fecha = DateTime.tryParse(fechaTexto);
-        if (fecha == null) continue;
-        final fechaNormalizada = DateTime.utc(
-          fecha.year,
-          fecha.month,
-          fecha.day,
-        );
-
+      for (final fechaNormalizada in _diasEnCalendario(tratamiento)) {
         eventosCalendario.putIfAbsent(fechaNormalizada, () => []).add({
           'medicacion': tratamiento.medicacion,
           'indicaciones': texto,
@@ -559,6 +554,25 @@ class TratamientoController {
     }
 
     return eventosCalendario;
+  }
+
+  /// Días en los que el historial muestra el tratamiento.
+  /// Un evento puntual vive en `fechaInicio`. Si esa fecha todavía no está,
+  /// se usa el registro. Un diario sigue el registro de dosis dadas.
+  List<DateTime> _diasEnCalendario(TratamientoModel tratamiento) {
+    if (tratamiento.categoria != 'diario') {
+      final inicio = tratamiento.fechaInicio;
+      if (inicio != null) {
+        return [DateTime.utc(inicio.year, inicio.month, inicio.day)];
+      }
+    }
+    final dias = <DateTime>[];
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      dias.add(DateTime.utc(fecha.year, fecha.month, fecha.day));
+    }
+    return dias;
   }
 
   /// Una fila por tratamiento, de más nuevo a más viejo.
@@ -581,7 +595,12 @@ class TratamientoController {
               tratamiento.fechaInicio!.month,
               tratamiento.fechaInicio!.day,
             );
-      if (dosis.isNotEmpty && (inicio == null || dosis.first.isBefore(inicio))) {
+      final puntual = tratamiento.categoria != 'diario';
+      if (puntual && inicio != null) {
+        dosis
+          ..clear()
+          ..add(inicio);
+      } else if (dosis.isNotEmpty && (inicio == null || dosis.first.isBefore(inicio))) {
         inicio = dosis.first;
       }
       DateTime? fin;

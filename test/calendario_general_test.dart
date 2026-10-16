@@ -268,6 +268,62 @@ void main() {
     expect(diaManana.eventos.single.detalle, 'Corte');
   });
 
+  test('un evento editado se muestra en la fecha nueva, no en el registro viejo', () {
+    final corte = TratamientoModel(
+      id: 'corte',
+      categoria: 'higiene',
+      medicacion: 'Corte de pelo',
+      indicaciones: '',
+      fechaInicio: DateTime(2026, 10, 6),
+      registroDosis: const ['2026-10-04'],
+      activo: true,
+    );
+    final lista = [perro(tratamientos: [corte])];
+    final viejo = DateTime(2026, 10, 4);
+    final nuevo = DateTime(2026, 10, 6);
+
+    expect(resumen(lista, viejo).eventos, isEmpty);
+    expect(resumen(lista, nuevo).eventos.single.titulo, 'Corte de pelo');
+    expect(marcadores(lista, viejo), isEmpty);
+    expect(marcadores(lista, nuevo), ['higiene']);
+
+    final filas = CalendarioGeneralController.construirLista(
+      lista,
+      desde: viejo,
+      hasta: nuevo,
+    );
+    expect(filas.map((fila) => fila.fecha), [nuevo]);
+
+    final controller = TratamientoController();
+    final editado = controller.editarTratamiento(
+      corte,
+      medicacion: 'Corte de pelo',
+      indicaciones: '',
+      diasDuracion: 0,
+      fechaInicio: nuevo,
+      horaRecordatorio: '09:00',
+    );
+    expect(editado.registroDosis, ['2026-10-06']);
+
+    final diarioEditado = controller.editarTratamiento(
+      diario(dosis: const ['2026-06-15'], inicio: hoy),
+      medicacion: 'Pastilla',
+      indicaciones: '1 comprimido',
+      diasDuracion: 10,
+      fechaInicio: manana,
+      horaRecordatorio: '09:00',
+    );
+    expect(diarioEditado.registroDosis, ['2026-06-15']);
+
+    final calendario = controller.construirEventosCalendario([corte]);
+    expect(calendario[DateTime.utc(2026, 10, 4)], isNull);
+    expect(calendario[DateTime.utc(2026, 10, 6)]!.single['medicacion'], 'Corte de pelo');
+
+    final historial = controller.construirHistorialLista([corte]);
+    expect(historial.single.fechaInicio, nuevo);
+    expect(historial.single.fechaFin, isNull);
+  });
+
   test('un recordatorio aparece en su día, también si ya venció', () {
     final lista = [
       perro(
