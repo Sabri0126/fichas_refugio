@@ -21,6 +21,9 @@ class NotificacionRegistroModel {
   final DateTime creada;
   final bool leida;
 
+  /// El servidor todavía no escribió `creada`. Cuenta como no leída.
+  final bool creadaPendiente;
+
   const NotificacionRegistroModel({
     required this.id,
     required this.titulo,
@@ -33,9 +36,10 @@ class NotificacionRegistroModel {
     required this.fecha,
     required this.creada,
     required this.leida,
+    this.creadaPendiente = false,
   });
 
-  /// Devuelve null si falta `creada` o no se puede leer la fecha.
+  /// Devuelve null si no hay ninguna fecha legible.
   static NotificacionRegistroModel? desdeDocumento(
     String id,
     Map<String, dynamic> data, {
@@ -43,10 +47,11 @@ class NotificacionRegistroModel {
   }) {
     final creada = _fecha(data['creada']);
     final ocurrencia = _fecha(data['fecha']) ?? creada;
-    if (creada == null || ocurrencia == null || id.isEmpty) return null;
+    if ((creada == null && ocurrencia == null) || id.isEmpty) return null;
     final idPerro = data['id_perro']?.toString();
     final idTratamiento = data['id_tratamiento']?.toString().trim() ?? '';
     final dia = data['dia']?.toString().trim() ?? '';
+    final pendiente = creada == null;
     return NotificacionRegistroModel(
       id: id,
       titulo: data['titulo']?.toString() ?? '',
@@ -56,9 +61,10 @@ class NotificacionRegistroModel {
       dia: dia.isEmpty ? null : dia,
       categoria: data['categoria']?.toString() ?? 'diario',
       tipo: data['tipo']?.toString() ?? '',
-      fecha: ocurrencia,
-      creada: creada,
-      leida: leidasHasta != null && !creada.isAfter(leidasHasta),
+      fecha: ocurrencia ?? DateTime.now(),
+      creada: creada ?? DateTime.now(),
+      leida: creada != null && leidasHasta != null && !creada.isAfter(leidasHasta),
+      creadaPendiente: pendiente,
     );
   }
 }

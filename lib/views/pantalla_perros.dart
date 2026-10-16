@@ -951,17 +951,20 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                 children: [
                   if (resumen != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                      child: Row(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
                         children: [
-                          Expanded(
-                            child: Text(
-                              resumen,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.lienzo),
-                            ),
+                          Text(
+                            resumen,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
                           ),
                           TextButton(
-                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                             onPressed: _quitarFiltros,
                             child: const Text('Quitar filtros'),
                           ),

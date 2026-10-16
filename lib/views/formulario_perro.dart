@@ -2204,11 +2204,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     ),
                     maxLines: 6,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sale en la tarjeta para adoptar. La ven los visitantes.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                  ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -2272,11 +2267,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       alignLabelWithHint: true,
                     ),
                     maxLines: 6,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Notas clínicas. No salen en la tarjeta.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                   ),
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Tratamientos (activos y pausados) ---

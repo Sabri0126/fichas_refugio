@@ -15,7 +15,9 @@ class HistorialNotificacionesController {
 
   static bool _migrado = false;
 
-  final _aviso = StreamController<void>.broadcast();
+  static final _aviso = StreamController<void>.broadcast();
+
+  List<NotificacionRegistroModel> _ultima = const [];
 
   Stream<List<NotificacionRegistroModel>> observarHistorial() {
     if (FirebaseAuth.instance.currentUser == null) {
@@ -28,10 +30,19 @@ class HistorialNotificacionesController {
     return observarHistorial().map((lista) => lista.where((entrada) => !entrada.leida).length);
   }
 
-  Future<void> marcarTodasLeidas() async {
+  Future<void> marcarTodasLeidas([List<NotificacionRegistroModel>? lista]) async {
+    DateTime? marca;
+    for (final entrada in lista ?? _ultima) {
+      if (entrada.creadaPendiente) continue;
+      if (marca == null || entrada.creada.isAfter(marca)) marca = entrada.creada;
+    }
+    if (marca == null) return;
     final prefs = await SharedPreferences.getInstance();
     await _migrar(prefs);
-    await prefs.setString(_claveLeidas, DateTime.now().toIso8601String());
+    await prefs.setString(
+      _claveLeidas,
+      marca.add(const Duration(milliseconds: 1)).toIso8601String(),
+    );
     _avisar();
   }
 
@@ -55,27 +66,47 @@ class HistorialNotificacionesController {
   Stream<List<NotificacionRegistroModel>> _observar() {
     return Stream.multi((controller) {
       StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? remota;
+      StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? pendientes;
+      QuerySnapshot<Map<String, dynamic>>? snapFecha;
+      QuerySnapshot<Map<String, dynamic>>? snapPendiente;
       var activo = true;
       var generacion = 0;
+
+      Future<void> publicar(int esta) async {
+        if (snapFecha == null) return;
+        if (!activo || esta != generacion || controller.isClosed) return;
+        try {
+          final lista = await _armar(snapFecha, snapPendiente);
+          if (activo && esta == generacion && !controller.isClosed) controller.add(lista);
+        } catch (error, traza) {
+          if (activo && !controller.isClosed) controller.addError(error, traza);
+        }
+      }
 
       Future<void> enganchar() async {
         final esta = ++generacion;
         await remota?.cancel();
+        await pendientes?.cancel();
+        snapFecha = null;
+        snapPendiente = null;
         if (!activo || esta != generacion) return;
         final corte = await _corte();
         if (!activo || esta != generacion) return;
         remota = _consulta(corte).snapshots().listen(
-          (snap) async {
-            try {
-              final lista = await _armar(snap);
-              if (activo && esta == generacion && !controller.isClosed) controller.add(lista);
-            } catch (error, traza) {
-              if (activo && !controller.isClosed) controller.addError(error, traza);
-            }
+          (snap) {
+            snapFecha = snap;
+            publicar(esta);
           },
           onError: (Object error, StackTrace traza) {
             if (activo && !controller.isClosed) controller.addError(error, traza);
           },
+        );
+        pendientes = _consultaSinFecha().snapshots().listen(
+          (snap) {
+            snapPendiente = snap;
+            publicar(esta);
+          },
+          onError: (Object _, StackTrace _) {},
         );
       }
 
@@ -84,6 +115,7 @@ class HistorialNotificacionesController {
       controller.onCancel = () {
         activo = false;
         remota?.cancel();
+        pendientes?.cancel();
         local.cancel();
       };
     });
@@ -97,6 +129,13 @@ class HistorialNotificacionesController {
         .limit(100);
   }
 
+  Query<Map<String, dynamic>> _consultaSinFecha() {
+    return FirebaseFirestore.instance
+        .collection('notificaciones')
+        .where('creada', isNull: true)
+        .limit(100);
+  }
+
   Future<DateTime> _corte() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrar(prefs);
@@ -106,19 +145,30 @@ class HistorialNotificacionesController {
     return hace30;
   }
 
-  Future<List<NotificacionRegistroModel>> _armar(QuerySnapshot<Map<String, dynamic>> snap) async {
+  Future<List<NotificacionRegistroModel>> _armar(
+    QuerySnapshot<Map<String, dynamic>>? conFecha,
+    QuerySnapshot<Map<String, dynamic>>? sinFecha,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await _migrar(prefs);
     final leidasHasta = DateTime.tryParse(prefs.getString(_claveLeidas) ?? '');
-    final presentes = snap.docs.map((doc) => doc.id).toSet();
+    final docs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final doc in sinFecha?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+      docs[doc.id] = doc;
+    }
+    for (final doc in conFecha?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[]) {
+      docs[doc.id] = doc;
+    }
+    final presentes = docs.keys.toSet();
     final eliminadas = _leerIds(prefs);
     final podadas = eliminadas.where(presentes.contains).toList();
-    if (podadas.length != eliminadas.length) {
+    final listaCompleta = conFecha != null && sinFecha != null;
+    if (listaCompleta && podadas.length != eliminadas.length) {
       await prefs.setString(_claveEliminadas, jsonEncode(podadas));
     }
-    final ocultas = podadas.toSet();
+    final ocultas = (listaCompleta ? podadas : eliminadas).toSet();
     final lista = <NotificacionRegistroModel>[];
-    for (final doc in snap.docs) {
+    for (final doc in docs.values) {
       if (ocultas.contains(doc.id)) continue;
       final modelo = NotificacionRegistroModel.desdeDocumento(
         doc.id,
@@ -127,6 +177,8 @@ class HistorialNotificacionesController {
       );
       if (modelo != null) lista.add(modelo);
     }
+    lista.sort((a, b) => b.fecha.compareTo(a.fecha));
+    _ultima = lista;
     return lista;
   }
 

@@ -117,6 +117,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
           ),
           SafeArea(
             child: Stack(
+              clipBehavior: Clip.none,
               children: [
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -292,7 +293,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   ),
                 ),
                 Positioned(
-                  top: 0,
+                  top: 12,
                   left: 8,
                   child: IconButton(
                     tooltip: 'Cerrar sesión',
@@ -332,7 +333,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   ),
                 ),
                 Positioned(
-                  top: 0,
+                  top: 12,
                   right: esInvitado ? 8 : 60,
                   child: PopupMenuButton<ThemeMode>(
                     tooltip: 'Apariencia',
@@ -355,7 +356,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                 ),
                 if (!esInvitado)
                   Positioned(
-                    top: 0,
+                    top: 12,
                     right: 8,
                     child: Badge(
                       isLabelVisible: _noLeidas > 0,

@@ -69,7 +69,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         _noLeidasAlAbrir = capturadas;
         _puntosListos = true;
       });
-      await _historial.marcarTodasLeidas();
+      await _historial.marcarTodasLeidas(lista);
     });
   }
 
