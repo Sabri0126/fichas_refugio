@@ -19,6 +19,9 @@ class ItemResumen {
   final String? tratamientoId;
   final bool pendiente;
 
+  /// Una dosis de por vida queda en el día, pero no pinta el punto verde.
+  final bool pintaPunto;
+
   ItemResumen({
     required this.perro,
     required this.titulo,
@@ -28,6 +31,7 @@ class ItemResumen {
     this.esRecordatorio = false,
     this.tratamientoId,
     this.pendiente = false,
+    this.pintaPunto = true,
   });
 }
 
@@ -87,7 +91,13 @@ abstract final class CalendarioGeneralController {
       for (final tratamiento in perro.tratamientos) {
         if (tratamiento.categoria == 'diario') {
           final dada = tratamiento.registroDosis.contains(iso);
-          if (dada) dadas.add(_itemTratamiento(perro, tratamiento));
+          if (dada) {
+            dadas.add(_itemTratamiento(
+              perro,
+              tratamiento,
+              pintaPunto: tratamiento.diasDuracion > 0,
+            ));
+          }
           // De un tratamiento pausado, o de un perro fallecido, solo se
           // muestran las dosis ya dadas. No entran pendientes ni programadas.
           if (fallecido || !tratamiento.activo || !_corresponde(tratamiento, diaFecha)) {
@@ -171,7 +181,7 @@ abstract final class CalendarioGeneralController {
     }
 
     if (resumen.pendientes.isNotEmpty) agregar('pendiente');
-    if (resumen.dadas.isNotEmpty) agregar('diario');
+    if (resumen.dadas.any((item) => item.pintaPunto)) agregar('diario');
     const ordenEventos = ['unico', 'vacuna', 'higiene', 'evento', 'veterinaria'];
     final presentes = resumen.eventos.map((item) => item.categoria).toSet();
     for (final categoria in ordenEventos) {
@@ -232,6 +242,7 @@ abstract final class CalendarioGeneralController {
     PerroModel perro,
     TratamientoModel tratamiento, {
     bool pendiente = false,
+    bool pintaPunto = true,
   }) {
     return ItemResumen(
       perro: perro,
@@ -243,6 +254,7 @@ abstract final class CalendarioGeneralController {
       categoria: tratamiento.categoria,
       tratamientoId: tratamiento.id,
       pendiente: pendiente,
+      pintaPunto: pintaPunto,
     );
   }
 
@@ -270,6 +282,32 @@ abstract final class CalendarioGeneralController {
 
   static DateTime _soloFecha(DateTime fecha) =>
       DateTime(fecha.year, fecha.month, fecha.day);
+
+  /// El día más viejo entre ingresos, decesos, registros y recordatorios.
+  static DateTime? fechaMasAntigua(List<PerroModel> perros, {String? idPerro}) {
+    DateTime? menor;
+    void tomar(DateTime? fecha) {
+      if (fecha == null) return;
+      final dia = _soloFecha(fecha);
+      if (menor == null || dia.isBefore(menor!)) menor = dia;
+    }
+
+    for (final perro in perros) {
+      if (idPerro != null && perro.id != idPerro) continue;
+      tomar(perro.fechaIngreso);
+      tomar(perro.fechaFallecimiento);
+      for (final tratamiento in perro.tratamientos) {
+        tomar(tratamiento.fechaInicio);
+        for (final texto in tratamiento.registroDosis) {
+          tomar(DateTime.tryParse(texto));
+        }
+      }
+      for (final recordatorio in perro.recordatorios) {
+        tomar(recordatorio.fechaHora);
+      }
+    }
+    return menor;
+  }
 
   /// Eventos del rango, de más nuevo a más viejo.
   /// Un tratamiento diario es una sola fila, no una por dosis.

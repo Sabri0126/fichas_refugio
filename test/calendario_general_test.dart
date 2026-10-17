@@ -177,6 +177,46 @@ void main() {
     expect(marcadores(lista, ayer), ['diario']);
   });
 
+  test('una dosis de por vida no pinta el punto verde', () {
+    final dePorVida = diario(
+      id: 'vida',
+      medicacion: 'Fenobarbital',
+      dias: 0,
+      dosis: [iso(ayer)],
+    );
+    final deTreinta = diario(
+      id: 'curso',
+      medicacion: 'Antibiótico',
+      dias: 30,
+      inicio: DateTime(2026, 6, 1),
+      dosis: [iso(ayer)],
+    );
+    final soloVida = [perro(tratamientos: [dePorVida])];
+    final juntos = [perro(tratamientos: [dePorVida, deTreinta])];
+
+    expect(resumen(soloVida, ayer).dadas.single.titulo, 'Fenobarbital');
+    expect(marcadores(soloVida, ayer), isEmpty);
+    expect(marcadores([perro(tratamientos: [diario(dias: 0)])], hoy), ['pendiente']);
+
+    final dia = resumen(juntos, ayer);
+    expect(dia.dadas.map((item) => item.titulo), containsAll(['Fenobarbital', 'Antibiótico']));
+    expect(marcadores(juntos, ayer), ['diario']);
+  });
+
+  test('la lista alcanza un ingreso anterior a 2024', () {
+    final ingreso = DateTime(2020, 3, 4);
+    final lista = [perro(fechaIngreso: ingreso, nombre: 'Merlina')];
+
+    expect(CalendarioGeneralController.fechaMasAntigua(lista), ingreso);
+    final filas = CalendarioGeneralController.construirLista(
+      lista,
+      desde: ingreso,
+      hasta: DateTime(2027, 1, 1),
+    );
+    expect(filas.single.titulo, 'Ingreso');
+    expect(filas.single.fecha, ingreso);
+  });
+
   test('mañana dentro del rango queda programada', () {
     final dia = resumen([
       perro(tratamientos: [diario(hora: '21:00')]),

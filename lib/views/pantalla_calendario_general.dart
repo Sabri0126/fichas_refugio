@@ -314,9 +314,11 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   };
 
   Widget _panelLista(List<PerroModel> perros, String? filtro) {
+    final antigua = CalendarioGeneralController.fechaMasAntigua(perros, idPerro: filtro);
+    final desde = antigua != null && antigua.isBefore(_primerDia) ? antigua : _primerDia;
     final todas = CalendarioGeneralController.construirLista(
       perros,
-      desde: _primerDia,
+      desde: desde,
       hasta: _ultimoDia,
       idPerro: filtro,
     );

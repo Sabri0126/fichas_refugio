@@ -1753,7 +1753,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         if (perro.parientes.isNotEmpty) ...[
           const SizedBox(height: 12),
           _tarjetaSeccion(
-            titulo: 'Familiares en el refugio',
+            titulo: 'Familiares/Parientes',
             icono: Icons.people_outline,
             children: [
               Wrap(

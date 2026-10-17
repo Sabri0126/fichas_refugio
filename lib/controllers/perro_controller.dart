@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
@@ -472,12 +473,104 @@ class PerroController {
     return null;
   }
 
-  /// Elimina definitivamente la ficha de un perro de Firestore.
-  ///
-  /// @param id id del documento del perro a eliminar.
-  /// @return un `Future` que se completa cuando el documento fue eliminado.
-  Future<void> eliminarPerro(String id) {
-    return _perrosRef.doc(id).delete();
+  /// Elimina la ficha y lo que queda afuera del documento: el vínculo en los
+  /// otros familiares, las fotos de Storage y los avisos de ese perro.
+  /// El calendario sale de la ficha, así que al borrar el documento desaparece.
+  /// Si una foto o un aviso no se puede borrar, la ficha igual se elimina.
+  Future<void> eliminarPerro(String id) async {
+    PerroModel? perro;
+    try {
+      perro = await obtenerPerroPorId(id);
+    } catch (_) {}
+    if (perro != null) {
+      try {
+        await _quitarDeFamiliares(id);
+      } catch (_) {}
+      try {
+        await _borrarFotos(perro);
+      } catch (_) {}
+      try {
+        await _borrarAvisos(id);
+      } catch (_) {}
+    }
+    await _perrosRef.doc(id).delete();
+  }
+
+  Future<void> _quitarDeFamiliares(String id) async {
+    final snapshot = await _perrosRef.get();
+    WriteBatch? lote;
+    var operaciones = 0;
+
+    Future<void> enviar() async {
+      final pendiente = lote;
+      if (pendiente == null || operaciones == 0) return;
+      lote = null;
+      operaciones = 0;
+      await pendiente.commit();
+    }
+
+    for (final doc in snapshot.docs) {
+      if (doc.id == id) continue;
+      final crudo = doc.data()['parientes'];
+      if (crudo is! List) continue;
+      final queda = <dynamic>[];
+      var cambio = false;
+      for (final item in crudo) {
+        if (item is Map) {
+          final mapa = Map<String, dynamic>.from(item);
+          final familiarId = (mapa['id'] ?? mapa['id_documento'] ?? '').toString();
+          if (familiarId == id) {
+            cambio = true;
+            continue;
+          }
+        }
+        queda.add(item);
+      }
+      if (!cambio) continue;
+      lote ??= FirebaseFirestore.instance.batch();
+      lote!.update(doc.reference, {'parientes': queda});
+      operaciones++;
+      if (operaciones >= 400) await enviar();
+    }
+    await enviar();
+  }
+
+  Future<void> _borrarFotos(PerroModel perro) async {
+    final urls = <String>{};
+    final perfil = perro.fotoPerfil?.trim() ?? '';
+    if (perfil.isNotEmpty) urls.add(perfil);
+    for (final foto in [...perro.galeria, ...perro.galeriaEstudios]) {
+      final url = foto['url']?.toString().trim() ?? '';
+      if (url.isNotEmpty) urls.add(url);
+    }
+    for (final url in urls) {
+      try {
+        await FirebaseStorage.instance.refFromURL(url).delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _borrarAvisos(String id) async {
+    final avisos = FirebaseFirestore.instance.collection('notificaciones');
+    final snapshot = await avisos.where('id_perro', isEqualTo: id).get();
+    WriteBatch? lote;
+    var operaciones = 0;
+
+    Future<void> enviar() async {
+      final pendiente = lote;
+      if (pendiente == null || operaciones == 0) return;
+      lote = null;
+      operaciones = 0;
+      await pendiente.commit();
+    }
+
+    for (final doc in snapshot.docs) {
+      lote ??= FirebaseFirestore.instance.batch();
+      lote!.delete(doc.reference);
+      operaciones++;
+      if (operaciones >= 400) await enviar();
+    }
+    await enviar();
   }
 
   /// Actualiza únicamente la foto de perfil de un perro.

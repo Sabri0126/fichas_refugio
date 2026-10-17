@@ -636,89 +636,27 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   Future<void> _mostrarDialogoAgregarFamiliar() async {
-    String? seleccionadoId;
-    String? seleccionadoNombre;
-    String seleccionadaRelacion = 'Hermano/a';
-    const relaciones = ['Hermano/a', 'Padre', 'Madre', 'Hijo/a'];
-
     final listaPerros = await _perroController.obtenerListaPerros();
-    final opciones = listaPerros
-        .where((p) => p.id != widget.idDocumento)
-        .map(
-          (p) => {'id': p.id, 'nombre': p.nombre.isNotEmpty ? p.nombre : p.id},
-        )
-        .toList();
-
+    final opciones = [
+      for (final perro in listaPerros)
+        if (perro.id != widget.idDocumento) perro,
+    ];
     if (!mounted) return;
 
-    await showDialog<void>(
+    final elegido = await showDialog<_FamiliarElegido>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Añadir familiar'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Perro',
-                ),
-                initialValue: seleccionadoId,
-                items: opciones
-                    .map(
-                      (o) => DropdownMenuItem(
-                        value: o['id'],
-                        child: Text(o['nombre']!),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) => setDialogState(() {
-                  seleccionadoId = val;
-                  seleccionadoNombre = opciones.firstWhere(
-                    (o) => o['id'] == val,
-                  )['nombre'];
-                }),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Relación',
-                ),
-                initialValue: seleccionadaRelacion,
-                items: relaciones
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (val) =>
-                    setDialogState(() => seleccionadaRelacion = val!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: seleccionadoId == null
-                  ? null
-                  : () {
-                      setState(() {
-                        _parientes.add({
-                          'id': seleccionadoId,
-                          'id_documento': seleccionadoId,
-                          'nombre': seleccionadoNombre,
-                          'relacion': seleccionadaRelacion,
-                        });
-                        _hayCambios = true;
-                      });
-                      Navigator.pop(ctx);
-                    },
-              child: const Text('Añadir'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => _DialogoAgregarFamiliar(perros: opciones),
     );
+    if (elegido == null || !mounted) return;
+    setState(() {
+      _parientes.add({
+        'id': elegido.id,
+        'id_documento': elegido.id,
+        'nombre': elegido.nombre,
+        'relacion': elegido.relacion,
+      });
+      _hayCambios = true;
+    });
   }
 
   Widget _tarjetaFormulario({
@@ -2542,6 +2480,206 @@ class SelectorEstadoPerro extends StatelessWidget {
       ],
       selected: {actual},
       onSelectionChanged: (seleccion) => onChanged(seleccion.first),
+    );
+  }
+}
+
+class _FamiliarElegido {
+  final String id;
+  final String nombre;
+  final String relacion;
+
+  const _FamiliarElegido({
+    required this.id,
+    required this.nombre,
+    required this.relacion,
+  });
+}
+
+class _DialogoAgregarFamiliar extends StatefulWidget {
+  final List<PerroModel> perros;
+
+  const _DialogoAgregarFamiliar({required this.perros});
+
+  @override
+  State<_DialogoAgregarFamiliar> createState() => _DialogoAgregarFamiliarState();
+}
+
+class _DialogoAgregarFamiliarState extends State<_DialogoAgregarFamiliar> {
+  final TextEditingController _busqueda = TextEditingController();
+  String? _idElegido;
+  String _relacion = 'Hermano/a';
+  static const _relaciones = ['Hermano/a', 'Padre', 'Madre', 'Hijo/a'];
+
+  @override
+  void initState() {
+    super.initState();
+    _busqueda.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _busqueda.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final consulta = _busqueda.text.trim().toLowerCase();
+    final visibles = [
+      for (final perro in widget.perros)
+        if (consulta.isEmpty || perro.nombre.toLowerCase().contains(consulta)) perro,
+    ]..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    final repetidos = _nombresRepetidos(widget.perros);
+    final alto = (MediaQuery.sizeOf(context).height * 0.5).clamp(240.0, 420.0);
+
+    return AlertDialog(
+      title: const Text('Añadir familiar'),
+      content: SizedBox(
+        width: 420,
+        height: alto,
+        child: Column(
+          children: [
+            TextField(
+              controller: _busqueda,
+              scrollPadding: EdgeInsets.zero,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Buscar por nombre',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: visibles.isEmpty
+                  ? Align(
+                      alignment: Alignment.topLeft,
+                      child: Text(
+                        'Ningún perro coincide.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: context.paleta.textoSuave,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: visibles.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 4),
+                      itemBuilder: (context, indice) {
+                        final perro = visibles[indice];
+                        final seleccionado = perro.id == _idElegido;
+                        final sinFoto = perro.fotoPerfil == null || perro.fotoPerfil!.isEmpty;
+                        final mostrarIngreso = sinFoto &&
+                            repetidos.contains(perro.nombre.trim().toLowerCase());
+                        final nombre = perro.nombre.trim().isEmpty ? 'Sin nombre' : perro.nombre;
+                        return Material(
+                          color: seleccionado
+                              ? context.paleta.lienzo.withValues(alpha: 0.08)
+                              : context.paleta.superficie,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: seleccionado ? context.paleta.lienzo : context.paleta.borde,
+                            ),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ListTile(
+                            leading: _MiniaturaPerro(url: perro.fotoPerfil),
+                            title: Text(nombre),
+                            subtitle: mostrarIngreso ? Text(_textoIngreso(perro.fechaIngreso)) : null,
+                            onTap: () => setState(() => _idElegido = perro.id),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Relación'),
+              initialValue: _relacion,
+              items: [
+                for (final relacion in _relaciones)
+                  DropdownMenuItem(value: relacion, child: Text(relacion)),
+              ],
+              onChanged: (valor) {
+                if (valor == null) return;
+                setState(() => _relacion = valor);
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _idElegido == null
+              ? null
+              : () {
+                  PerroModel? perro;
+                  for (final item in widget.perros) {
+                    if (item.id == _idElegido) perro = item;
+                  }
+                  if (perro == null) return;
+                  final nombre = perro.nombre.trim().isEmpty ? perro.id : perro.nombre;
+                  Navigator.pop(
+                    context,
+                    _FamiliarElegido(id: perro.id, nombre: nombre, relacion: _relacion),
+                  );
+                },
+          child: const Text('Añadir'),
+        ),
+      ],
+    );
+  }
+}
+
+Set<String> _nombresRepetidos(List<PerroModel> perros) {
+  final vistos = <String>{};
+  final repetidos = <String>{};
+  for (final perro in perros) {
+    final nombre = perro.nombre.trim().toLowerCase();
+    if (nombre.isEmpty) continue;
+    if (!vistos.add(nombre)) repetidos.add(nombre);
+  }
+  return repetidos;
+}
+
+String _textoIngreso(DateTime? fecha) {
+  if (fecha == null) return 'Sin fecha de ingreso';
+  final dia = fecha.day.toString().padLeft(2, '0');
+  final mes = fecha.month.toString().padLeft(2, '0');
+  return 'Ingreso $dia/$mes/${fecha.year}';
+}
+
+class _MiniaturaPerro extends StatelessWidget {
+  final String? url;
+
+  const _MiniaturaPerro({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url == null || url!.isEmpty) return _vacio();
+    return ClipOval(
+      child: Image.network(
+        url!,
+        width: 40,
+        height: 40,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _vacio(),
+      ),
+    );
+  }
+
+  Widget _vacio() {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: const BoxDecoration(color: AppColors.navy, shape: BoxShape.circle),
+      child: Icon(Icons.pets, size: 22, color: Colors.white.withValues(alpha: 0.4)),
     );
   }
 }
