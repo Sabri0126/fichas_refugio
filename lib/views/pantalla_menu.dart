@@ -12,10 +12,12 @@ import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/tema_app.dart';
+import '../utils/fundacion_refugio.dart';
 import 'pantalla_calendario_general.dart';
 import 'pantalla_login.dart';
 import 'pantalla_notificaciones.dart';
 import 'pantalla_perros.dart';
+import 'pantalla_reportes.dart';
 
 class PantallaMenu extends StatefulWidget {
   const PantallaMenu({super.key});
@@ -276,6 +278,30 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                             MaterialPageRoute(
                                               builder: (_) => const PantallaCalendarioGeneral(),
                                             ),
+                                          ),
+                                        ),
+                                        if (!esInvitado) ...[
+                                          const SizedBox(height: 16),
+                                          BotonMenu(
+                                            label: 'Reportes',
+                                            detalle: 'Población y estadía',
+                                            icon: Icons.insights,
+                                            color: CategoryColors.higieneTexto,
+                                            onTap: () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => const PantallaReportes(),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 28),
+                                        Text(
+                                          textoAniosCuidando(calcularAniosServicio()),
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            color: Colors.white.withValues(alpha: 0.9),
+                                            shadows: const [Shadow(color: Colors.black87, blurRadius: 6)],
                                           ),
                                         ),
                                       ],

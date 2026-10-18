@@ -5,6 +5,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { DateTime } from 'luxon';
 
 import { type Alarma, type PerroEntrada, ZONA, aZona, calcularAlarmas, calcularPausas } from './alarmas.js';
+import { esMananaDeAniversario, mensajeAniversario } from './aniversario.js';
 import { type MomentoClima, evaluarClima, normalizarConfig } from './clima.js';
 import { crearNotificacion, enviarAlarma } from './envio.js';
 
@@ -84,6 +85,20 @@ export const enviarAvisosClima = onSchedule(
   async () => {
     const db = getFirestore();
     const ahora = DateTime.now().setZone(ZONA);
+    if (esMananaDeAniversario(ahora)) {
+      const mensaje = { ...mensajeAniversario(ahora), fecha: ahora };
+      const creada = await crearNotificacion(db, mensaje);
+      if (creada) {
+        const dispositivos = await db.collection('dispositivos').get();
+        const tokens = dispositivos.docs.map((doc) => doc.id);
+        const resultado = await enviarAlarma(tokens, mensaje);
+        for (const token of resultado.invalidos) {
+          await db.collection('dispositivos').doc(token).delete();
+        }
+        logger.info('aniversario', { anio: ahora.year, enviados: resultado.enviados });
+      }
+    }
+
     const config = normalizarConfig((await db.doc('config/clima').get()).data());
     if (!config.activo) {
       logger.info('enviarAvisosClima', { avisos: 0, enviados: 0 });
