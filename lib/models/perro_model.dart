@@ -135,6 +135,12 @@ class PerroModel {
   /// Mediciones de peso. La clave Firestore es `pesos`. Vacío si nunca se pesó.
   final List<PesoModel> pesos;
 
+  /// Quién guardó la ficha por última vez. Null si todavía no hay marca.
+  final String? editadoPor;
+
+  /// Cuándo se guardó la ficha por última vez.
+  final DateTime? editadoEn;
+
   /// Crea una instancia inmutable de [PerroModel].
   PerroModel({
     required this.id,
@@ -164,6 +170,8 @@ class PerroModel {
     this.recordatorios = const [],
     this.seguimientos = const [],
     this.pesos = const [],
+    this.editadoPor,
+    this.editadoEn,
   });
 
   /// Construye un [PerroModel] a partir del mapa `data` de un documento de
@@ -255,6 +263,8 @@ class PerroModel {
       recordatorios: recordatoriosDesdeValor(data['recordatorios']),
       seguimientos: seguimientosDesdeValor(data['seguimientos']),
       pesos: pesosDesdeValor(data['pesos']),
+      editadoPor: data['editado_por']?.toString(),
+      editadoEn: _fechaDesdeValor(data['editado_en']),
     );
   }
 
@@ -289,6 +299,8 @@ class PerroModel {
       'recordatorios': recordatorios.map((r) => r.toMap()).toList(),
       'seguimientos': seguimientos.map((s) => s.toMap()).toList(),
       'pesos': pesos.map((peso) => peso.toMap()).toList(),
+      if (editadoPor != null && editadoPor!.trim().isNotEmpty) 'editado_por': editadoPor,
+      if (editadoEn != null) 'editado_en': Timestamp.fromDate(editadoEn!),
     };
   }
 
@@ -332,6 +344,8 @@ class PerroModel {
       recordatorios: recordatorios,
       seguimientos: seguimientos ?? this.seguimientos,
       pesos: pesos ?? this.pesos,
+      editadoPor: editadoPor,
+      editadoEn: editadoEn,
     );
   }
 }

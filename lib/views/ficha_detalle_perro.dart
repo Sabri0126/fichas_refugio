@@ -1115,6 +1115,17 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     return '$dia/$mes/${fecha.year}';
   }
 
+  String? _textoUltimaEdicion(PerroModel perro) {
+    final nombre = perro.editadoPor?.trim() ?? '';
+    final fecha = perro.editadoEn;
+    if (nombre.isEmpty || fecha == null) return null;
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    final hora = fecha.hour.toString().padLeft(2, '0');
+    final minuto = fecha.minute.toString().padLeft(2, '0');
+    return 'Última edición: $nombre · $dia/$mes/${fecha.year}, $hora:$minuto';
+  }
+
   /// Marca como inactivos los tratamientos diarios ya finalizados,
   /// persistiendo el cambio en Firestore para que dejen de listarse en "Tratamientos actuales".
   PerroModel _procesarAutoArchivado(PerroModel perro) {
@@ -1797,6 +1808,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: _filaAgregarEstudio(),
+          ),
+        if (_textoUltimaEdicion(perro) case final marca?)
+          Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: Text(
+              marca,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+            ),
           ),
         const SizedBox(height: 24),
       ],

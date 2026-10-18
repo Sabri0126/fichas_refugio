@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/egreso_model.dart';
@@ -368,6 +369,15 @@ class PerroController {
     if (perro.fechaEgreso == null) datosPerro['fecha_egreso'] = FieldValue.delete();
     if (perro.notaEgreso == null) datosPerro['nota_egreso'] = FieldValue.delete();
     if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
+    final usuario = FirebaseAuth.instance.currentUser;
+    if (usuario != null) {
+      final nombre = usuario.displayName?.trim() ?? '';
+      final email = usuario.email?.trim() ?? '';
+      datosPerro['editado_por'] = nombre.isNotEmpty
+          ? nombre
+          : (email.isNotEmpty ? email : 'Administrador');
+      datosPerro['editado_en'] = Timestamp.fromDate(DateTime.now());
+    }
 
     // La galería y los estudios se gestionan desde sus propios métodos
     // (agregarFotoAGaleria, agregarFotoAEstudios, etc.), no desde este

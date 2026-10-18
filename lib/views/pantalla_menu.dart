@@ -46,6 +46,12 @@ class _PantallaMenuState extends State<PantallaMenu> {
         if (!mounted) return;
         setState(() => _noLeidas = cantidad);
       });
+      final sinNombre = FirebaseAuth.instance.currentUser?.displayName?.trim().isEmpty ?? true;
+      if (sinNombre) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _pedirNombre();
+        });
+      }
     }
   }
 
@@ -53,6 +59,21 @@ class _PantallaMenuState extends State<PantallaMenu> {
   void dispose() {
     _badge?.cancel();
     super.dispose();
+  }
+
+  Future<void> _pedirNombre() async {
+    final usuario = FirebaseAuth.instance.currentUser;
+    if (usuario == null || !mounted) return;
+    final elegido = await showDialog<String>(
+      context: context,
+      builder: (context) => _DialogoNombre(inicial: usuario.displayName?.trim() ?? ''),
+    );
+    if (elegido == null || !mounted) return;
+    final limpio = elegido.trim();
+    if (limpio.isEmpty) return;
+    await usuario.updateProfile(displayName: limpio);
+    await usuario.reload();
+    if (mounted) setState(() {});
   }
 
   Future<void> _abrirNotificaciones() {
@@ -332,6 +353,30 @@ class _PantallaMenuState extends State<PantallaMenu> {
                     icon: const Icon(Icons.logout_rounded),
                   ),
                 ),
+                if (!esInvitado)
+                  Positioned(
+                    top: 16,
+                    left: 60,
+                    right: 120,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: _pedirNombre,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: Text(
+                          _etiquetaNombre(FirebaseAuth.instance.currentUser),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: 12,
                   right: esInvitado ? 8 : 60,
@@ -499,6 +544,62 @@ class _PanelDelDia extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+String _etiquetaNombre(User? usuario) {
+  final nombre = usuario?.displayName?.trim() ?? '';
+  if (nombre.isNotEmpty) return nombre;
+  return 'Elegí tu nombre';
+}
+
+class _DialogoNombre extends StatefulWidget {
+  final String inicial;
+
+  const _DialogoNombre({required this.inicial});
+
+  @override
+  State<_DialogoNombre> createState() => _DialogoNombreState();
+}
+
+class _DialogoNombreState extends State<_DialogoNombre> {
+  late final TextEditingController _nombre = TextEditingController(text: widget.inicial);
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    super.dispose();
+  }
+
+  void _guardar() {
+    final limpio = _nombre.text.trim();
+    if (limpio.isEmpty) return;
+    Navigator.pop(context, limpio);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Tu nombre'),
+      content: TextField(
+        controller: _nombre,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        scrollPadding: EdgeInsets.zero,
+        decoration: const InputDecoration(labelText: 'Cómo te ven en las fichas'),
+        onSubmitted: (_) => _guardar(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _guardar,
+          child: const Text('Guardar'),
+        ),
+      ],
     );
   }
 }
