@@ -7,6 +7,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../controllers/calendario_general_controller.dart';
 import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
+import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
@@ -14,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
+import '../theme/seguimiento_tipos.dart';
 import 'alta_calendario.dart';
 import 'ficha_detalle_perro.dart';
 
@@ -31,6 +33,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
+  final SeguimientoController _seguimientoController = SeguimientoController();
   late final Stream<List<PerroModel>> _streamPerros = _perroController
       .observarPerros();
   late final Future<void> _localeListo;
@@ -338,6 +341,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _seguimientosActivos(perros, filtro),
         TextField(
           controller: _busqueda,
           textCapitalization: TextCapitalization.sentences,
@@ -615,6 +619,22 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                 ),
               ),
             ),
+            VerticalDivider(width: 1, thickness: 1, color: context.paleta.borde),
+            Expanded(
+              child: _celdaAlta(
+                icono: Icons.visibility_outlined,
+                texto: 'Agregar seguimiento',
+                habilitado: hayPerros,
+                alTocar: () => abrirAltaSeguimientoCalendario(
+                  context,
+                  activos: activos,
+                  idPreseleccionado: _idPerroFiltro,
+                  fecha: _diaSeleccionado,
+                  seguimientos: _seguimientoController,
+                  perros: _perroController,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -631,19 +651,18 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     return InkWell(
       onTap: habilitado ? alTocar : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icono, size: 18, color: color),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                texto,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
-              ),
+            Icon(icono, size: 20, color: color),
+            const SizedBox(height: 4),
+            Text(
+              texto,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
             ),
           ],
         ),
@@ -939,6 +958,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _seguimientosActivos(perros, filtro),
         Text('Resumen del día', style: textTheme.titleLarge?.copyWith(color: context.paleta.lienzo)),
         const SizedBox(height: 4),
         Text(
@@ -1001,6 +1021,15 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       ),
       child: Text(texto, style: Theme.of(context).textTheme.labelMedium),
     );
+  }
+
+  Widget _seguimientosActivos(List<PerroModel> perros, String? filtro) {
+    final items = CalendarioGeneralController.seguimientosActivos(
+      perros,
+      hoy: _hoy,
+      idPerro: filtro,
+    );
+    return _seccion('Seguimientos activos', Icons.visibility_outlined, items);
   }
 
   Widget _seccion(
@@ -1172,6 +1201,14 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
     }
     if (item.esRecordatorio) {
       final tipo = RecordatorioTipos.de(item.categoria);
+      return _VisualCategoria(
+        icono: tipo.icono,
+        color: tipo.color,
+        tinte: tipo.color.withValues(alpha: 0.12),
+      );
+    }
+    if (item.esSeguimiento) {
+      final tipo = SeguimientoTipos.de(item.categoria);
       return _VisualCategoria(
         icono: tipo.icono,
         color: tipo.color,

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
+import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../theme/app_colors.dart';
 import 'dialogo_recordatorio.dart';
+import 'dialogo_seguimiento.dart';
 import 'dialogo_tratamiento.dart';
 
 /// Elige un perro activo y abre el alta de un registro médico.
@@ -77,6 +79,34 @@ Future<void> abrirAltaRecordatorioCalendario(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No se pudo guardar el recordatorio')),
+    );
+  }
+}
+
+/// Elige un perro activo y abre el alta de un seguimiento.
+/// El día seleccionado en el calendario queda como fecha de inicio.
+Future<void> abrirAltaSeguimientoCalendario(
+  BuildContext context, {
+  required List<PerroModel> activos,
+  required String? idPreseleccionado,
+  required DateTime fecha,
+  required SeguimientoController seguimientos,
+  required PerroController perros,
+}) async {
+  final perro = await _elegirPerro(context, activos, idPreseleccionado);
+  if (perro == null || !context.mounted) return;
+  final modelo = await mostrarDialogoSeguimiento(
+    context,
+    controller: seguimientos,
+    fechaInicial: fecha,
+  );
+  if (modelo == null || !context.mounted) return;
+  try {
+    await perros.agregarSeguimiento(perro.id, modelo);
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudo guardar el seguimiento')),
     );
   }
 }

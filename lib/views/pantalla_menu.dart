@@ -8,6 +8,7 @@ import '../controllers/historial_notificaciones_controller.dart';
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
 import '../services/mensajeria_service.dart';
+import '../services/nombre_usuario.dart';
 import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
@@ -32,6 +33,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
   final PerroController _perros = PerroController();
   StreamSubscription<int>? _badge;
   int _noLeidas = 0;
+  bool _pidiendoNombre = false;
 
   @override
   void initState() {
@@ -48,12 +50,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
         if (!mounted) return;
         setState(() => _noLeidas = cantidad);
       });
-      final sinNombre = FirebaseAuth.instance.currentUser?.displayName?.trim().isEmpty ?? true;
-      if (sinNombre) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _pedirNombre();
-        });
-      }
+      unawaited(_prepararNombre());
     }
   }
 
@@ -63,19 +60,32 @@ class _PantallaMenuState extends State<PantallaMenu> {
     super.dispose();
   }
 
-  Future<void> _pedirNombre() async {
+  Future<void> _prepararNombre() async {
     final usuario = FirebaseAuth.instance.currentUser;
     if (usuario == null || !mounted) return;
-    final elegido = await showDialog<String>(
-      context: context,
-      builder: (context) => _DialogoNombre(inicial: usuario.displayName?.trim() ?? ''),
-    );
-    if (elegido == null || !mounted) return;
-    final limpio = elegido.trim();
-    if (limpio.isEmpty) return;
-    await usuario.updateProfile(displayName: limpio);
-    await usuario.reload();
-    if (mounted) setState(() {});
+    await NombreUsuario.cargar(usuario.uid);
+    if (!mounted) return;
+    setState(() {});
+    if (NombreUsuario.falta(usuario)) await _pedirNombre();
+  }
+
+  Future<void> _pedirNombre() async {
+    final usuario = FirebaseAuth.instance.currentUser;
+    if (usuario == null || !mounted || _pidiendoNombre) return;
+    _pidiendoNombre = true;
+    try {
+      final elegido = await showDialog<String>(
+        context: context,
+        builder: (context) => _DialogoNombre(inicial: NombreUsuario.visible(usuario)),
+      );
+      if (elegido == null || !mounted) return;
+      final limpio = elegido.trim();
+      if (limpio.isEmpty) return;
+      await NombreUsuario.guardar(usuario, limpio);
+      if (mounted) setState(() {});
+    } finally {
+      _pidiendoNombre = false;
+    }
   }
 
   Future<void> _abrirNotificaciones() {
@@ -352,6 +362,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                       if (!esInvitado) {
                         await MensajeriaService.instance
                             .desregistrarDispositivo();
+                        NombreUsuario.olvidar();
                         await FirebaseAuth.instance.signOut();
                       }
                       if (!context.mounted) return;
@@ -575,7 +586,7 @@ class _PanelDelDia extends StatelessWidget {
 }
 
 String _etiquetaNombre(User? usuario) {
-  final nombre = usuario?.displayName?.trim() ?? '';
+  final nombre = NombreUsuario.visible(usuario);
   if (nombre.isNotEmpty) return nombre;
   return 'Elegí tu nombre';
 }

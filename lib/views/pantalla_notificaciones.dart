@@ -250,6 +250,13 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
         fondo: AppColors.terracota.withValues(alpha: 0.12),
       );
     }
+    if (item.categoria == 'ingreso') {
+      return (
+        icono: Icons.cake_outlined,
+        color: AppColors.terracota,
+        fondo: AppColors.terracota.withValues(alpha: 0.12),
+      );
+    }
     if (item.categoria == 'llovizna') {
       return (
         icono: Icons.grain,

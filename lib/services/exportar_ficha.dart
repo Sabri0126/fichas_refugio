@@ -112,7 +112,7 @@ abstract final class ExportarFicha {
           if (_textoFamiliares(perro.parientes) case final familiares?) _seccion('Familiares', familiares),
           _seccion('Ficha médica', perro.fichaMedica.trim().isEmpty ? 'Sin ficha médica.' : perro.fichaMedica.trim()),
           if (perro.pesos.isNotEmpty) _pesos(perro.pesos),
-          if (perro.tratamientos.isNotEmpty) _tratamientos(perro.tratamientos),
+          ...bloquesTratamientos(perro.tratamientos),
           if (perro.recordatorios.isNotEmpty) _recordatorios(perro.recordatorios),
           if (perro.estado == 'egresado' || perro.historialEgresos.isNotEmpty) _egresos(perro),
           if (galeria.isNotEmpty) ...[
@@ -264,27 +264,80 @@ abstract final class ExportarFicha {
     return '$base   $nota';
   }
 
-  static pw.Widget _tratamientos(List<TratamientoModel> tratamientos) {
+  /// Cada tarjeta es un hijo del PDF para que un historial largo se parta entre páginas.
+  static List<pw.Widget> bloquesTratamientos(List<TratamientoModel> tratamientos) {
+    if (tratamientos.isEmpty) return const [];
     final diarios = tratamientos.where((t) => t.categoria == 'diario').toList();
     final eventos = tratamientos.where((t) => t.categoria != 'diario').toList();
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 14),
+    return [
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 8),
+        child: _titulo('Tratamientos'),
+      ),
+      if (diarios.isNotEmpty) ...[
+        pw.Text('Medicación diaria', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _suave)),
+        pw.SizedBox(height: 6),
+        for (final tratamiento in diarios) _tarjetaTratamiento(tratamiento),
+      ],
+      if (eventos.isNotEmpty) ...[
+        if (diarios.isNotEmpty) pw.SizedBox(height: 4),
+        pw.Text('Eventos y visitas', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _suave)),
+        pw.SizedBox(height: 6),
+        for (final tratamiento in eventos) _tarjetaEvento(tratamiento),
+      ],
+      pw.SizedBox(height: 8),
+    ];
+  }
+
+  /// Líneas de un evento puntual, las mismas que imprime el PDF.
+  static List<String> lineasEvento(TratamientoModel tratamiento) {
+    if (tratamiento.categoria == 'veterinaria') {
+      String campo(String etiqueta, String valor) {
+        final texto = valor.trim();
+        return texto.isEmpty ? '$etiqueta: —' : '$etiqueta: $texto';
+      }
+
+      return [
+        campo('Veterinario', tratamiento.veterinario),
+        campo('Motivo', tratamiento.medicacion),
+        campo('Diagnóstico', tratamiento.diagnostico),
+        campo('Indicaciones', tratamiento.indicaciones),
+        '${_categoria(tratamiento.categoria)} · ${_fecha(tratamiento.fechaInicio)}',
+      ];
+    }
+    final nombre = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
+    final detalle = tratamiento.detalleVisible.trim();
+    return [
+      nombre,
+      '${_categoria(tratamiento.categoria)} · ${_fecha(tratamiento.fechaInicio)}',
+      if (detalle.isNotEmpty) detalle,
+    ];
+  }
+
+  static pw.Widget _tarjetaEvento(TratamientoModel tratamiento) {
+    final lineas = lineasEvento(tratamiento);
+    return pw.Container(
+      width: double.infinity,
+      margin: const pw.EdgeInsets.only(bottom: 6),
+      padding: const pw.EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: pw.BoxDecoration(
+        color: _relleno,
+        border: pw.Border.all(color: _borde),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          _titulo('Tratamientos'),
-          pw.SizedBox(height: 8),
-          if (diarios.isNotEmpty) ...[
-            pw.Text('Medicación diaria', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _suave)),
-            pw.SizedBox(height: 6),
-            for (final tratamiento in diarios) _tarjetaTratamiento(tratamiento),
-          ],
-          if (eventos.isNotEmpty) ...[
-            if (diarios.isNotEmpty) pw.SizedBox(height: 4),
-            pw.Text('Eventos y visitas', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _suave)),
-            pw.SizedBox(height: 6),
-            for (final tratamiento in eventos) _tarjetaTratamiento(tratamiento),
-          ],
+          for (var i = 0; i < lineas.length; i++)
+            pw.Padding(
+              padding: pw.EdgeInsets.only(top: i == 0 ? 0 : 2),
+              child: pw.Text(
+                lineas[i],
+                style: i == 0
+                    ? pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _texto)
+                    : const pw.TextStyle(fontSize: 11, color: _texto, lineSpacing: 2),
+              ),
+            ),
         ],
       ),
     );

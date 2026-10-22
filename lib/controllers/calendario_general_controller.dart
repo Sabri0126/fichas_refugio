@@ -6,6 +6,8 @@ import '../models/recordatorio_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+import '../theme/seguimiento_tipos.dart';
+import 'seguimiento_controller.dart';
 import 'tratamiento_controller.dart';
 
 /// Una fila del resumen: un tratamiento o un recordatorio de un perro.
@@ -16,6 +18,7 @@ class ItemResumen {
   final String? hora;
   final String categoria;
   final bool esRecordatorio;
+  final bool esSeguimiento;
   final String? tratamientoId;
   final bool pendiente;
 
@@ -29,6 +32,7 @@ class ItemResumen {
     this.hora,
     required this.categoria,
     this.esRecordatorio = false,
+    this.esSeguimiento = false,
     this.tratamientoId,
     this.pendiente = false,
     this.pintaPunto = true,
@@ -162,6 +166,34 @@ abstract final class CalendarioGeneralController {
         categoria: 'deceso',
       ));
     }
+  }
+
+  /// Seguimientos abiertos y no vencidos al día [hoy]. No dependen del día seleccionado.
+  static List<ItemResumen> seguimientosActivos(
+    List<PerroModel> perros, {
+    required DateTime hoy,
+    String? idPerro,
+  }) {
+    final controlador = SeguimientoController();
+    final items = <ItemResumen>[];
+    for (final perro in perros) {
+      if (idPerro != null && perro.id != idPerro) continue;
+      for (final seguimiento in controlador.vigentes(perro.seguimientos, ahora: hoy)) {
+        final visual = SeguimientoTipos.de(seguimiento.motivo);
+        final detalle = seguimiento.detalle.trim();
+        final plazo = controlador.describirPlazo(seguimiento, ahora: hoy);
+        items.add(ItemResumen(
+          perro: perro,
+          titulo: visual.etiqueta,
+          detalle: detalle.isEmpty ? plazo : '$plazo · $detalle',
+          hora: seguimiento.hora,
+          categoria: seguimiento.motivo,
+          esSeguimiento: true,
+        ));
+      }
+    }
+    items.sort(_compararItems);
+    return items;
   }
 
   /// Claves de puntos del día, sin repetir y como máximo 5.

@@ -22,14 +22,20 @@ class TratamientoModel {
   /// `'evento'`, `'veterinaria'` y `'vacuna'`.
   final String categoria;
 
-  /// Nombre de la medicación, del procedimiento o de la vacuna.
+  /// Nombre de la medicación, del procedimiento, de la vacuna o motivo de la visita.
   final String medicacion;
 
-  /// Indicaciones, dosis administrada o diagnóstico asociado al tratamiento.
+  /// Indicaciones o dosis administrada.
   final String indicaciones;
 
   /// Razón de la aplicación o notas. La usan la dosis única y la vacuna.
   final String notas;
+
+  /// Nombre de quien atendió la visita. Solo lo usa la categoría `'veterinaria'`.
+  final String veterinario;
+
+  /// Diagnóstico de la visita. Solo lo usa la categoría `'veterinaria'`.
+  final String diagnostico;
 
   /// Fecha en la que se inició el tratamiento o en la que ocurrió el evento.
   final DateTime? fechaInicio;
@@ -61,6 +67,8 @@ class TratamientoModel {
     required this.medicacion,
     required this.indicaciones,
     this.notas = '',
+    this.veterinario = '',
+    this.diagnostico = '',
     this.fechaInicio,
     this.diasDuracion = 0,
     this.horaRecordatorio,
@@ -79,6 +87,8 @@ class TratamientoModel {
       medicacion: data['medicacion']?.toString() ?? '',
       indicaciones: data['indicaciones']?.toString() ?? '',
       notas: data['notas']?.toString() ?? '',
+      veterinario: data['veterinario']?.toString() ?? '',
+      diagnostico: data['diagnostico']?.toString() ?? '',
       fechaInicio: _fechaDesdeValor(data['fecha_inicio']),
       diasDuracion: int.tryParse(data['dias_duracion']?.toString() ?? '') ?? 0,
       horaRecordatorio: data['hora_recordatorio']?.toString(),
@@ -101,6 +111,8 @@ class TratamientoModel {
       'medicacion': medicacion,
       'indicaciones': indicaciones,
       'notas': notas,
+      'veterinario': veterinario,
+      'diagnostico': diagnostico,
       'fecha_inicio': fechaInicio != null ? Timestamp.fromDate(fechaInicio!) : null,
       'dias_duracion': diasDuracion,
       'hora_recordatorio': horaRecordatorio,
@@ -119,6 +131,8 @@ class TratamientoModel {
     String? medicacion,
     String? indicaciones,
     String? notas,
+    String? veterinario,
+    String? diagnostico,
     DateTime? fechaInicio,
     int? diasDuracion,
     String? horaRecordatorio,
@@ -132,6 +146,8 @@ class TratamientoModel {
       medicacion: medicacion ?? this.medicacion,
       indicaciones: indicaciones ?? this.indicaciones,
       notas: notas ?? this.notas,
+      veterinario: veterinario ?? this.veterinario,
+      diagnostico: diagnostico ?? this.diagnostico,
       fechaInicio: fechaInicio ?? this.fechaInicio,
       diasDuracion: diasDuracion ?? this.diasDuracion,
       horaRecordatorio: horaRecordatorio ?? this.horaRecordatorio,
@@ -141,8 +157,16 @@ class TratamientoModel {
     );
   }
 
-  /// Dosis o indicaciones, y la razón cuando también hay texto.
+  /// Texto secundario de listas y calendario.
+  /// En una visita veterinaria junta veterinario, diagnóstico e indicaciones.
   String get detalleVisible {
+    if (categoria == 'veterinaria') {
+      return [
+        veterinario.trim(),
+        diagnostico.trim(),
+        indicaciones.trim(),
+      ].where((parte) => parte.isNotEmpty).join(' · ');
+    }
     final dosis = indicaciones.trim();
     final extra = notas.trim();
     if (dosis.isEmpty) return extra;

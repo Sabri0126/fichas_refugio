@@ -6,7 +6,9 @@ import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
+import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
+import '../services/nombre_usuario.dart';
 
 /// Controlador encargado de la lógica de negocio y de acceso a Firestore de
 /// los perros del refugio: lectura/escritura de fichas, validaciones de
@@ -236,6 +238,11 @@ class PerroController {
     return _agregarEnLista(idPerro, 'recordatorios', recordatorio.id, recordatorio.toMap());
   }
 
+  /// Suma un seguimiento al array `seguimientos` si ese id todavía no está.
+  Future<void> agregarSeguimiento(String idPerro, SeguimientoModel seguimiento) {
+    return _agregarEnLista(idPerro, 'seguimientos', seguimiento.id, seguimiento.toMap());
+  }
+
   Future<void> _agregarEnLista(
     String idPerro,
     String campo,
@@ -371,7 +378,7 @@ class PerroController {
     if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
     final usuario = FirebaseAuth.instance.currentUser;
     if (usuario != null) {
-      final nombre = usuario.displayName?.trim() ?? '';
+      final nombre = NombreUsuario.visible(usuario);
       final email = usuario.email?.trim() ?? '';
       datosPerro['editado_por'] = nombre.isNotEmpty
           ? nombre

@@ -359,4 +359,86 @@ describe('calcularAlarmas', () => {
     expect(alarmas[0].idTratamiento).toBe('doxi');
     expect(alarmas[0].dia).toBe('2026-01-10');
   });
+
+  it('avisa el aniversario de ingreso a las 9, una vez por año', () => {
+    const boby: PerroEntrada = {
+      id: 'boby',
+      estado: 'activo',
+      nombre: 'Boby',
+      fecha_ingreso: ba('2024-10-18T15:00:00'),
+      tratamientos: [],
+    };
+    const alarmas = calcularAlarmas(boby, ba('2026-10-18T08:55:00'), ba('2026-10-18T09:05:00'));
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].clave).toBe('ingreso_boby_2026');
+    expect(alarmas[0].titulo).toBe('Aniversario de ingreso');
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumplen 2 años desde que Boby ingresó al refugio.');
+    expect(alarmas[0].idPerro).toBe('boby');
+    expect(alarmas[0].categoria).toBe('ingreso');
+    expect(alarmas[0].tipo).toBe('ingreso');
+    expect(alarmas[0].idTratamiento).toBeUndefined();
+    expect(alarmas[0].dia).toBeUndefined();
+
+    expect(calcularAlarmas(boby, ba('2026-10-18T08:00:00'), ba('2026-10-18T08:59:00'))).toHaveLength(0);
+    expect(calcularAlarmas(boby, ba('2026-10-19T09:00:00'), ba('2026-10-19T09:05:00'))).toHaveLength(0);
+  });
+
+  it('el día del ingreso no avisa y un año usa el singular', () => {
+    const boby: PerroEntrada = {
+      id: 'boby',
+      estado: 'activo',
+      nombre: 'Boby',
+      fecha_ingreso: ba('2025-10-18T15:00:00'),
+      tratamientos: [],
+    };
+    expect(calcularAlarmas(boby, ba('2025-10-18T08:55:00'), ba('2025-10-18T09:05:00'))).toHaveLength(0);
+    const unAnio = calcularAlarmas(boby, ba('2026-10-18T08:55:00'), ba('2026-10-18T09:05:00'));
+    expect(unAnio).toHaveLength(1);
+    expect(unAnio[0].cuerpo).toBe('Hoy se cumple 1 año desde que Boby ingresó al refugio.');
+  });
+
+  it('un 29 de febrero avisa el 28 en un año no bisiesto', () => {
+    const boby: PerroEntrada = {
+      id: 'boby',
+      estado: 'activo',
+      nombre: 'Boby',
+      fecha_ingreso: ba('2024-02-29T12:00:00'),
+      tratamientos: [],
+    };
+    const alarmas = calcularAlarmas(boby, ba('2025-02-28T08:55:00'), ba('2025-02-28T09:05:00'));
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumple 1 año desde que Boby ingresó al refugio.');
+    expect(alarmas[0].clave).toBe('ingreso_boby_2025');
+    expect(calcularAlarmas(boby, ba('2025-03-01T08:55:00'), ba('2025-03-01T09:05:00'))).toHaveLength(0);
+  });
+
+  it('un inactivo o sin fecha no avisa el ingreso', () => {
+    const desde = ba('2026-10-18T08:55:00');
+    const hasta = ba('2026-10-18T09:05:00');
+    expect(
+      calcularAlarmas(
+        { id: 'boby', estado: 'inactivo', nombre: 'Boby', fecha_ingreso: ba('2024-10-18T15:00:00'), tratamientos: [] },
+        desde,
+        hasta,
+      ),
+    ).toHaveLength(0);
+    expect(
+      calcularAlarmas({ id: 'boby', estado: 'activo', nombre: 'Boby', tratamientos: [] }, desde, hasta),
+    ).toHaveLength(0);
+  });
+
+  it('sin nombre usa el respaldo del resto de los avisos', () => {
+    const alarmas = calcularAlarmas(
+      {
+        id: 'boby',
+        estado: 'activo',
+        nombre: '  ',
+        fecha_ingreso: ba('2024-10-18T15:00:00'),
+        tratamientos: [],
+      },
+      ba('2026-10-18T08:55:00'),
+      ba('2026-10-18T09:05:00'),
+    );
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumplen 2 años desde que tu perrito ingresó al refugio.');
+  });
 });

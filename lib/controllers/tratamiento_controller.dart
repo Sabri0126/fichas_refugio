@@ -47,8 +47,10 @@ class TratamientoController {
   /// @param categoria tipo de tratamiento (`'diario'`, `'unico'`, `'higiene'`,
   ///   `'evento'`, `'veterinaria'`, `'vacuna'`).
   /// @param medicacion nombre de la medicación, procedimiento o vacuna.
-  /// @param indicaciones indicaciones, dosis administrada o diagnóstico.
+  /// @param indicaciones indicaciones o dosis administrada.
   /// @param notas razón de la aplicación o notas (`'unico'` y `'vacuna'`).
+  /// @param veterinario nombre de quien atendió (`'veterinaria'`).
+  /// @param diagnostico diagnóstico de la visita (`'veterinaria'`).
   /// @param fechaInicio fecha de inicio o de aplicación del evento.
   /// @param diasDuracion días de duración (solo aplica a categoría `'diario'`).
   /// @param horaRecordatorio hora `HH:mm` del recordatorio diario (solo `'diario'`).
@@ -60,6 +62,8 @@ class TratamientoController {
     required String medicacion,
     required String indicaciones,
     String notas = '',
+    String veterinario = '',
+    String diagnostico = '',
     required DateTime fechaInicio,
     int diasDuracion = 0,
     String? horaRecordatorio,
@@ -74,6 +78,8 @@ class TratamientoController {
         medicacion: medicacion,
         indicaciones: indicaciones,
         notas: notas,
+        veterinario: veterinario,
+        diagnostico: diagnostico,
         fechaInicio: fechaInicio,
         diasDuracion: 0,
         // Se registra la fecha elegida en el formulario (no la de hoy) para que el TableCalendar la ubique.
@@ -92,6 +98,8 @@ class TratamientoController {
       medicacion: medicacion,
       indicaciones: indicaciones,
       notas: notas,
+      veterinario: veterinario,
+      diagnostico: diagnostico,
       fechaInicio: fechaInicio,
       diasDuracion: diasDuracion,
       horaRecordatorio: horaRecordatorio,
@@ -118,6 +126,8 @@ class TratamientoController {
     required String medicacion,
     required String indicaciones,
     String? notas,
+    String? veterinario,
+    String? diagnostico,
     required int diasDuracion,
     required DateTime fechaInicio,
     required String horaRecordatorio,
@@ -126,6 +136,8 @@ class TratamientoController {
       medicacion: medicacion,
       indicaciones: indicaciones,
       notas: notas,
+      veterinario: veterinario,
+      diagnostico: diagnostico,
       diasDuracion: diasDuracion,
       fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,

@@ -3,6 +3,7 @@ import 'package:fichas_refugio/controllers/recordatorio_controller.dart';
 import 'package:fichas_refugio/controllers/tratamiento_controller.dart';
 import 'package:fichas_refugio/models/perro_model.dart';
 import 'package:fichas_refugio/models/recordatorio_model.dart';
+import 'package:fichas_refugio/models/seguimiento_model.dart';
 import 'package:fichas_refugio/models/tratamiento_model.dart';
 import 'package:fichas_refugio/theme/app_colors.dart';
 import 'package:fichas_refugio/theme/category_colors.dart';
@@ -63,6 +64,7 @@ PerroModel perro({
   DateTime? fechaFallecimiento,
   List<TratamientoModel> tratamientos = const [],
   List<RecordatorioModel> recordatorios = const [],
+  List<SeguimientoModel> seguimientos = const [],
 }) {
   return PerroModel(
     id: id,
@@ -72,6 +74,7 @@ PerroModel perro({
     fechaFallecimiento: fechaFallecimiento,
     tratamientos: tratamientos,
     recordatorios: recordatorios,
+    seguimientos: seguimientos,
   );
 }
 
@@ -656,5 +659,53 @@ void main() {
       ahora: ahora,
     );
     expect(restantes.map((item) => item.id), ['viejo']);
+  });
+
+  test('lista los seguimientos vigentes de hoy y omite cerrados o vencidos', () {
+    final lista = [
+      perro(
+        seguimientos: [
+          SeguimientoModel(
+            id: 's1',
+            motivo: 'ojo',
+            detalle: 'izquierdo',
+            hora: '18:00',
+            fechaInicio: DateTime(2026, 6, 14),
+            diasDuracion: 5,
+            activo: true,
+          ),
+          SeguimientoModel(
+            id: 's2',
+            motivo: 'pata',
+            detalle: '',
+            hora: '09:00',
+            fechaInicio: DateTime(2026, 6, 10),
+            diasDuracion: 3,
+            activo: true,
+          ),
+          SeguimientoModel(
+            id: 's3',
+            motivo: 'herida',
+            detalle: '',
+            hora: '09:00',
+            fechaInicio: DateTime(2026, 6, 15),
+            diasDuracion: 3,
+            activo: false,
+          ),
+        ],
+      ),
+      perro(id: 'p2', nombre: 'Canelo'),
+    ];
+
+    final activos = CalendarioGeneralController.seguimientosActivos(lista, hoy: hoy);
+    expect(activos, hasLength(1));
+    expect(activos.single.titulo, 'Ojo');
+    expect(activos.single.detalle, 'Día 2 de 5 · izquierdo');
+    expect(activos.single.hora, '18:00');
+    expect(activos.single.esSeguimiento, isTrue);
+    expect(
+      CalendarioGeneralController.seguimientosActivos(lista, hoy: hoy, idPerro: 'p2'),
+      isEmpty,
+    );
   });
 }

@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 export const ZONA = 'America/Argentina/Buenos_Aires';
 
-export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'seguimiento' | 'legacy';
+export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'seguimiento' | 'legacy' | 'ingreso';
 
 export interface Alarma {
   clave: string;
@@ -50,6 +50,7 @@ export interface PerroEntrada {
   id?: string;
   estado?: string;
   nombre?: string;
+  fecha_ingreso?: unknown;
   tratamientos?: unknown;
   recordatorios?: unknown;
   seguimientos?: unknown;
@@ -120,6 +121,9 @@ export function calcularAlarmas(perro: PerroEntrada, desde: DateTime, hasta: Dat
   for (const seguimiento of listaDe<SeguimientoEntrada>(perro.seguimientos)) {
     alarmas.push(...alarmaSeguimiento(seguimiento, idPerro, nombre, inicioVentana, finVentana));
   }
+
+  const ingreso = alarmaIngreso(perro, idPerro, nombre, inicioVentana, finVentana);
+  if (ingreso) alarmas.push(ingreso);
 
   alarmas.sort((a, b) => a.fecha.toMillis() - b.fecha.toMillis() || a.clave.localeCompare(b.clave));
   return alarmas;
@@ -348,6 +352,53 @@ function diasDeVentana(desde: DateTime, hasta: DateTime): DateTime[] {
     dias.push(dia);
   }
   return dias;
+}
+
+/// A las 9:00 del aniversario de ingreso. Una clave por perro y por año.
+function alarmaIngreso(
+  perro: PerroEntrada,
+  idPerro: string,
+  nombre: string,
+  desde: DateTime,
+  hasta: DateTime,
+): Alarma | null {
+  if (idPerro === '') return null;
+  const ingreso = diaDe(perro.fecha_ingreso);
+  if (!ingreso) return null;
+
+  for (const dia of diasDeVentana(desde, hasta)) {
+    const anios = dia.year - ingreso.year;
+    if (anios < 1) continue;
+    const cumple = diaAniversario(ingreso, dia.year);
+    if (!cumple || !dia.hasSame(cumple, 'day')) continue;
+    const ocurrencia = cumple.set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+    if (!enVentana(ocurrencia, desde, hasta)) continue;
+    const verbo = anios === 1 ? 'cumple' : 'cumplen';
+    const unidad = anios === 1 ? 'año' : 'años';
+    return {
+      clave: `ingreso_${idPerro}_${dia.year}`,
+      tipo: 'ingreso',
+      titulo: 'Aniversario de ingreso',
+      cuerpo: `Hoy se ${verbo} ${anios} ${unidad} desde que ${nombre} ingresó al refugio.`,
+      categoria: 'ingreso',
+      idPerro,
+      fecha: ocurrencia,
+    };
+  }
+  return null;
+}
+
+/// El 29 de febrero, en un año no bisiesto, cae el 28.
+function diaAniversario(ingreso: DateTime, anio: number): DateTime | null {
+  const candidato = DateTime.fromObject(
+    { year: anio, month: ingreso.month, day: ingreso.day },
+    { zone: ZONA },
+  );
+  if (candidato.isValid) return candidato.startOf('day');
+  if (ingreso.month === 2 && ingreso.day === 29) {
+    return DateTime.fromObject({ year: anio, month: 2, day: 28 }, { zone: ZONA }).startOf('day');
+  }
+  return null;
 }
 
 function diaDe(valor: unknown): DateTime | null {

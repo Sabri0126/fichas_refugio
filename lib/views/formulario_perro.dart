@@ -29,6 +29,7 @@ import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import 'dialogo_peso.dart';
 import 'dialogo_recordatorio.dart';
+import 'dialogo_seguimiento.dart';
 import 'dialogo_tratamiento.dart';
 
 class FormularioPerro extends StatefulWidget {
@@ -73,6 +74,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
   List<EgresoModel> _historialEgresos = [];
   String _sexo = 'macho';
   List<Map<String, dynamic>> _parientes = [];
+  List<PerroModel>? _perrosConocidos;
+  Future<List<PerroModel>>? _cargaPerros;
   List<TratamientoModel> _tratamientos = [];
   final Set<String> _idsReanudadosManualmente = {};
   final Set<String> _idsInicialesTratamientos = {};
@@ -144,6 +147,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             '${_fechaRegreso!.day.toString().padLeft(2, '0')}/${_fechaRegreso!.month.toString().padLeft(2, '0')}/${_fechaRegreso!.year}';
       }
     }
+    _cargaPerros = _pedirPerros();
     // Registrar listeners después de cargar valores iniciales para no marcar cambios prematuros
     for (final c in [
       _nombreController,
@@ -635,8 +639,44 @@ class _FormularioPerroState extends State<FormularioPerro> {
     }
   }
 
+  Future<List<PerroModel>> _pedirPerros() async {
+    try {
+      final lista = await _perroController.obtenerListaPerros();
+      if (mounted) setState(() => _perrosConocidos = lista);
+      return lista;
+    } catch (_) {
+      _cargaPerros = null;
+      rethrow;
+    }
+  }
+
+  Future<List<PerroModel>> _perrosParaFamiliares() {
+    return _cargaPerros ??= _pedirPerros();
+  }
+
+  String? _fotoFamiliar(Map<String, dynamic> familiar) {
+    final id = (familiar['id'] ?? familiar['id_documento'] ?? '').toString();
+    if (id.isEmpty) return null;
+    for (final perro in _perrosConocidos ?? const <PerroModel>[]) {
+      if (perro.id != id) continue;
+      final foto = perro.fotoPerfil;
+      if (foto == null || foto.isEmpty) return null;
+      return foto;
+    }
+    return null;
+  }
+
   Future<void> _mostrarDialogoAgregarFamiliar() async {
-    final listaPerros = await _perroController.obtenerListaPerros();
+    final List<PerroModel> listaPerros;
+    try {
+      listaPerros = await _perrosParaFamiliares();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo cargar la lista de perros')),
+      );
+      return;
+    }
     final opciones = [
       for (final perro in listaPerros)
         if (perro.id != widget.idDocumento) perro,
@@ -1310,146 +1350,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Future<void> _mostrarDialogoSeguimiento({int? indice}) async {
     final actual = indice == null ? null : _seguimientos[indice];
-    var motivo = actual?.motivo ?? 'ojo';
-    if (SeguimientoTipos.de(motivo).motivo != motivo) motivo = 'otro';
-    final detalleController = TextEditingController(text: actual?.detalle ?? '');
-    var dias = actual?.diasDuracion ?? 5;
-    const duraciones = <(int, String)>[
-      (3, '3 días'),
-      (5, '5 días'),
-      (7, '7 días'),
-      (14, '14 días'),
-      (0, 'Hasta que lo cierre'),
-    ];
-    if (!duraciones.any((opcion) => opcion.$1 == dias)) dias = 5;
-    var hora = _horaDeTexto(actual?.hora ?? '18:00');
-
-    final guardado = await showDialog<SeguimientoModel>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final horaTexto =
-              '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
-          return AlertDialog(
-            scrollable: true,
-            title: Text(actual == null ? 'Agregar seguimiento' : 'Editar seguimiento'),
-            content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final visual in SeguimientoTipos.todos)
-                        ChoiceChip(
-                          avatar: Icon(visual.icono, size: 18, color: visual.colorTexto),
-                          label: Text(visual.etiqueta),
-                          selected: motivo == visual.motivo,
-                          onSelected: (seleccionado) {
-                            if (!seleccionado) return;
-                            setDialogState(() => motivo = visual.motivo);
-                          },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: detalleController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Detalle (opcional)',
-                      helperText: 'Por ejemplo: ojo izquierdo irritado',
-                      helperMaxLines: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Duración', style: Theme.of(ctx).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final opcion in duraciones)
-                        ChoiceChip(
-                          label: Text(opcion.$2),
-                          selected: dias == opcion.$1,
-                          onSelected: (seleccionado) {
-                            if (!seleccionado) return;
-                            setDialogState(() => dias = opcion.$1);
-                          },
-                        ),
-                    ],
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Hora del aviso: $horaTexto'),
-                    trailing: const Icon(Icons.access_time),
-                    onTap: () async {
-                      final seleccionada = await showTimePicker(
-                        context: ctx,
-                        initialTime: hora,
-                        builder: (BuildContext context, Widget? child) {
-                          return MediaQuery(
-                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (seleccionada == null) return;
-                      setDialogState(() => hora = seleccionada);
-                    },
-                  ),
-                  Text(
-                    'Si la hora de hoy ya pasó, el primer aviso llega mañana.',
-                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                  ),
-                  if (actual != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      actual.activo
-                          ? 'Los días se cuentan desde el día en que lo creaste.'
-                          : 'Está cerrado. Guardar no lo vuelve a abrir.',
-                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                    ),
-                  ],
-                ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  FocusScope.of(ctx).unfocus();
-                  final horaTextoGuardada =
-                      '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
-                  final resultado = actual == null
-                      ? _seguimientoController.crear(
-                          motivo: motivo,
-                          detalle: detalleController.text,
-                          hora: horaTextoGuardada,
-                          fechaInicio: DateTime.now(),
-                          diasDuracion: dias,
-                        )
-                      : _seguimientoController.editar(
-                          actual,
-                          motivo: motivo,
-                          detalle: detalleController.text,
-                          hora: horaTextoGuardada,
-                          diasDuracion: dias,
-                        );
-                  Navigator.pop(ctx, resultado);
-                },
-                child: Text(actual == null ? 'Agregar' : 'Guardar'),
-              ),
-            ],
-          );
-        },
-      ),
+    final guardado = await mostrarDialogoSeguimiento(
+      context,
+      controller: _seguimientoController,
+      actual: actual,
+      fechaInicial: DateTime.now(),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => detalleController.dispose());
     if (!mounted || guardado == null) return;
     setState(() {
       if (indice == null) {
@@ -1459,15 +1365,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
       }
       _hayCambios = true;
     });
-  }
-
-  TimeOfDay _horaDeTexto(String hora) {
-    final partes = hora.split(':');
-    var horas = int.tryParse(partes[0]) ?? 18;
-    var minutos = partes.length > 1 ? int.tryParse(partes[1]) ?? 0 : 0;
-    if (horas < 0 || horas > 23) horas = 18;
-    if (minutos < 0 || minutos > 59) minutos = 0;
-    return TimeOfDay(hour: horas, minute: minutos);
   }
 
   Widget _seccionRecordatorios() {
@@ -2068,10 +1965,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         final p = entry.value;
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.navy.withValues(alpha: 0.08),
-                            child: const Icon(Icons.pets, size: 20, color: AppColors.navy),
-                          ),
+                          leading: _MiniaturaPerro(url: _fotoFamiliar(p)),
                           title: Text(p['nombre']?.toString() ?? ''),
                           subtitle: Text(p['relacion']?.toString() ?? ''),
                           trailing: IconButton(

@@ -15,7 +15,8 @@ const categoriasRegistroMedico = <(String, String)>[
   ('vacuna', 'Vacuna'),
 ];
 
-/// Grilla de dos columnas. [alElegir] recibe la categoría.
+/// Dos columnas cuando cada una alcanza para el ícono y el nombre entero.
+/// En un teléfono queda una columna, para que no se corte el texto.
 class GrillaRegistrosMedicos extends StatelessWidget {
   final ValueChanged<String> alElegir;
 
@@ -26,8 +27,10 @@ class GrillaRegistrosMedicos extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const espacio = 12.0;
+        const anchoMinimo = 220.0;
         final disponible = constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
-        final anchoCelda = (disponible - espacio) / 2;
+        final columnas = disponible >= anchoMinimo * 2 + espacio ? 2 : 1;
+        final anchoCelda = columnas == 1 ? disponible : (disponible - espacio) / 2;
         return Wrap(
           spacing: espacio,
           runSpacing: espacio,
@@ -91,7 +94,6 @@ class _BotonCategoria extends StatelessWidget {
               child: Text(
                 etiqueta,
                 maxLines: 2,
-                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: colorTexto,
                   fontSize: 15,
@@ -159,6 +161,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   late final TextEditingController _medicacion;
   late final TextEditingController _indicaciones;
   late final TextEditingController _notas;
+  late final TextEditingController _veterinario;
+  late final TextEditingController _diagnostico;
   late final TextEditingController _dias;
   late DateTime _fecha;
   late TimeOfDay _hora;
@@ -179,6 +183,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     _medicacion = TextEditingController(text: actual?.medicacion ?? '');
     _indicaciones = TextEditingController(text: actual?.indicaciones ?? '');
     _notas = TextEditingController(text: actual?.notas ?? '');
+    _veterinario = TextEditingController(text: actual?.veterinario ?? '');
+    _diagnostico = TextEditingController(text: actual?.diagnostico ?? '');
     _dias = TextEditingController(text: (actual?.diasDuracion ?? 0).toString());
     _fecha = actual?.fechaInicio ?? widget.fechaInicial ?? DateTime.now();
     final partes = (actual?.horaRecordatorio ?? '09:00').split(':');
@@ -193,6 +199,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     _medicacion.dispose();
     _indicaciones.dispose();
     _notas.dispose();
+    _veterinario.dispose();
+    _diagnostico.dispose();
     _dias.dispose();
     super.dispose();
   }
@@ -204,6 +212,9 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final hora =
         '${_hora.hour.toString().padLeft(2, '0')}:${_hora.minute.toString().padLeft(2, '0')}';
     final notas = _rotuloNotas == null ? (widget.actual?.notas ?? '') : _notas.text.trim();
+    final esVisita = widget.categoria == 'veterinaria';
+    final veterinario = esVisita ? _veterinario.text.trim() : (widget.actual?.veterinario ?? '');
+    final diagnostico = esVisita ? _diagnostico.text.trim() : (widget.actual?.diagnostico ?? '');
     final actual = widget.actual;
     final modelo = actual == null
         ? widget.controller.crearTratamiento(
@@ -211,6 +222,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             medicacion: medicacion,
             indicaciones: _indicaciones.text.trim(),
             notas: notas,
+            veterinario: veterinario,
+            diagnostico: diagnostico,
             fechaInicio: _fecha,
             diasDuracion: int.tryParse(_dias.text.trim()) ?? 0,
             horaRecordatorio: hora,
@@ -220,6 +233,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             medicacion: medicacion,
             indicaciones: _indicaciones.text.trim(),
             notas: notas,
+            veterinario: veterinario,
+            diagnostico: diagnostico,
             diasDuracion: _esDiario ? (int.tryParse(_dias.text.trim()) ?? 0) : actual.diasDuracion,
             fechaInicio: _fecha,
             horaRecordatorio: _esDiario ? hora : (actual.horaRecordatorio ?? hora),
@@ -243,6 +258,17 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.categoria == 'veterinaria') ...[
+              TextField(
+                controller: _veterinario,
+                scrollPadding: EdgeInsets.zero,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del veterinario o la veterinaria',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: _medicacion,
               scrollPadding: EdgeInsets.zero,
@@ -250,6 +276,15 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
               decoration: InputDecoration(labelText: _rotuloMedicacion(widget.categoria)),
             ),
             const SizedBox(height: 16),
+            if (widget.categoria == 'veterinaria') ...[
+              TextField(
+                controller: _diagnostico,
+                scrollPadding: EdgeInsets.zero,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Diagnóstico'),
+              ),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: _indicaciones,
               scrollPadding: EdgeInsets.zero,
@@ -344,7 +379,7 @@ String _tituloAlta(String categoria) => switch (categoria) {
     };
 
 String _rotuloMedicacion(String categoria) => switch (categoria) {
-      'veterinaria' => 'Motivo de la visita',
+      'veterinaria' => 'Motivo de visita',
       'unico' => 'Medicación / Aplicación',
       'higiene' => 'Procedimiento / Cuidado',
       'evento' => 'Evento / Motivo',
@@ -353,7 +388,7 @@ String _rotuloMedicacion(String categoria) => switch (categoria) {
     };
 
 String _rotuloIndicaciones(String categoria) => switch (categoria) {
-      'veterinaria' => 'Diagnóstico / Indicaciones',
+      'veterinaria' => 'Indicaciones',
       'evento' => 'Notas / Indicaciones',
       'unico' || 'vacuna' => 'Dosis administrada',
       'higiene' => 'Notas (opcional)',

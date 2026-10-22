@@ -267,6 +267,50 @@ void main() {
     expect(bytes, isNotEmpty);
   });
 
+  test('el pdf lista el evento médico con nombre y fecha', () {
+    final lineas = ExportarFicha.lineasEvento(
+      TratamientoModel(
+        id: 'e1',
+        categoria: 'evento',
+        medicacion: 'Corte de uña infectada',
+        indicaciones: 'Limpiar y vendar',
+        fechaInicio: DateTime(2026, 3, 4),
+      ),
+    );
+    final texto = lineas.join('\n');
+    expect(texto, contains('Corte de uña infectada'));
+    expect(texto, contains('Evento médico'));
+    expect(texto, contains('04/03/2026'));
+    expect(texto, contains('Limpiar y vendar'));
+  });
+
+  test('la visita veterinaria conserva el texto viejo y suma los campos nuevos', () {
+    final vieja = TratamientoModel.fromMap(
+      {
+        'categoria': 'veterinaria',
+        'medicacion': 'Control anual',
+        'indicaciones': 'Otitis. Gotas por 7 días',
+      },
+      'v1',
+    );
+    expect(vieja.veterinario, isEmpty);
+    expect(vieja.diagnostico, isEmpty);
+    expect(vieja.detalleVisible, 'Otitis. Gotas por 7 días');
+
+    final nueva = vieja.copyWith(
+      veterinario: 'Dra. Pérez',
+      diagnostico: 'Otitis',
+      indicaciones: 'Gotas por 7 días',
+    );
+    final lineas = ExportarFicha.lineasEvento(nueva);
+    expect(lineas[0], 'Veterinario: Dra. Pérez');
+    expect(lineas[1], 'Motivo: Control anual');
+    expect(lineas[2], 'Diagnóstico: Otitis');
+    expect(lineas[3], 'Indicaciones: Gotas por 7 días');
+    expect(nueva.toMap()['veterinario'], 'Dra. Pérez');
+    expect(nueva.toMap()['diagnostico'], 'Otitis');
+  });
+
   test('el pdf se genera aunque fallen las fotos y también con fotos inyectadas', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final perro = PerroModel(
