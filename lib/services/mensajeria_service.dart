@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'notificaciones_service.dart';
 import '../models/dosis_avisada.dart';
@@ -12,6 +14,10 @@ import '../models/dosis_avisada.dart';
 class MensajeriaService {
   MensajeriaService._();
   static final MensajeriaService instance = MensajeriaService._();
+
+  /// Ids de diarios que este celular no quiere recibir. La misma lista va en
+  /// `dispositivos/{token}.silenciados`.
+  static const claveSilenciados = 'tratamientos_silenciados';
 
   final FirebaseMessaging _mensajeria = FirebaseMessaging.instance;
   StreamSubscription<String>? _alRenovarToken;
@@ -94,11 +100,76 @@ class MensajeriaService {
     await _mensajeria.deleteToken();
   }
 
-  Future<void> _guardarToken(String token, String uid) {
-    return FirebaseFirestore.instance.collection('dispositivos').doc(token).set({
+  /// Ids de diarios callados solo en este celular.
+  static Future<Set<String>> leerSilenciados() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _conjuntoSilenciados(prefs.getString(claveSilenciados));
+  }
+
+  /// Suma o saca un diario de la lista local y, si hay token, del documento del celular.
+  Future<void> definirSilencio(String idTratamiento, {required bool silenciar}) async {
+    final id = idTratamiento.trim();
+    if (id.isEmpty) return;
+    final ids = await leerSilenciados();
+    if (silenciar) {
+      ids.add(id);
+    } else {
+      ids.remove(id);
+    }
+    await _guardarSilenciadosLocales(ids);
+    await _escribirSilencioRemoto(ids);
+  }
+
+  Future<void> _guardarToken(String token, String uid) async {
+    final ref = FirebaseFirestore.instance.collection('dispositivos').doc(token);
+    final locales = await leerSilenciados();
+    var remotos = <String>{};
+    try {
+      final snap = await ref.get();
+      remotos = _conjuntoSilenciados(snap.data()?['silenciados']);
+    } catch (_) {}
+    final unidos = {...locales, ...remotos};
+    await _guardarSilenciadosLocales(unidos);
+    await ref.set({
       'uid': uid,
       'plataforma': defaultTargetPlatform.name,
       'actualizado': FieldValue.serverTimestamp(),
+      'silenciados': _listaOrdenada(unidos),
     }, SetOptions(merge: true));
+  }
+
+  Future<void> _escribirSilencioRemoto(Set<String> ids) async {
+    if (!_pushSoportado) return;
+    final usuario = FirebaseAuth.instance.currentUser;
+    if (usuario == null) return;
+    final token = await _mensajeria.getToken();
+    if (token == null || token.isEmpty) return;
+    await FirebaseFirestore.instance.collection('dispositivos').doc(token).set({
+      'uid': usuario.uid,
+      'silenciados': _listaOrdenada(ids),
+      'actualizado': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> _guardarSilenciadosLocales(Set<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(claveSilenciados, jsonEncode(_listaOrdenada(ids)));
+  }
+
+  static List<String> _listaOrdenada(Set<String> ids) {
+    final lista = ids.toList()..sort();
+    return lista;
+  }
+
+  static Set<String> _conjuntoSilenciados(Object? crudo) {
+    if (crudo is String) {
+      try {
+        return _conjuntoSilenciados(jsonDecode(crudo));
+      } catch (_) {
+        return {};
+      }
+    }
+    if (crudo is! List) return {};
+    return crudo.map((item) => item.toString().trim()).where((id) => id.isNotEmpty).toSet();
   }
 }

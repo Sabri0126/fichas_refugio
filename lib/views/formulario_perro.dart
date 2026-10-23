@@ -21,6 +21,7 @@ import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
+import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/encabezado_seccion.dart';
@@ -77,6 +78,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   List<PerroModel>? _perrosConocidos;
   Future<List<PerroModel>>? _cargaPerros;
   List<TratamientoModel> _tratamientos = [];
+  Set<String> _silenciados = {};
   final Set<String> _idsReanudadosManualmente = {};
   final Set<String> _idsInicialesTratamientos = {};
   List<RecordatorioModel> _recordatorios = [];
@@ -161,6 +163,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
     ]) {
       c.addListener(() => setState(() => _hayCambios = true));
     }
+    _cargarSilenciados();
+  }
+
+  Future<void> _cargarSilenciados() async {
+    final ids = await MensajeriaService.leerSilenciados();
+    if (!mounted) return;
+    setState(() => _silenciados = ids);
   }
 
   @override
@@ -823,7 +832,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
       if (t.indicaciones.trim().isNotEmpty) t.indicaciones.trim(),
       dias > 0 ? '$dias días' : 'Indefinido',
       if (!pausado && fechaTexto.isNotEmpty) 'Desde $fechaTexto',
-      if (!pausado && horaRecordatorio.isNotEmpty) 'Recordatorio $horaRecordatorio',
+      if (!pausado && !t.notificar)
+        'Sin notificación'
+      else if (!pausado && _silenciados.contains(t.id))
+        'Sin notificación en este celular'
+      else if (!pausado && horaRecordatorio.isNotEmpty)
+        'Recordatorio $horaRecordatorio',
       if (sufijo.trim().isNotEmpty) sufijo.replaceFirst(RegExp(r'^ · '), ''),
     ];
     final colorIcono = pausado ? AppColors.pausado : CategoryColors.base('diario');
@@ -1553,8 +1567,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
       categoria: categoria,
     );
     if (!mounted || nuevo == null) return;
+    final silenciados = await MensajeriaService.leerSilenciados();
+    if (!mounted) return;
     setState(() {
       _tratamientos.add(nuevo);
+      _silenciados = silenciados;
       _hayCambios = true;
     });
   }
@@ -1566,8 +1583,11 @@ class _FormularioPerroState extends State<FormularioPerro> {
       actual: _tratamientos[indice],
     );
     if (!mounted || actualizado == null) return;
+    final silenciados = await MensajeriaService.leerSilenciados();
+    if (!mounted) return;
     setState(() {
       _tratamientos[indice] = actualizado;
+      _silenciados = silenciados;
       _hayCambios = true;
     });
   }
@@ -2111,7 +2131,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'El diario avisa cada día a la hora elegida. Los demás quedan en la fecha de la aplicación.',
+                    'El diario avisa cada día a la hora elegida, salvo que elijas no notificar. Los demás quedan en la fecha de la aplicación.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                   ),
                   const SizedBox(height: 12),

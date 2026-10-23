@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/notificacion_registro_model.dart';
+import '../services/mensajeria_service.dart';
 
 /// Historial de avisos del servidor. Lo leído y lo borrado queda en este teléfono.
 class HistorialNotificacionesController {
@@ -167,9 +168,14 @@ class HistorialNotificacionesController {
       await prefs.setString(_claveEliminadas, jsonEncode(podadas));
     }
     final ocultas = (listaCompleta ? podadas : eliminadas).toSet();
+    final silenciados = await MensajeriaService.leerSilenciados();
     final lista = <NotificacionRegistroModel>[];
     for (final doc in docs.values) {
       if (ocultas.contains(doc.id)) continue;
+      final datos = doc.data();
+      if (datos['silenciosa'] == true) continue;
+      final idTratamiento = datos['id_tratamiento']?.toString().trim() ?? '';
+      if (idTratamiento.isNotEmpty && silenciados.contains(idTratamiento)) continue;
       final modelo = NotificacionRegistroModel.desdeDocumento(
         doc.id,
         doc.data(),
@@ -202,7 +208,9 @@ class HistorialNotificacionesController {
     }
   }
 
-  void _avisar() {
+  static void refrescar() {
     if (!_aviso.isClosed) _aviso.add(null);
   }
+
+  void _avisar() => refrescar();
 }

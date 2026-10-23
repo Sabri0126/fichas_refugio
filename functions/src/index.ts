@@ -4,7 +4,17 @@ import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { DateTime } from 'luxon';
 
-import { type Alarma, type PerroEntrada, ZONA, aZona, calcularAlarmas, calcularPausas } from './alarmas.js';
+import {
+  type Alarma,
+  type DispositivoAviso,
+  type PerroEntrada,
+  ZONA,
+  aZona,
+  calcularAlarmas,
+  calcularPausas,
+  listaSilenciados,
+  tokensParaAlarma,
+} from './alarmas.js';
 import { esMananaDeAniversario, mensajeAniversario } from './aniversario.js';
 import { type MomentoClima, evaluarClima, normalizarConfig } from './clima.js';
 import { crearNotificacion, enviarAlarma } from './envio.js';
@@ -38,8 +48,11 @@ export const enviarNotificaciones = onSchedule(
       if (creada) nuevas.push(alarma);
     }
 
-    const dispositivos = await db.collection('dispositivos').get();
-    const tokens = dispositivos.docs.map((doc) => doc.id);
+    const dispositivosSnap = await db.collection('dispositivos').get();
+    const dispositivos: DispositivoAviso[] = dispositivosSnap.docs.map((doc) => ({
+      token: doc.id,
+      silenciados: listaSilenciados(doc.get('silenciados')),
+    }));
     let enviados = 0;
     let marcadas = 0;
     const tokensMalos = new Set<string>();
@@ -47,7 +60,7 @@ export const enviarNotificaciones = onSchedule(
       if (alarma.idTratamiento && alarma.dia) {
         marcadas += await marcarDosis(db, alarma.idPerro, alarma.idTratamiento, alarma.dia);
       }
-      const resultado = await enviarAlarma(tokens, alarma);
+      const resultado = await enviarAlarma(tokensParaAlarma(dispositivos, alarma), alarma);
       enviados += resultado.enviados;
       for (const token of resultado.invalidos) tokensMalos.add(token);
     }

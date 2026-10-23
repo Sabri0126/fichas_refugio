@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/historial_notificaciones_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/tratamiento_model.dart';
+import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+
+enum _AlcanceAviso { todos, esteCelular, nadie }
 
 /// Las seis categorías del alta, en el orden de la grilla.
 const categoriasRegistroMedico = <(String, String)>[
@@ -167,6 +171,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   late DateTime _fecha;
   late TimeOfDay _hora;
   var _cerrando = false;
+  var _alcance = _AlcanceAviso.todos;
+  var _avisoListo = true;
 
   bool get _esDiario => widget.categoria == 'diario';
 
@@ -192,6 +198,26 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       hour: int.tryParse(partes.isNotEmpty ? partes[0] : '') ?? 9,
       minute: int.tryParse(partes.length > 1 ? partes[1] : '') ?? 0,
     );
+    if (_esDiario && actual != null && !actual.notificar) {
+      _alcance = _AlcanceAviso.nadie;
+    }
+    _avisoListo = !_esDiario || actual == null || !actual.notificar;
+    if (!_avisoListo) _leerSilencioDeEsteCelular();
+  }
+
+  Future<void> _leerSilencioDeEsteCelular() async {
+    final id = widget.actual?.id ?? '';
+    try {
+      final ids = await MensajeriaService.leerSilenciados();
+      if (!mounted) return;
+      setState(() {
+        if (ids.contains(id)) _alcance = _AlcanceAviso.esteCelular;
+        _avisoListo = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _avisoListo = true);
+    }
   }
 
   @override
@@ -205,10 +231,11 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     super.dispose();
   }
 
-  void _guardar() {
-    if (_cerrando) return;
+  Future<void> _guardar() async {
+    if (_cerrando || !_avisoListo) return;
     final medicacion = _medicacion.text.trim();
     if (medicacion.isEmpty) return;
+    _cerrando = true;
     final hora =
         '${_hora.hour.toString().padLeft(2, '0')}:${_hora.minute.toString().padLeft(2, '0')}';
     final notas = _rotuloNotas == null ? (widget.actual?.notas ?? '') : _notas.text.trim();
@@ -216,6 +243,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final veterinario = esVisita ? _veterinario.text.trim() : (widget.actual?.veterinario ?? '');
     final diagnostico = esVisita ? _diagnostico.text.trim() : (widget.actual?.diagnostico ?? '');
     final actual = widget.actual;
+    final avisa = _alcance != _AlcanceAviso.nadie;
     final modelo = actual == null
         ? widget.controller.crearTratamiento(
             categoria: widget.categoria,
@@ -227,6 +255,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             fechaInicio: _fecha,
             diasDuracion: int.tryParse(_dias.text.trim()) ?? 0,
             horaRecordatorio: hora,
+            notificar: _esDiario ? avisa : true,
           )
         : widget.controller.editarTratamiento(
             actual,
@@ -238,9 +267,46 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             diasDuracion: _esDiario ? (int.tryParse(_dias.text.trim()) ?? 0) : actual.diasDuracion,
             fechaInicio: _fecha,
             horaRecordatorio: _esDiario ? hora : (actual.horaRecordatorio ?? hora),
+            notificar: _esDiario ? avisa : null,
           );
-    _cerrando = true;
+    if (_esDiario) {
+      try {
+        await MensajeriaService.instance.definirSilencio(
+          modelo.id,
+          silenciar: _alcance == _AlcanceAviso.esteCelular,
+        );
+        HistorialNotificacionesController.refrescar();
+      } catch (_) {
+        _cerrando = false;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo guardar el aviso de este celular.')),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     Navigator.pop(context, modelo);
+  }
+
+  Widget _opcionAviso(_AlcanceAviso valor, String texto) {
+    final elegido = _alcance == valor;
+    return InkWell(
+      onTap: _avisoListo ? () => setState(() => _alcance = valor) : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Icon(
+              elegido ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: elegido ? AppColors.navy : context.paleta.textoSuave,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(texto)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -352,6 +418,20 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
                   trailing: const Icon(Icons.access_time),
                 ),
               ),
+            if (_esDiario) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'La dosis se marca igual a la hora elegida. Esto solo corta el aviso.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 4),
+              _opcionAviso(_AlcanceAviso.todos, 'Avisar en todos los celulares'),
+              _opcionAviso(_AlcanceAviso.esteCelular, 'No avisar en este celular'),
+              _opcionAviso(_AlcanceAviso.nadie, 'No avisar en ningún celular de administrador'),
+            ],
           ],
         ),
       ),
@@ -361,7 +441,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _guardar,
+          onPressed: _avisoListo ? _guardar : null,
           child: Text(actual == null ? 'Agregar' : 'Guardar'),
         ),
       ],

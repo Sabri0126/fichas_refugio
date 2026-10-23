@@ -14,6 +14,13 @@ export interface Alarma {
   fecha: DateTime;
   idTratamiento?: string;
   dia?: string;
+  /** `false` calla el push en todos los celulares. Si falta, se avisa. */
+  notificar?: boolean;
+}
+
+export interface DispositivoAviso {
+  token: string;
+  silenciados: readonly string[];
 }
 
 export interface TratamientoEntrada {
@@ -22,6 +29,7 @@ export interface TratamientoEntrada {
   activo?: boolean;
   medicacion?: string;
   hora_recordatorio?: string;
+  notificar?: boolean;
   dias_duracion?: number | string;
   fecha_inicio?: unknown;
   fecha_proximo_recordatorio?: unknown;
@@ -149,6 +157,24 @@ export function calcularPausas(perro: PerroEntrada, hoy: DateTime): string[] {
   return ids;
 }
 
+export function listaSilenciados(valor: unknown): string[] {
+  if (!Array.isArray(valor)) return [];
+  return valor.map((item) => String(item).trim()).filter((item) => item !== '');
+}
+
+/** Sin tokens si el diario está callado para todos. Si no, omite los celulares que lo silenciaron. */
+export function tokensParaAlarma(
+  dispositivos: readonly DispositivoAviso[],
+  alarma: { notificar?: boolean; idTratamiento?: string },
+): string[] {
+  if (alarma.notificar === false) return [];
+  const id = alarma.idTratamiento?.trim() ?? '';
+  return dispositivos.flatMap((dispositivo) => {
+    if (id !== '' && dispositivo.silenciados.includes(id)) return [];
+    return [dispositivo.token];
+  });
+}
+
 function alarmaDiaria(
   tratamiento: TratamientoEntrada,
   idPerro: string,
@@ -201,6 +227,7 @@ function alarmaDiaria(
       fecha: ocurrencia,
       idTratamiento: idItem,
       dia: diaIso,
+      notificar: tratamiento.notificar !== false,
     });
   }
 

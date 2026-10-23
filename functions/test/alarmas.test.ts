@@ -6,6 +6,7 @@ import {
   aZona,
   calcularAlarmas,
   calcularPausas,
+  tokensParaAlarma,
   type PerroEntrada,
 } from '../src/alarmas.js';
 
@@ -440,5 +441,42 @@ describe('calcularAlarmas', () => {
       ba('2026-10-18T09:05:00'),
     );
     expect(alarmas[0].cuerpo).toBe('Hoy se cumplen 2 años desde que tu perrito ingresó al refugio.');
+  });
+
+  it('un diario callado sigue generando la alarma y no avisa', () => {
+    const alarmas = calcularAlarmas(
+      perro({ tratamientos: [diario({ notificar: false })] }),
+      ba('2026-01-10T08:00:00'),
+      ba('2026-01-10T10:00:00'),
+    );
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].notificar).toBe(false);
+    expect(alarmas[0].idTratamiento).toBe('doxi');
+    expect(alarmas[0].tipo).toBe('diaria');
+  });
+
+  it('sin el campo notificar la alarma sigue avisando', () => {
+    const alarmas = calcularAlarmas(perro(), ba('2026-01-10T08:00:00'), ba('2026-01-10T10:00:00'));
+    expect(alarmas[0].notificar).toBe(true);
+  });
+});
+
+describe('tokensParaAlarma', () => {
+  const dispositivos = [
+    { token: 'a', silenciados: ['doxi'] },
+    { token: 'b', silenciados: [] },
+    { token: 'c', silenciados: ['otro'] },
+  ];
+
+  it('notificar false no deja tokens', () => {
+    expect(tokensParaAlarma(dispositivos, { notificar: false, idTratamiento: 'doxi' })).toEqual([]);
+  });
+
+  it('silenciados saca solo ese dispositivo', () => {
+    expect(tokensParaAlarma(dispositivos, { notificar: true, idTratamiento: 'doxi' })).toEqual(['b', 'c']);
+  });
+
+  it('un aviso sin tratamiento no usa la lista', () => {
+    expect(tokensParaAlarma(dispositivos, {})).toEqual(['a', 'b', 'c']);
   });
 });

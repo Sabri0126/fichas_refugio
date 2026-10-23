@@ -115,18 +115,18 @@ abstract final class ExportarFicha {
           ...bloquesTratamientos(perro.tratamientos),
           if (perro.recordatorios.isNotEmpty) _recordatorios(perro.recordatorios),
           if (perro.estado == 'egresado' || perro.historialEgresos.isNotEmpty) _egresos(perro),
+          if (estudios.isNotEmpty) ...[
+            pw.SizedBox(height: 16),
+            _titulo('Estudios y registros médicos'),
+            pw.SizedBox(height: 10),
+            for (final estudio in estudios)
+              _bloqueEstudio(estudio, alto: estudios.length == 1 ? _altoEstudioUnico : _altoEstudio),
+          ],
           if (galeria.isNotEmpty) ...[
             pw.NewPage(),
             _titulo('Galería de fotos'),
             pw.SizedBox(height: 10),
             ..._filasGaleria(galeria),
-          ],
-          if (estudios.isNotEmpty) ...[
-            pw.NewPage(),
-            _titulo('Estudios y registros médicos'),
-            pw.SizedBox(height: 10),
-            for (final estudio in estudios)
-              _bloqueEstudio(estudio, alto: estudios.length == 1 ? _altoEstudioUnico : _altoEstudio),
           ],
         ],
       ),

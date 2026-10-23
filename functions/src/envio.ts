@@ -18,6 +18,7 @@ export interface MensajePush {
   fecha: DateTime;
   idTratamiento?: string;
   dia?: string;
+  notificar?: boolean;
 }
 
 export async function crearNotificacion(db: Firestore, mensaje: MensajePush): Promise<boolean> {
@@ -31,6 +32,7 @@ export async function crearNotificacion(db: Firestore, mensaje: MensajePush): Pr
       fecha: Timestamp.fromDate(mensaje.fecha.toJSDate()),
       ...(mensaje.idTratamiento ? { id_tratamiento: mensaje.idTratamiento } : {}),
       ...(mensaje.dia ? { dia: mensaje.dia } : {}),
+      ...(mensaje.notificar === false ? { silenciosa: true } : {}),
       creada: FieldValue.serverTimestamp(),
       expira_en: Timestamp.fromDate(mensaje.fecha.plus({ days: 30 }).toJSDate()),
     });

@@ -55,6 +55,7 @@ class TratamientoController {
   /// @param diasDuracion días de duración (solo aplica a categoría `'diario'`).
   /// @param horaRecordatorio hora `HH:mm` del recordatorio diario (solo `'diario'`).
   /// @param fechaProximoRecordatorio próximo recordatorio opcional (`'unico'` y `'higiene'`).
+  /// @param notificar si el diario avisa a los celulares. `false` lo calla en todos.
   /// @return el [TratamientoModel] recién creado, listo para agregarse a la
   /// lista de tratamientos del perro.
   TratamientoModel crearTratamiento({
@@ -68,6 +69,7 @@ class TratamientoController {
     int diasDuracion = 0,
     String? horaRecordatorio,
     DateTime? fechaProximoRecordatorio,
+    bool notificar = true,
   }) {
     final esEventoUnico = categoria != 'diario';
 
@@ -89,6 +91,7 @@ class TratamientoController {
             (categoria == 'unico' || categoria == 'higiene')
             ? fechaProximoRecordatorio
             : null,
+        notificar: notificar,
       );
     }
 
@@ -105,6 +108,7 @@ class TratamientoController {
       horaRecordatorio: horaRecordatorio,
       registroDosis: const [],
       activo: true,
+      notificar: notificar,
     );
   }
 
@@ -120,6 +124,7 @@ class TratamientoController {
   /// @param diasDuracion nueva duración en días.
   /// @param fechaInicio nueva fecha de inicio.
   /// @param horaRecordatorio nueva hora del recordatorio.
+  /// @param notificar si el diario avisa. `null` conserva el valor anterior.
   /// @return una nueva instancia de [TratamientoModel] con los campos actualizados.
   TratamientoModel editarTratamiento(
     TratamientoModel actual, {
@@ -131,6 +136,7 @@ class TratamientoController {
     required int diasDuracion,
     required DateTime fechaInicio,
     required String horaRecordatorio,
+    bool? notificar,
   }) {
     return actual.copyWith(
       medicacion: medicacion,
@@ -142,6 +148,7 @@ class TratamientoController {
       fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,
       registroDosis: actual.categoria == 'diario' ? null : [formatearFechaISO(fechaInicio)],
+      notificar: notificar,
     );
   }
 

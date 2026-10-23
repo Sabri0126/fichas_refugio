@@ -60,6 +60,10 @@ class TratamientoModel {
   /// tratamientos de categoría `'unico'`.
   final DateTime? fechaProximoRecordatorio;
 
+  /// Si el diario manda aviso a los celulares de administradores.
+  /// `false` lo calla en todos. Si el campo no viene de Firestore, sigue avisando.
+  final bool notificar;
+
   /// Crea una instancia inmutable de [TratamientoModel].
   TratamientoModel({
     required this.id,
@@ -75,6 +79,7 @@ class TratamientoModel {
     this.registroDosis = const [],
     this.activo = true,
     this.fechaProximoRecordatorio,
+    this.notificar = true,
   });
 
   /// Construye un [TratamientoModel] a partir del mapa `data` obtenido de
@@ -97,6 +102,7 @@ class TratamientoModel {
       fechaProximoRecordatorio: _fechaDesdeValor(
         data['fecha_proximo_recordatorio'],
       ),
+      notificar: data['notificar'] != false,
     );
   }
 
@@ -121,6 +127,7 @@ class TratamientoModel {
       'fecha_proximo_recordatorio': fechaProximoRecordatorio != null
           ? Timestamp.fromDate(fechaProximoRecordatorio!)
           : null,
+      'notificar': notificar,
     };
   }
 
@@ -139,6 +146,7 @@ class TratamientoModel {
     List<String>? registroDosis,
     bool? activo,
     DateTime? fechaProximoRecordatorio,
+    bool? notificar,
   }) {
     return TratamientoModel(
       id: id ?? this.id,
@@ -154,6 +162,7 @@ class TratamientoModel {
       registroDosis: registroDosis ?? this.registroDosis,
       activo: activo ?? this.activo,
       fechaProximoRecordatorio: fechaProximoRecordatorio ?? this.fechaProximoRecordatorio,
+      notificar: notificar ?? this.notificar,
     );
   }
 
