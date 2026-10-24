@@ -880,8 +880,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           Text(
                             _capitalizarPrimera(t.medicacion),
                             style: textTheme.titleMedium,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 6),
                           Wrap(
@@ -985,47 +983,68 @@ class _FormularioPerroState extends State<FormularioPerro> {
           side: BorderSide(color: context.paleta.borde),
         ),
         clipBehavior: Clip.antiAlias,
-        child: ListTile(
+        child: InkWell(
           onTap: () => _mostrarDialogoEditarTratamiento(i),
-          contentPadding: const EdgeInsets.only(left: 12, right: 4),
-          leading: CircleAvatar(
-            radius: 20,
-            backgroundColor: CategoryColors.tinte(t.categoria),
-            child: Icon(_iconoCategoria(t.categoria), size: 20, color: color),
-          ),
-          title: Text(
-            _capitalizarPrimera(t.medicacion),
-            style: textTheme.titleMedium?.copyWith(fontSize: 15),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          isThreeLine: true,
-          subtitle: Text(
-            '${_etiquetaCategoria(t.categoria)} · $fechaTexto'
-            '${t.detalleVisible.isNotEmpty ? '\n${t.detalleVisible}' : ''}',
-            style: textTheme.bodyMedium?.copyWith(
-              color: context.paleta.textoSuave,
-              fontSize: 13,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: CategoryColors.tinte(t.categoria),
+                    child: Icon(_iconoCategoria(t.categoria), size: 20, color: color),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _capitalizarPrimera(t.medicacion),
+                          style: textTheme.titleMedium?.copyWith(fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_etiquetaCategoria(t.categoria)} · $fechaTexto',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: context.paleta.textoSuave,
+                            fontSize: 13,
+                          ),
+                        ),
+                        if (t.detalleVisible.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            t.detalleVisible,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: context.paleta.textoSuave,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  tooltip: 'Editar',
+                  color: context.paleta.textoSuave,
+                  onPressed: () => _mostrarDialogoEditarTratamiento(i),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  tooltip: 'Eliminar',
+                  color: AppColors.error,
+                  onPressed: () => _mostrarDialogoEliminarTratamiento(i),
+                ),
+              ],
             ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                tooltip: 'Editar',
-                color: context.paleta.textoSuave,
-                onPressed: () => _mostrarDialogoEditarTratamiento(i),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                tooltip: 'Eliminar',
-                color: AppColors.error,
-                onPressed: () => _mostrarDialogoEliminarTratamiento(i),
-              ),
-            ],
           ),
         ),
       ),

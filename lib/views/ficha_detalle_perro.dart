@@ -974,8 +974,6 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                               child: Text(
                                 _capitalizar(t.medicacion),
                                 textScaler: _escala,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1346,11 +1344,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             ),
           ],
         ),
+        const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton(
+          child: OutlinedButton.icon(
             onPressed: cerrando ? null : () => _cerrarSeguimiento(seguimiento),
-            child: const Text('Cerrar seguimiento'),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Cerrar seguimiento'),
           ),
         ),
       ],
@@ -2524,10 +2524,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   DateTime _focusedDay = DateTime.now();
   late final Future<void> _localeListo;
   _VistaHistorial _vista = _VistaHistorial.lista;
-  String? _filtroCategoria;
   final TextEditingController _busqueda = TextEditingController();
-
-  static const _ordenCategorias = ['diario', 'unico', 'vacuna', 'higiene', 'evento', 'veterinaria'];
 
   @override
   void initState() {
@@ -2564,6 +2561,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
           border: Border.all(color: context.paleta.borde),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 40,
@@ -2579,8 +2577,6 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                   Text(
                     evento['detalle']?.toString() ?? '${evento['medicacion']} - ${evento['indicaciones']}',
                     style: textTheme.titleMedium,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -2765,10 +2761,6 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
           );
         }
         final filtradas = _entradasFiltradas();
-        final categorias = [
-          for (final categoria in _ordenCategorias)
-            if (widget.historial.any((entrada) => entrada.categoria == categoria)) categoria,
-        ];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2780,31 +2772,6 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                 prefixIcon: Icon(Icons.search),
               ),
             ),
-            if (categorias.length > 1) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Todas'),
-                    selected: _filtroCategoria == null,
-                    onSelected: (seleccionado) {
-                      if (!seleccionado) return;
-                      setState(() => _filtroCategoria = null);
-                    },
-                  ),
-                  for (final categoria in categorias)
-                    ChoiceChip(
-                      label: Text(CategoryColors.etiqueta(categoria)),
-                      selected: _filtroCategoria == categoria,
-                      onSelected: (seleccionado) {
-                        setState(() => _filtroCategoria = seleccionado ? categoria : null);
-                      },
-                    ),
-                ],
-              ),
-            ],
             const SizedBox(height: 16),
             if (filtradas.isEmpty)
               Padding(
@@ -2832,11 +2799,10 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     final consulta = _busqueda.text.trim().toLowerCase();
     return [
       for (final entrada in widget.historial)
-        if (_filtroCategoria == null || entrada.categoria == _filtroCategoria)
-          if (consulta.isEmpty ||
-              entrada.titulo.toLowerCase().contains(consulta) ||
-              entrada.indicaciones.toLowerCase().contains(consulta))
-            entrada,
+        if (consulta.isEmpty ||
+            entrada.titulo.toLowerCase().contains(consulta) ||
+            entrada.indicaciones.toLowerCase().contains(consulta))
+          entrada,
     ];
   }
 
@@ -2925,7 +2891,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(entrada.titulo, style: textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(entrada.titulo, style: textTheme.titleMedium),
                       const SizedBox(height: 2),
                       Text(
                         enCurso ? '${_resumenHistorial(entrada)} · En curso' : _resumenHistorial(entrada),
@@ -2936,8 +2902,6 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                         Text(
                           entrada.indicaciones,
                           style: textTheme.bodyMedium,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ],

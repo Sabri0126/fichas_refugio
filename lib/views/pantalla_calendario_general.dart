@@ -19,7 +19,7 @@ import '../theme/seguimiento_tipos.dart';
 import 'alta_calendario.dart';
 import 'ficha_detalle_perro.dart';
 
-enum _VistaCalendario { mes, dosSemanas, lista }
+enum _VistaCalendario { mes, lista }
 
 class PantallaCalendarioGeneral extends StatefulWidget {
   const PantallaCalendarioGeneral({super.key});
@@ -89,12 +89,6 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       _diaEnfocado = _hoy;
       if (_vista == _VistaCalendario.lista) _vista = _VistaCalendario.mes;
     });
-  }
-
-  void _cambiarFormato(CalendarFormat formato) {
-    final vista = formato == CalendarFormat.twoWeeks ? _VistaCalendario.dosSemanas : _VistaCalendario.mes;
-    if (_vista == vista) return;
-    setState(() => _vista = vista);
   }
 
   String _capitalizar(String texto) {
@@ -506,8 +500,6 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                   children: [
                     Text(
                       _capitalizar(entrada.titulo),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: textTheme.titleMedium,
                     ),
                     const SizedBox(height: 2),
@@ -519,8 +511,6 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                       const SizedBox(height: 2),
                       Text(
                         detalle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: textTheme.bodyMedium,
                       ),
                     ],
@@ -671,25 +661,14 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   }
 
   Widget _selectorFormato() {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: SegmentedButton<_VistaCalendario>(
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: _VistaCalendario.mes, label: Text('Mes')),
-            ButtonSegment(value: _VistaCalendario.lista, label: Text('Resumen')),
-            ButtonSegment(value: _VistaCalendario.dosSemanas, label: Text('2 semanas')),
-          ],
-          selected: {_vista},
-          onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
-        ),
-      ),
+    return SegmentedButton<_VistaCalendario>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: _VistaCalendario.mes, label: Text('Mes'), icon: Icon(Icons.calendar_month_outlined)),
+        ButtonSegment(value: _VistaCalendario.lista, label: Text('Resumen'), icon: Icon(Icons.view_list_outlined)),
+      ],
+      selected: {_vista},
+      onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
     );
   }
 
@@ -728,11 +707,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
       lastDay: _ultimoDia,
       focusedDay: _diaEnfocado,
       currentDay: _hoy,
-      calendarFormat: _vista == _VistaCalendario.dosSemanas ? CalendarFormat.twoWeeks : CalendarFormat.month,
+      calendarFormat: CalendarFormat.month,
       startingDayOfWeek: StartingDayOfWeek.monday,
       availableCalendarFormats: const {
         CalendarFormat.month: 'Mes',
-        CalendarFormat.twoWeeks: '2 semanas',
       },
       availableGestures: AvailableGestures.horizontalSwipe,
       selectedDayPredicate: (dia) => isSameDay(dia, _diaSeleccionado),
@@ -820,7 +798,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         });
       },
       onPageChanged: (enfocado) => _diaEnfocado = enfocado,
-      onFormatChanged: _cambiarFormato,
+      onFormatChanged: (_) {},
         ),
       ),
     );
@@ -1115,6 +1093,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                   final angosta = constraints.maxWidth < 400;
                   final texto = angosta && item.hora != null ? '${item.hora} · $subtitulo' : subtitulo;
                   return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _avatar(item.perro),
                       const SizedBox(width: 12),
@@ -1124,14 +1103,10 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
                           children: [
                             Text(
                               _capitalizar(item.titulo),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                               style: textTheme.titleMedium,
                             ),
                             Text(
                               texto,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                               style: textTheme.bodyMedium?.copyWith(
                                 color: context.paleta.textoSuave,
                               ),
