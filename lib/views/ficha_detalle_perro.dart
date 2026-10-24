@@ -2523,7 +2523,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   DateTime _selectedDay = DateTime.now();
   DateTime _focusedDay = DateTime.now();
   late final Future<void> _localeListo;
-  _VistaHistorial _vista = _VistaHistorial.calendario;
+  _VistaHistorial _vista = _VistaHistorial.lista;
   String? _filtroCategoria;
   final TextEditingController _busqueda = TextEditingController();
 
@@ -2613,14 +2613,14 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
             showSelectedIcon: false,
             segments: const [
               ButtonSegment(
+                value: _VistaHistorial.lista,
+                label: Text('Resumen'),
+                icon: Icon(Icons.view_list_outlined),
+              ),
+              ButtonSegment(
                 value: _VistaHistorial.calendario,
                 label: Text('Calendario'),
                 icon: Icon(Icons.calendar_month_outlined),
-              ),
-              ButtonSegment(
-                value: _VistaHistorial.lista,
-                label: Text('Lista'),
-                icon: Icon(Icons.view_list_outlined),
               ),
             ],
             selected: {_vista},

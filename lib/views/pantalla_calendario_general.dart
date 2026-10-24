@@ -683,8 +683,8 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
           showSelectedIcon: false,
           segments: const [
             ButtonSegment(value: _VistaCalendario.mes, label: Text('Mes')),
+            ButtonSegment(value: _VistaCalendario.lista, label: Text('Resumen')),
             ButtonSegment(value: _VistaCalendario.dosSemanas, label: Text('2 semanas')),
-            ButtonSegment(value: _VistaCalendario.lista, label: Text('Lista')),
           ],
           selected: {_vista},
           onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
