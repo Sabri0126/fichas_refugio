@@ -10,6 +10,7 @@ import {
   type PerroEntrada,
   ZONA,
   aZona,
+  agruparIngresos,
   calcularAlarmas,
   calcularPausas,
   listaSilenciados,
@@ -40,7 +41,7 @@ export const enviarNotificaciones = onSchedule(
 
     const perrosSnap = await db.collection('perros').where('estado', '==', 'activo').get();
     const perros = perrosSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as PerroEntrada);
-    const alarmas = perros.flatMap((perro) => calcularAlarmas(perro, desde, ahora));
+    const alarmas = agruparIngresos(perros.flatMap((perro) => calcularAlarmas(perro, desde, ahora)));
 
     const nuevas: Alarma[] = [];
     for (const alarma of alarmas) {

@@ -16,6 +16,8 @@ export interface Alarma {
   dia?: string;
   /** `false` calla el push en todos los celulares. Si falta, se avisa. */
   notificar?: boolean;
+  /** Fecha de ingreso `aaaa-MM-dd`. Sirve para unir aniversarios de la misma camada. */
+  cohorte?: string;
 }
 
 export interface DispositivoAviso {
@@ -410,9 +412,60 @@ function alarmaIngreso(
       categoria: 'ingreso',
       idPerro,
       fecha: ocurrencia,
+      cohorte: ingreso.toFormat('yyyy-MM-dd'),
     };
   }
   return null;
+}
+
+/// Une los aniversarios de perros que entraron el mismo día en un solo aviso.
+/// Uno solo conserva su clave y su ficha. Una camada queda sin perro asociado.
+export function agruparIngresos(alarmas: Alarma[]): Alarma[] {
+  const otras: Alarma[] = [];
+  const grupos = new Map<string, Alarma[]>();
+  for (const alarma of alarmas) {
+    if (alarma.tipo !== 'ingreso' || !alarma.cohorte) {
+      otras.push(alarma);
+      continue;
+    }
+    const lista = grupos.get(alarma.cohorte) ?? [];
+    lista.push(alarma);
+    grupos.set(alarma.cohorte, lista);
+  }
+  const unidas = [...grupos.values()].map((grupo) => (grupo.length === 1 ? grupo[0] : unirIngresos(grupo)));
+  return [...otras, ...unidas].sort(
+    (a, b) => a.fecha.toMillis() - b.fecha.toMillis() || a.clave.localeCompare(b.clave),
+  );
+}
+
+function unirIngresos(grupo: Alarma[]): Alarma {
+  const base = grupo[0];
+  const anio = base.fecha.setZone(ZONA).year;
+  const anios = anio - Number(base.cohorte!.slice(0, 4));
+  const nombres = grupo.map(nombreDeIngreso).sort((a, b) => a.localeCompare(b, 'es'));
+  const verbo = anios === 1 ? 'cumple' : 'cumplen';
+  const unidad = anios === 1 ? 'año' : 'años';
+  return {
+    clave: `ingreso_${base.cohorte}_${anio}`,
+    tipo: 'ingreso',
+    titulo: 'Aniversario de ingreso',
+    cuerpo: `Hoy se ${verbo} ${anios} ${unidad} desde que ${listaNombres(nombres)} ingresaron al refugio.`,
+    categoria: 'ingreso',
+    idPerro: '',
+    fecha: base.fecha,
+    cohorte: base.cohorte,
+  };
+}
+
+function nombreDeIngreso(alarma: Alarma): string {
+  const coincidencia = /desde que (.+) ingresó al refugio\.$/.exec(alarma.cuerpo);
+  return coincidencia?.[1] ?? 'tu perrito';
+}
+
+function listaNombres(nombres: string[]): string {
+  if (nombres.length <= 1) return nombres[0] ?? 'tu perrito';
+  if (nombres.length === 2) return `${nombres[0]} y ${nombres[1]}`;
+  return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
 }
 
 /// El 29 de febrero, en un año no bisiesto, cae el 28.

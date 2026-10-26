@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ZONA,
   aZona,
+  agruparIngresos,
   calcularAlarmas,
   calcularPausas,
   tokensParaAlarma,
@@ -458,6 +459,80 @@ describe('calcularAlarmas', () => {
   it('sin el campo notificar la alarma sigue avisando', () => {
     const alarmas = calcularAlarmas(perro(), ba('2026-01-10T08:00:00'), ba('2026-01-10T10:00:00'));
     expect(alarmas[0].notificar).toBe(true);
+  });
+});
+
+describe('agruparIngresos', () => {
+  const desde = ba('2026-10-18T08:55:00');
+  const hasta = ba('2026-10-18T09:05:00');
+
+  function ingreso(id: string, nombre: string, fecha: string): PerroEntrada {
+    return {
+      id,
+      estado: 'activo',
+      nombre,
+      fecha_ingreso: ba(fecha),
+      tratamientos: [],
+    };
+  }
+
+  it('tres perros de la misma fecha comparten un aviso', () => {
+    const camada = [
+      ingreso('portos', 'Portos', '2020-10-18T15:00:00'),
+      ingreso('aramis', 'Aramis', '2020-10-18T11:00:00'),
+      ingreso('dartanan', 'Dartañan', '2020-10-18T18:00:00'),
+    ];
+    const alarmas = agruparIngresos(camada.flatMap((perro) => calcularAlarmas(perro, desde, hasta)));
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].clave).toBe('ingreso_2020-10-18_2026');
+    expect(alarmas[0].idPerro).toBe('');
+    expect(alarmas[0].titulo).toBe('Aniversario de ingreso');
+    expect(alarmas[0].cuerpo).toBe(
+      'Hoy se cumplen 6 años desde que Aramis, Dartañan y Portos ingresaron al refugio.',
+    );
+  });
+
+  it('un año de varios perros usa el singular', () => {
+    const alarmas = agruparIngresos(
+      [ingreso('portos', 'Portos', '2025-10-18T15:00:00'), ingreso('aramis', 'Aramis', '2025-10-18T15:00:00')].flatMap(
+        (perro) => calcularAlarmas(perro, desde, hasta),
+      ),
+    );
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumple 1 año desde que Aramis y Portos ingresaron al refugio.');
+  });
+
+  it('la misma fecha de calendario con otro año no se mezcla', () => {
+    const alarmas = agruparIngresos(
+      [ingreso('portos', 'Portos', '2020-10-18T15:00:00'), ingreso('boby', 'Boby', '2024-10-18T15:00:00')].flatMap(
+        (perro) => calcularAlarmas(perro, desde, hasta),
+      ),
+    );
+    expect(alarmas).toHaveLength(2);
+    expect(alarmas.map((alarma) => alarma.clave).sort()).toEqual(['ingreso_boby_2026', 'ingreso_portos_2026']);
+    expect(alarmas.find((alarma) => alarma.idPerro === 'boby')?.cuerpo).toBe(
+      'Hoy se cumplen 2 años desde que Boby ingresó al refugio.',
+    );
+  });
+
+  it('un perro solo conserva su aviso', () => {
+    const sueltas = calcularAlarmas(ingreso('boby', 'Boby', '2024-10-18T15:00:00'), desde, hasta);
+    const alarmas = agruparIngresos(sueltas);
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].clave).toBe('ingreso_boby_2026');
+    expect(alarmas[0].idPerro).toBe('boby');
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumplen 2 años desde que Boby ingresó al refugio.');
+  });
+
+  it('un 29 de febrero agrupa a la camada el 28', () => {
+    const alarmas = agruparIngresos(
+      [ingreso('portos', 'Portos', '2024-02-29T12:00:00'), ingreso('aramis', 'Aramis', '2024-02-29T12:00:00')].flatMap(
+        (perro) => calcularAlarmas(perro, ba('2025-02-28T08:55:00'), ba('2025-02-28T09:05:00')),
+      ),
+    );
+    expect(alarmas).toHaveLength(1);
+    expect(alarmas[0].clave).toBe('ingreso_2024-02-29_2025');
+    expect(alarmas[0].cuerpo).toBe('Hoy se cumple 1 año desde que Aramis y Portos ingresaron al refugio.');
   });
 });
 
