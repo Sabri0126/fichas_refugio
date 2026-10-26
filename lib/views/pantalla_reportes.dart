@@ -5,6 +5,8 @@ import '../controllers/reportes_controller.dart';
 import '../models/perro_model.dart';
 import '../theme/app_colors.dart';
 import '../utils/fundacion_refugio.dart';
+import '../widgets/grafico_poblacion.dart';
+import 'ficha_detalle_perro.dart';
 
 const _nombresMes = [
   'Enero',
@@ -83,6 +85,7 @@ class _PantallaReportesState extends State<PantallaReportes> {
                 hijo: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _ayuda(context, 'Perros a cargo ahora, en el predio o en una casa.'),
                     _numero(context, '${reporte.poblacion.activos}'),
                     const SizedBox(height: 8),
                     Text(
@@ -91,6 +94,13 @@ class _PantallaReportesState extends State<PantallaReportes> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 12),
+              _tarjeta(
+                context,
+                titulo: 'Población por año',
+                icono: Icons.show_chart,
+                hijo: _poblacion(context, reporte.serie),
               ),
               const SizedBox(height: 12),
               _tarjeta(
@@ -105,7 +115,9 @@ class _PantallaReportesState extends State<PantallaReportes> {
                 titulo: 'A lo largo del tiempo',
                 icono: Icons.history,
                 hijo: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _ayuda(context, 'Desde ${fundacionRefugio.year}. Una adopción cuenta aunque el perro haya vuelto.'),
                     _fila(context, Icons.volunteer_activism, 'Adoptados', reporte.balance.adoptados),
                     _fila(context, Icons.home, 'Reencontrados', reporte.balance.reencontrados),
                     _fila(context, Icons.local_florist, 'En memoria', reporte.balance.difuntos),
@@ -120,10 +132,12 @@ class _PantallaReportesState extends State<PantallaReportes> {
                 hijo: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _ayuda(context, 'Movimientos con fecha en el mes elegido.'),
                     _selectorMes(context),
                     const SizedBox(height: 16),
                     _fila(context, Icons.login, 'Ingresos', reporte.mes.ingresos),
                     _fila(context, Icons.favorite, 'Adopciones', reporte.mes.adopciones),
+                    _fila(context, Icons.home, 'Reencuentros', reporte.mes.reencuentros),
                     _fila(context, Icons.local_florist, 'Fallecimientos', reporte.mes.fallecimientos),
                   ],
                 ),
@@ -135,12 +149,95 @@ class _PantallaReportesState extends State<PantallaReportes> {
     );
   }
 
-  Widget _estadia(BuildContext context, LargaEstadia estadia) {
-    final promedio = estadia.mesesPromedio;
+  void _verAnio(PuntoPoblacion punto) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        final alto = MediaQuery.sizeOf(ctx).height * 0.72;
+        final grupos = <(String, List<PerroAnio>)>[
+          ('Entraron', punto.quienesEntraron),
+          ('Salieron', punto.quienesSalieron),
+          ('Quedaron', punto.quienesQuedaron),
+        ].where((grupo) => grupo.$2.isNotEmpty).toList();
+        return SafeArea(
+          child: SizedBox(
+            height: alto,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Text('${punto.anio}', style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                if (grupos.isEmpty)
+                  Text(
+                    'No hay perros para mostrar.',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: ctx.paleta.textoSuave),
+                  )
+                else
+                  for (final grupo in grupos) ...[
+                    Text(grupo.$1, style: Theme.of(ctx).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    for (final perro in grupo.$2)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(perro.nombre),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FichaDetallePerro(idDocumento: perro.id),
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 12),
+                  ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _poblacion(BuildContext context, SeriePoblacion serie) {
+    final sinFecha = serie.sinFecha;
+    final aviso = sinFecha == 1
+        ? '1 perro no entra porque le falta una fecha.'
+        : '$sinFecha perros no entran porque les falta una fecha.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _numero(context, promedio == null ? 'Sin fecha de ingreso' : ReportesController.textoMeses(promedio)),
+        _ayuda(context, 'Perros a cargo al cierre de cada año.'),
+        if (serie.puntos.isEmpty)
+          Text(
+            'No hay ingresos con fecha para armar la curva.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.texto),
+          )
+        else
+          GraficoPoblacion(puntos: serie.puntos, alVer: _verAnio),
+        if (sinFecha > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            aviso,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _estadia(BuildContext context, LargaEstadia estadia) {
+    final promedio = estadia.mesesPromedio;
+    final lectura = promedio == null ? 'Sin fecha de ingreso' : '${ReportesController.textoMeses(promedio)} en promedio';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ayuda(context, 'Promedio de los perros activos que tienen fecha de ingreso.'),
+        _numero(context, lectura),
         if (estadia.conFecha > 0) ...[
           const SizedBox(height: 8),
           Text(
@@ -195,6 +292,16 @@ class _PantallaReportesState extends State<PantallaReportes> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _ayuda(BuildContext context, String texto) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+      ),
     );
   }
 

@@ -45,27 +45,67 @@ class LargaEstadia {
 class RendimientoMes {
   final int ingresos;
   final int adopciones;
+  final int reencuentros;
   final int fallecimientos;
 
   const RendimientoMes({
     required this.ingresos,
     required this.adopciones,
+    required this.reencuentros,
     required this.fallecimientos,
   });
 }
 
-/// Los cuatro bloques de la pantalla de reportes.
+/// Un perro dentro de un año de la curva. El nombre ya está listo para mostrar.
+class PerroAnio {
+  final String id;
+  final String nombre;
+
+  const PerroAnio({required this.id, required this.nombre});
+}
+
+/// Población al cierre de un año, con los movimientos de ese año.
+/// Los números son el largo de cada lista.
+class PuntoPoblacion {
+  final int anio;
+  final List<PerroAnio> quienesEntraron;
+  final List<PerroAnio> quienesSalieron;
+  final List<PerroAnio> quienesQuedaron;
+
+  const PuntoPoblacion({
+    required this.anio,
+    required this.quienesEntraron,
+    required this.quienesSalieron,
+    required this.quienesQuedaron,
+  });
+
+  int get entraron => quienesEntraron.length;
+  int get salieron => quienesSalieron.length;
+  int get quedaron => quienesQuedaron.length;
+}
+
+/// Curva anual. [sinFecha] son perros que no se pueden ubicar en el tiempo.
+class SeriePoblacion {
+  final List<PuntoPoblacion> puntos;
+  final int sinFecha;
+
+  const SeriePoblacion({required this.puntos, required this.sinFecha});
+}
+
+/// Los bloques de la pantalla de reportes.
 class ReporteRefugio {
   final PoblacionActual poblacion;
   final BalanceHistorico balance;
   final LargaEstadia estadia;
   final RendimientoMes mes;
+  final SeriePoblacion serie;
 
   const ReporteRefugio({
     required this.poblacion,
     required this.balance,
     required this.estadia,
     required this.mes,
+    required this.serie,
   });
 }
 
@@ -117,12 +157,118 @@ abstract final class ReportesController {
       ),
       mes: RendimientoMes(
         ingresos: perros.where((perro) => _enMes(perro.fechaIngreso, mes)).length,
-        adopciones: _adopcionesDelMes(perros, mes),
+        adopciones: _egresosDelMes(perros, mes, 'adopcion'),
+        reencuentros: _egresosDelMes(perros, mes, 'familia'),
         fallecimientos: perros.where((perro) {
           return perro.estado == 'inactivo' && _enMes(perro.fechaFallecimiento, mes);
         }).length,
       ),
+      serie: _seriePoblacion(perros, dia),
     );
+  }
+
+  /// Un punto por año, del primer ingreso fechado al año de [hoy].
+  /// El cierre del año en curso es [hoy], no el 31 de diciembre.
+  static SeriePoblacion _seriePoblacion(List<PerroModel> perros, DateTime hoy) {
+    final fechados = <PerroModel>[];
+    var sinFecha = 0;
+    for (final perro in perros) {
+      if (_poblacionFechada(perro)) {
+        fechados.add(perro);
+      } else {
+        sinFecha++;
+      }
+    }
+    if (fechados.isEmpty) return SeriePoblacion(puntos: const [], sinFecha: sinFecha);
+
+    var primero = fechados.first.fechaIngreso!.year;
+    for (final perro in fechados) {
+      final anio = perro.fechaIngreso!.year;
+      if (anio < primero) primero = anio;
+    }
+    if (primero > hoy.year) return SeriePoblacion(puntos: const [], sinFecha: sinFecha);
+
+    final puntos = <PuntoPoblacion>[];
+    for (var anio = primero; anio <= hoy.year; anio++) {
+      final corte = anio == hoy.year ? hoy : DateTime(anio, 12, 31);
+      final entraron = <PerroAnio>[];
+      final salieron = <PerroAnio>[];
+      final quedaron = <PerroAnio>[];
+      for (final perro in fechados) {
+        final ficha = _perroAnio(perro);
+        final ingreso = perro.fechaIngreso!;
+        if (ingreso.year == anio && !_solo(ingreso).isAfter(corte)) entraron.add(ficha);
+        if (_salioEnAnio(perro, anio, corte)) salieron.add(ficha);
+        if (_aCargo(perro, corte)) quedaron.add(ficha);
+      }
+      _ordenar(entraron);
+      _ordenar(salieron);
+      _ordenar(quedaron);
+      puntos.add(
+        PuntoPoblacion(
+          anio: anio,
+          quienesEntraron: entraron,
+          quienesSalieron: salieron,
+          quienesQuedaron: quedaron,
+        ),
+      );
+    }
+    return SeriePoblacion(puntos: puntos, sinFecha: sinFecha);
+  }
+
+  /// Se puede saber si estaba a cargo: ingreso, muerte y cada egreso tienen fecha.
+  static bool _poblacionFechada(PerroModel perro) {
+    if (perro.fechaIngreso == null) return false;
+    if (perro.estado == 'inactivo' && perro.fechaFallecimiento == null) return false;
+    if (perro.estado == 'egresado' && perro.fechaEgreso == null) return false;
+    for (final egreso in perro.historialEgresos) {
+      if (egreso.fechaEgreso == null || egreso.fechaRegreso == null) return false;
+    }
+    return true;
+  }
+
+  static bool _aCargo(PerroModel perro, DateTime dia) {
+    final ingreso = _solo(perro.fechaIngreso!);
+    if (ingreso.isAfter(dia)) return false;
+    final muerte = perro.fechaFallecimiento;
+    if (muerte != null && !_solo(muerte).isAfter(dia)) return false;
+    for (final egreso in perro.historialEgresos) {
+      final salida = _solo(egreso.fechaEgreso!);
+      final regreso = _solo(egreso.fechaRegreso!);
+      if (!salida.isAfter(dia) && regreso.isAfter(dia)) return false;
+    }
+    if (perro.estado == 'egresado') {
+      final salida = _solo(perro.fechaEgreso!);
+      if (!salida.isAfter(dia)) return false;
+    }
+    return true;
+  }
+
+  static bool _salioEnAnio(PerroModel perro, int anio, DateTime corte) {
+    bool enElAnio(DateTime? fecha) {
+      if (fecha == null || fecha.year != anio) return false;
+      return !_solo(fecha).isAfter(corte);
+    }
+
+    if (enElAnio(perro.fechaFallecimiento)) return true;
+    if (perro.estado == 'egresado' && enElAnio(perro.fechaEgreso)) return true;
+    for (final egreso in perro.historialEgresos) {
+      if (enElAnio(egreso.fechaEgreso)) return true;
+    }
+    return false;
+  }
+
+  static PerroAnio _perroAnio(PerroModel perro) {
+    final nombre = perro.nombre.trim();
+    return PerroAnio(id: perro.id, nombre: nombre.isEmpty ? 'Sin nombre' : nombre);
+  }
+
+  static void _ordenar(List<PerroAnio> lista) {
+    lista.sort((a, b) {
+      final porNombre = a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+      if (porNombre != 0) return porNombre;
+      return a.id.compareTo(b.id);
+    });
   }
 
   /// 50 meses se lee «4 años y 2 meses».
@@ -147,14 +293,14 @@ abstract final class ReportesController {
     return total;
   }
 
-  static int _adopcionesDelMes(List<PerroModel> perros, DateTime mes) {
+  static int _egresosDelMes(List<PerroModel> perros, DateTime mes, String motivo) {
     var total = 0;
     for (final perro in perros) {
-      if (perro.estado == 'egresado' && perro.motivoEgreso == 'adopcion' && _enMes(perro.fechaEgreso, mes)) {
+      if (perro.estado == 'egresado' && perro.motivoEgreso == motivo && _enMes(perro.fechaEgreso, mes)) {
         total++;
       }
       for (final egreso in perro.historialEgresos) {
-        if (egreso.motivo == 'adopcion' && _enMes(egreso.fechaEgreso, mes)) total++;
+        if (egreso.motivo == motivo && _enMes(egreso.fechaEgreso, mes)) total++;
       }
     }
     return total;
