@@ -227,17 +227,18 @@ class TratamientoController {
   ///
   /// Lee el documento, cambia `registroDosis` en Dart y reescribe el array
   /// `tratamientos` completo. No usa rutas indexadas ni `FieldValue`.
-  Future<void> toggleDosis(
+  /// Devuelve `false` sin escribir si el día queda fuera de [periodoCorreccion].
+  Future<bool> toggleDosis(
     String perroId,
     TratamientoModel tratamiento,
     DateTime fechaDosis,
   ) async {
     final dia = normalizarDia(fechaDosis);
-    final inicio = tratamiento.fechaInicio;
-    if (inicio != null && dia.isBefore(normalizarDia(inicio))) return;
+    if (!_diaDentroDeCorreccion(tratamiento, dia)) return false;
 
     final fechaIso = formatearFechaISO(dia);
     final docRef = _perrosRef.doc(perroId);
+    var escrito = false;
 
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final snapshot = await tx.get(docRef);
@@ -247,6 +248,7 @@ class TratamientoController {
       final tratamientos = _tratamientosDesdeDocumento(data['tratamientos']);
       final indice = tratamientos.indexWhere((t) => t.id == tratamiento.id);
       if (indice == -1) return;
+      if (!_diaDentroDeCorreccion(tratamientos[indice], dia)) return;
 
       final registro = List<String>.from(tratamientos[indice].registroDosis);
       if (registro.contains(fechaIso)) {
@@ -259,7 +261,17 @@ class TratamientoController {
       tx.update(docRef, {
         'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
       });
+      escrito = true;
     });
+    return escrito;
+  }
+
+  bool _diaDentroDeCorreccion(TratamientoModel tratamiento, DateTime dia) {
+    final inicio = tratamiento.fechaInicio;
+    if (inicio != null && dia.isBefore(normalizarDia(inicio))) return false;
+    final periodo = periodoCorreccion(tratamiento);
+    if (periodo != null && dia.isAfter(periodo.fin)) return false;
+    return true;
   }
 
   /// Copia local con la dosis del día marcada o desmarcada.
@@ -465,6 +477,71 @@ class TratamientoController {
     }
 
     return marcas.reversed.toList();
+  }
+
+  /// Días en los que se puede marcar una dosis: desde el inicio hasta hoy,
+  /// o hasta el último día de medicación si ese tramo ya terminó.
+  /// Un diario indefinido llega hasta hoy. Antes del inicio no hay período.
+  static ({DateTime inicio, DateTime fin})? periodoMarcable(
+    TratamientoModel tratamiento, {
+    DateTime? hoy,
+  }) {
+    if (tratamiento.categoria != 'diario' || tratamiento.fechaInicio == null) return null;
+    final inicio = DateTime(
+      tratamiento.fechaInicio!.year,
+      tratamiento.fechaInicio!.month,
+      tratamiento.fechaInicio!.day,
+    );
+    final referencia = hoy ?? DateTime.now();
+    final hoyFecha = DateTime(referencia.year, referencia.month, referencia.day);
+    if (hoyFecha.isBefore(inicio)) return null;
+    var fin = hoyFecha;
+    if (tratamiento.diasDuracion > 0) {
+      final ultimo = DateTime(inicio.year, inicio.month, inicio.day + tratamiento.diasDuracion - 1);
+      if (ultimo.isBefore(fin)) fin = ultimo;
+    }
+    return (inicio: inicio, fin: fin);
+  }
+
+  /// Período que se puede corregir sin alargar un diario ya detenido.
+  /// Uno en curso usa [periodoMarcable]. Uno con la duración cumplida llega
+  /// hasta su último día de medicación. Uno pausado antes de ese día, o
+  /// indefinido ya pausado, llega solo hasta la última dosis registrada.
+  static ({DateTime inicio, DateTime fin})? periodoCorreccion(
+    TratamientoModel tratamiento, {
+    DateTime? hoy,
+  }) {
+    final periodo = periodoMarcable(tratamiento, hoy: hoy);
+    if (periodo == null || tratamiento.activo) return periodo;
+    final fase = calcularEstadoDuracion(tratamiento, hoy: hoy).fase;
+    if (fase == FaseTratamiento.finalizado) return periodo;
+    final ultima = _ultimaDosis(tratamiento, periodo.inicio);
+    if (ultima == null || ultima.isBefore(periodo.inicio)) {
+      return (inicio: periodo.inicio, fin: periodo.inicio);
+    }
+    if (ultima.isAfter(periodo.fin)) return periodo;
+    return (inicio: periodo.inicio, fin: ultima);
+  }
+
+  static DateTime? _ultimaDosis(TratamientoModel tratamiento, DateTime inicio) {
+    DateTime? ultima;
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      final dia = DateTime(fecha.year, fecha.month, fecha.day);
+      if (dia.isBefore(inicio)) continue;
+      if (ultima == null || dia.isAfter(ultima)) ultima = dia;
+    }
+    return ultima;
+  }
+
+  /// Hay días del período que no entran en la tira de la última semana.
+  static bool hayDiasAnteriores(TratamientoModel tratamiento, {DateTime? hoy}) {
+    final periodo = periodoMarcable(tratamiento, hoy: hoy);
+    if (periodo == null) return false;
+    final marcas = marcasDosisRecientes(tratamiento, hoy: hoy);
+    if (marcas.isEmpty) return true;
+    return periodo.inicio.isBefore(marcas.first.dia);
   }
 
   static int _diasEntre(DateTime desde, DateTime hasta) {

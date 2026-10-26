@@ -69,6 +69,85 @@ void main() {
     expect(marcas[2].estado, EstadoMarcaDosis.pendiente);
   });
 
+  test('un diario corto se puede marcar hasta hoy', () {
+    final periodo = TratamientoController.periodoMarcable(
+      _diario(inicio: DateTime(2026, 10, 11), dias: 5),
+      hoy: hoy,
+    );
+    expect(periodo?.inicio, DateTime(2026, 10, 11));
+    expect(periodo?.fin, hoy);
+    expect(
+      TratamientoController.hayDiasAnteriores(
+        _diario(inicio: DateTime(2026, 10, 11), dias: 5),
+        hoy: hoy,
+      ),
+      isFalse,
+    );
+  });
+
+  test('un diario ya terminado se marca hasta el último día, no hasta hoy', () {
+    final periodo = TratamientoController.periodoMarcable(
+      _diario(inicio: DateTime(2026, 10, 1), dias: 10),
+      hoy: DateTime(2026, 10, 20),
+    );
+    expect(periodo?.inicio, DateTime(2026, 10, 1));
+    expect(periodo?.fin, DateTime(2026, 10, 10));
+    expect(
+      TratamientoController.hayDiasAnteriores(
+        _diario(inicio: DateTime(2026, 10, 1), dias: 10),
+        hoy: DateTime(2026, 10, 20),
+      ),
+      isTrue,
+    );
+  });
+
+  test('un diario pausado se corrige hasta la última dosis, no hasta hoy', () {
+    final hoyLargo = DateTime(2026, 10, 25);
+    final pausado = _diario(
+      inicio: DateTime(2026, 10, 1),
+      dias: 0,
+      activo: false,
+      doses: const ['2026-10-01', '2026-10-20'],
+    );
+    final correccion = TratamientoController.periodoCorreccion(pausado, hoy: hoyLargo);
+    expect(correccion?.inicio, DateTime(2026, 10, 1));
+    expect(correccion?.fin, DateTime(2026, 10, 20));
+
+    final pausadoConDias = _diario(
+      inicio: DateTime(2026, 10, 1),
+      dias: 40,
+      activo: false,
+      doses: const ['2026-10-20'],
+    );
+    expect(
+      TratamientoController.periodoCorreccion(pausadoConDias, hoy: hoyLargo)?.fin,
+      DateTime(2026, 10, 20),
+    );
+  });
+
+  test('un diario vencido se corrige hasta el último día de medicación', () {
+    final vencido = _diario(
+      inicio: DateTime(2026, 10, 1),
+      dias: 10,
+      activo: false,
+      doses: const ['2026-10-01', '2026-10-05'],
+    );
+    final correccion = TratamientoController.periodoCorreccion(
+      vencido,
+      hoy: DateTime(2026, 10, 25),
+    );
+    expect(correccion?.fin, DateTime(2026, 10, 10));
+  });
+
+  test('un diario indefinido se marca hasta hoy', () {
+    final periodo = TratamientoController.periodoMarcable(
+      _diario(inicio: DateTime(2026, 10, 1), dias: 0),
+      hoy: hoy,
+    );
+    expect(periodo?.inicio, DateTime(2026, 10, 1));
+    expect(periodo?.fin, hoy);
+  });
+
   testWidgets('filtros, estado, menú y encabezado no desbordan a 360 dp con escala 1.6', (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
     tester.view.physicalSize = const Size(360, 800);

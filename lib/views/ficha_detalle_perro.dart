@@ -153,8 +153,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   Future<bool> _toggleDosis(TratamientoModel tratamiento, DateTime fecha) async {
     try {
-      await _tratamientoController.toggleDosis(widget.idDocumento, tratamiento, fecha);
-      return true;
+      return await _tratamientoController.toggleDosis(widget.idDocumento, tratamiento, fecha);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -995,8 +994,33 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               padding: const EdgeInsets.only(left: 8),
               child: _buildHistorialDosis(t, esInvitado),
             ),
+            if (!esInvitado && TratamientoController.hayDiasAnteriores(t))
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => _abrirDosisAnteriores(t),
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text('Marcar un día anterior', textScaler: _escala),
+                ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _abrirDosisAnteriores(TratamientoModel tratamiento) async {
+    final periodo = TratamientoController.periodoMarcable(tratamiento);
+    if (periodo == null || !mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _HojaDosisPeriodo(
+        tratamiento: tratamiento,
+        inicio: periodo.inicio,
+        fin: periodo.fin,
+        alAlternar: (dia) => _toggleDosis(tratamiento, dia),
       ),
     );
   }
@@ -1179,12 +1203,12 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _botonHistorial(List<TratamientoModel> tratamientos) {
+  Widget _botonHistorial(List<TratamientoModel> tratamientos, bool esInvitado) {
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _mostrarHistorialCompleto(tratamientos),
+        onTap: () => _mostrarHistorialCompleto(tratamientos, esInvitado),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
@@ -1446,7 +1470,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  void _mostrarHistorialCompleto(List<TratamientoModel> tratamientos) {
+  void _mostrarHistorialCompleto(List<TratamientoModel> tratamientos, bool esInvitado) {
     final eventosCalendario = _tratamientoController.construirEventosCalendario(tratamientos);
     final historial = _tratamientoController.construirHistorialLista(tratamientos);
 
@@ -1463,6 +1487,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           child: CalendarioHistorialWidget(
             eventosCalendario: eventosCalendario,
             historial: historial,
+            esInvitado: esInvitado,
+            alAlternar: (tratamiento, dia) => _toggleDosis(tratamiento, dia),
           ),
         ),
       ),
@@ -1690,7 +1716,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       ?fichaMedica,
       ?peso,
       ?tratamientos,
-      if (perro.tratamientos.isNotEmpty) _botonHistorial(perro.tratamientos),
+      if (perro.tratamientos.isNotEmpty) _botonHistorial(perro.tratamientos, esInvitado),
       ?seguimiento,
       ?recordatorios,
       ?estudios,
@@ -2503,16 +2529,229 @@ class _BordePunteado extends CustomPainter {
   bool shouldRepaint(covariant _BordePunteado anterior) => anterior.color != color;
 }
 
+class _HojaDosisPeriodo extends StatefulWidget {
+  final TratamientoModel tratamiento;
+  final DateTime inicio;
+  final DateTime fin;
+  final Future<bool> Function(DateTime dia) alAlternar;
+
+  const _HojaDosisPeriodo({
+    required this.tratamiento,
+    required this.inicio,
+    required this.fin,
+    required this.alAlternar,
+  });
+
+  @override
+  State<_HojaDosisPeriodo> createState() => _HojaDosisPeriodoState();
+}
+
+class _HojaDosisPeriodoState extends State<_HojaDosisPeriodo> {
+  late final Future<void> _localeListo;
+  late DateTime _focused;
+  late final Set<String> _dadas;
+  final Set<String> _enCurso = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _localeListo = initializeDateFormatting('es_ES');
+    _focused = widget.fin;
+    _dadas = widget.tratamiento.registroDosis.toSet();
+  }
+
+  String _iso(DateTime dia) {
+    final fecha = DateTime(dia.year, dia.month, dia.day);
+    final mes = fecha.month.toString().padLeft(2, '0');
+    final numero = fecha.day.toString().padLeft(2, '0');
+    return '${fecha.year}-$mes-$numero';
+  }
+
+  /// Una pausa manual, que todavía no llegó a su último día, no se pinta como olvido.
+  bool get _enPausa {
+    if (widget.tratamiento.activo) return false;
+    final fase = TratamientoController.calcularEstadoDuracion(widget.tratamiento).fase;
+    return fase != FaseTratamiento.finalizado;
+  }
+
+  EstadoMarcaDosis _estado(DateTime dia) {
+    final fecha = DateTime(dia.year, dia.month, dia.day);
+    if (_dadas.contains(_iso(fecha))) return EstadoMarcaDosis.dada;
+    if (_enPausa) return EstadoMarcaDosis.pausa;
+    final ahora = DateTime.now();
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    if (fecha == hoy && widget.tratamiento.activo) return EstadoMarcaDosis.pendiente;
+    return EstadoMarcaDosis.olvidada;
+  }
+
+  Future<void> _alternar(DateTime dia) async {
+    final fecha = DateTime(dia.year, dia.month, dia.day);
+    final inicio = DateTime(widget.inicio.year, widget.inicio.month, widget.inicio.day);
+    final fin = DateTime(widget.fin.year, widget.fin.month, widget.fin.day);
+    if (fecha.isBefore(inicio) || fecha.isAfter(fin)) return;
+    final iso = _iso(dia);
+    if (_enCurso.contains(iso)) return;
+    final estaba = _dadas.contains(iso);
+    setState(() {
+      _enCurso.add(iso);
+      if (estaba) {
+        _dadas.remove(iso);
+      } else {
+        _dadas.add(iso);
+      }
+    });
+    final ok = await widget.alAlternar(DateTime(dia.year, dia.month, dia.day));
+    if (!mounted) return;
+    setState(() {
+      _enCurso.remove(iso);
+      if (!ok) {
+        if (estaba) {
+          _dadas.add(iso);
+        } else {
+          _dadas.remove(iso);
+        }
+      }
+    });
+  }
+
+  Widget _marca(DateTime dia, {required bool esHoy}) {
+    final estado = _estado(dia);
+    final Color fondo;
+    final IconData? icono;
+    switch (estado) {
+      case EstadoMarcaDosis.dada:
+        fondo = AppColors.dosisDada;
+        icono = Icons.check;
+      case EstadoMarcaDosis.pendiente:
+        fondo = AppColors.pendiente;
+        icono = null;
+      case EstadoMarcaDosis.pausa:
+        fondo = AppColors.pausado;
+        icono = Icons.pause;
+      case EstadoMarcaDosis.olvidada:
+        fondo = AppColors.dosisOlvidada;
+        icono = Icons.close;
+    }
+    final texto = esHoy ? AppColors.navy : context.paleta.texto;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '${dia.day}',
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.1,
+            fontWeight: esHoy ? FontWeight.w800 : FontWeight.w600,
+            color: texto,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: fondo,
+            shape: BoxShape.circle,
+            border: esHoy ? Border.all(color: AppColors.navy, width: 1.6) : null,
+          ),
+          child: icono == null ? null : Icon(icono, size: 10, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final nombre = widget.tratamiento.medicacion.trim().isEmpty
+        ? 'Tratamiento diario'
+        : widget.tratamiento.medicacion.trim();
+    final alto = MediaQuery.sizeOf(context).height * 0.72;
+    return SafeArea(
+      child: SizedBox(
+        height: alto,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            Text(nombre, style: textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Tocá un día para marcar o desmarcar la dosis.',
+              style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<void>(
+              future: _localeListo,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return TableCalendar<void>(
+                  locale: 'es_ES',
+                  firstDay: widget.inicio,
+                  lastDay: widget.fin,
+                  focusedDay: _focused,
+                  selectedDayPredicate: (_) => false,
+                  rowHeight: 58,
+                  availableGestures: AvailableGestures.horizontalSwipe,
+                  headerStyle: HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                    titleTextStyle: textTheme.titleMedium ?? const TextStyle(),
+                    leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.navy),
+                    rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.navy),
+                  ),
+                  daysOfWeekStyle: DaysOfWeekStyle(
+                    weekdayStyle: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ??
+                        const TextStyle(),
+                    weekendStyle: textTheme.labelMedium?.copyWith(color: context.paleta.textoSuave) ??
+                        const TextStyle(),
+                  ),
+                  calendarStyle: const CalendarStyle(
+                    outsideDaysVisible: false,
+                  ),
+                  onPageChanged: (enfocado) => _focused = enfocado,
+                  enabledDayPredicate: (dia) {
+                    final fecha = DateTime(dia.year, dia.month, dia.day);
+                    final inicio = DateTime(widget.inicio.year, widget.inicio.month, widget.inicio.day);
+                    final fin = DateTime(widget.fin.year, widget.fin.month, widget.fin.day);
+                    return !fecha.isBefore(inicio) && !fecha.isAfter(fin);
+                  },
+                  onDaySelected: (seleccionado, enfocado) {
+                    setState(() => _focused = enfocado);
+                    _alternar(seleccionado);
+                  },
+                  calendarBuilders: CalendarBuilders(
+                    defaultBuilder: (context, dia, _) => _marca(dia, esHoy: false),
+                    todayBuilder: (context, dia, _) => _marca(dia, esHoy: true),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 enum _VistaHistorial { calendario, lista }
 
 class CalendarioHistorialWidget extends StatefulWidget {
   final Map<DateTime, List<Map<String, dynamic>>> eventosCalendario;
   final List<EntradaHistorial> historial;
+  final bool esInvitado;
+  final Future<bool> Function(TratamientoModel tratamiento, DateTime dia) alAlternar;
 
   const CalendarioHistorialWidget({
     super.key,
     required this.eventosCalendario,
     required this.historial,
+    required this.esInvitado,
+    required this.alAlternar,
   });
 
   @override
@@ -2525,10 +2764,15 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
   late final Future<void> _localeListo;
   _VistaHistorial _vista = _VistaHistorial.lista;
   final TextEditingController _busqueda = TextEditingController();
+  final Map<String, Set<String>> _registros = {};
 
   @override
   void initState() {
     super.initState();
+    for (final entrada in widget.historial) {
+      if (entrada.categoria != 'diario' || entrada.origen.id.isEmpty) continue;
+      _registros[entrada.origen.id] = entrada.origen.registroDosis.toSet();
+    }
     _localeListo = initializeDateFormatting('es_ES');
     _busqueda.addListener(() {
       if (mounted) setState(() {});
@@ -2839,18 +3083,62 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     final desde = _fechaCortaHistorial(inicio ?? fin!);
     final rango = fin == null ? desde : '$desde – ${_fechaCortaHistorial(fin)}';
     if (entrada.categoria == 'diario') {
-      if (entrada.cantidadDosis <= 0) return '$rango · sin dosis registradas';
-      final dosis = entrada.cantidadDosis == 1 ? '1 dosis' : '${entrada.cantidadDosis} dosis';
+      final cantidad = _registros[entrada.origen.id]?.length ?? entrada.cantidadDosis;
+      if (cantidad <= 0) return '$rango · sin dosis registradas';
+      final dosis = cantidad == 1 ? '1 dosis' : '$cantidad dosis';
       return '$rango · $dosis';
     }
     if (entrada.cantidadDosis > 1) return '$rango · ${entrada.cantidadDosis} dosis';
     return rango;
   }
 
+  bool _puedeCorregir(EntradaHistorial entrada) {
+    if (widget.esInvitado || entrada.categoria != 'diario') return false;
+    return TratamientoController.periodoCorreccion(entrada.origen) != null;
+  }
+
+  String _isoDia(DateTime dia) {
+    final mes = dia.month.toString().padLeft(2, '0');
+    final numero = dia.day.toString().padLeft(2, '0');
+    return '${dia.year}-$mes-$numero';
+  }
+
+  Future<void> _corregirDosis(EntradaHistorial entrada) async {
+    final periodo = TratamientoController.periodoCorreccion(entrada.origen);
+    if (periodo == null) return;
+    final registro = _registros[entrada.origen.id] ?? entrada.origen.registroDosis.toSet();
+    final actual = entrada.origen.copyWith(registroDosis: registro.toList());
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _HojaDosisPeriodo(
+        tratamiento: actual,
+        inicio: periodo.inicio,
+        fin: periodo.fin,
+        alAlternar: (dia) async {
+          final ok = await widget.alAlternar(actual, dia);
+          if (!ok || !mounted) return ok;
+          final iso = _isoDia(dia);
+          setState(() {
+            final dias = _registros.putIfAbsent(entrada.origen.id, () => registro.toSet());
+            if (dias.contains(iso)) {
+              dias.remove(iso);
+            } else {
+              dias.add(iso);
+            }
+          });
+          return true;
+        },
+      ),
+    );
+  }
+
   Widget _filaHistorial(EntradaHistorial entrada) {
     final textTheme = Theme.of(context).textTheme;
     final fecha = entrada.fechaInicio ?? entrada.fechaFin;
     final enCurso = entrada.activo && entrada.categoria == 'diario';
+    final corregir = _puedeCorregir(entrada);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -2860,56 +3148,70 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
           side: BorderSide(color: context.paleta.borde),
         ),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: fecha == null
-              ? null
-              : () => setState(() {
-                    _vista = _VistaHistorial.calendario;
-                    _selectedDay = fecha;
-                    _focusedDay = fecha;
-                  }),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: CategoryColors.tinte(entrada.categoria),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    CategoryColors.icono(entrada.categoria),
-                    size: 20,
-                    color: CategoryColors.base(entrada.categoria),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(entrada.titulo, style: textTheme.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(
-                        enCurso ? '${_resumenHistorial(entrada)} · En curso' : _resumenHistorial(entrada),
-                        style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: fecha == null
+                  ? null
+                  : () => setState(() {
+                        _vista = _VistaHistorial.calendario;
+                        _selectedDay = fecha;
+                        _focusedDay = fecha;
+                      }),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 12, 12, corregir ? 0 : 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: CategoryColors.tinte(entrada.categoria),
+                        shape: BoxShape.circle,
                       ),
-                      if (entrada.indicaciones.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          entrada.indicaciones,
-                          style: textTheme.bodyMedium,
-                        ),
-                      ],
-                    ],
-                  ),
+                      child: Icon(
+                        CategoryColors.icono(entrada.categoria),
+                        size: 20,
+                        color: CategoryColors.base(entrada.categoria),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(entrada.titulo, style: textTheme.titleMedium),
+                          const SizedBox(height: 2),
+                          Text(
+                            enCurso ? '${_resumenHistorial(entrada)} · En curso' : _resumenHistorial(entrada),
+                            style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                          ),
+                          if (entrada.indicaciones.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              entrada.indicaciones,
+                              style: textTheme.bodyMedium,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+            if (corregir)
+              Padding(
+                padding: const EdgeInsets.only(left: 52),
+                child: TextButton.icon(
+                  onPressed: () => _corregirDosis(entrada),
+                  icon: const Icon(Icons.edit_calendar_outlined),
+                  label: const Text('Corregir dosis'),
+                ),
+              ),
+          ],
         ),
       ),
     );
