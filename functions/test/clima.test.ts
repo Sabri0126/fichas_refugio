@@ -5,10 +5,13 @@ import { ZONA } from '../src/alarmas.js';
 import {
   type ConfigClima,
   evaluarClima,
+  momentoClima,
   normalizarConfig,
 } from '../src/clima.js';
 
 const manana = DateTime.fromISO('2026-10-13T08:00:00', { zone: ZONA });
+const mediodia = DateTime.fromISO('2026-10-13T12:30:00', { zone: ZONA });
+const tarde = DateTime.fromISO('2026-10-13T15:00:00', { zone: ZONA });
 const noche = DateTime.fromISO('2026-10-13T19:00:00', { zone: ZONA });
 const CONSEJO_LLUVIA =
   'Guardá las cuchas y los comederos que estén a la intemperie, y revisá que sus espacios no se inunden.';
@@ -26,8 +29,8 @@ const CONSEJO_VIENTO = 'Asegurá lonas, bebederos y todo lo que se pueda volar, 
 const CONSEJO_FRIO_DIA =
   'Dejá abrigo en las cuchas durante el día y prestá atención a los más viejos y a los cachorros.';
 const CONSEJO_NUBLADO =
-  'No se espera sol: organizá el trabajo al aire libre igual, pero no cuentes con que seque rápido.';
-const CONSEJO_LINDO = 'Aprovechalo para baños, limpieza del predio o paseos.';
+  'No se espera sol: organizá el trabajo al aire libre igual, pero no cuentes con que se seque rápido.';
+const CONSEJO_LINDO = 'Aprovechalo para baños, limpieza del predio o cortes de pelo.';
 
 function hora(
   dia: string,
@@ -455,5 +458,153 @@ describe('evaluarClima', () => {
       manana,
     );
     expect(conLluvia[0].categoria).toBe('lluvia');
+  });
+
+  it('la hora local elige la mañana, el mediodía o la noche', () => {
+    expect(momentoClima(manana)).toBe('manana');
+    expect(momentoClima(mediodia)).toBe('mediodia');
+    expect(momentoClima(tarde)).toBe('mediodia');
+    expect(momentoClima(noche)).toBe('noche');
+  });
+
+  it('el mediodía calla si la mañana ya avisó lluvia y habla si no hubo aviso o aparece granizo', () => {
+    const lluvia = pronostico({
+      horas: [hora('2026-10-13', 9, { p: 80, mm: 4 }), hora('2026-10-13', 15, { p: 80, mm: 6 })],
+    });
+    expect(evaluarClima(lluvia, config(), 'mediodia', mediodia, { categoriaManana: 'lluvia' })).toEqual([]);
+
+    const sinManana = evaluarClima(lluvia, config(), 'mediodia', mediodia);
+    expect(sinManana).toHaveLength(1);
+    expect(sinManana[0].categoria).toBe('lluvia');
+    expect(sinManana[0].clave).toBe('clima_mediodia_20261013');
+
+    const granizo = evaluarClima(
+      pronostico({
+        horas: [hora('2026-10-13', 9, { p: 80, mm: 4 }), hora('2026-10-13', 16, { codigo: 96, mm: 3 })],
+      }),
+      config(),
+      'mediodia',
+      mediodia,
+      { categoriaManana: 'lluvia' },
+    );
+    expect(granizo).toHaveLength(1);
+    expect(granizo[0].categoria).toBe('granizo');
+    expect(granizo[0].clave).toBe('clima_mediodia_20261013');
+  });
+
+  it('el mediodía no avisa llovizna, nublado, frío de día ni un día lindo', () => {
+    const suave = pronostico({
+      horas: [hora('2026-10-13', 15, { p: 70, mm: 0.4, nubes: 90, t: 8, viento: 10 })],
+      maxima: [8, 8],
+    });
+    expect(evaluarClima(suave, config(), 'mediodia', mediodia)).toEqual([]);
+  });
+
+  it('la noche no repite una racha ya anunciada', () => {
+    const dias = pronostico({
+      horas: [hora('2026-10-14', 10, { p: 80, mm: 5 }), hora('2026-10-15', 14, { p: 70, mm: 4 })],
+      fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+    });
+    const primera = evaluarClima(dias, config(), 'noche', noche);
+    expect(primera).toHaveLength(1);
+    expect(primera[0].clave).toBe('clima_racha_2026-10-14');
+    expect(primera[0].titulo).toBe('Se vienen días de lluvia');
+    expect(primera[0].cuerpo.startsWith('Se vienen días de lluvia: mañana y pasado.')).toBe(true);
+    expect(primera[0].rachaDesde).toBe('2026-10-14');
+    expect(primera[0].rachaHasta).toBe('2026-10-15');
+
+    const repetida = evaluarClima(dias, config(), 'noche', noche, {
+      rachaAnterior: { desde: '2026-10-14', hasta: '2026-10-15' },
+    });
+    expect(repetida).toEqual([]);
+
+    const seguida = evaluarClima(dias, config(), 'noche', noche, {
+      rachaAnterior: { desde: '2026-10-12', hasta: '2026-10-13' },
+    });
+    expect(seguida).toEqual([]);
+
+    const heladaYaAvisada = evaluarClima(
+      pronostico({
+        horas: [
+          hora('2026-10-14', 4, { t: -2 }),
+          hora('2026-10-14', 10, { p: 80, mm: 5 }),
+          hora('2026-10-15', 14, { p: 70, mm: 4 }),
+        ],
+        fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+      }),
+      config(),
+      'noche',
+      noche,
+      { rachaAnterior: { desde: '2026-10-14', hasta: '2026-10-15' } },
+    );
+    expect(heladaYaAvisada).toHaveLength(1);
+    expect(heladaYaAvisada[0].titulo).toBe('Se espera helada esta noche');
+    expect(heladaYaAvisada[0].cuerpo.includes('Se vienen días de lluvia')).toBe(false);
+  });
+
+  it('con helada, la racha queda en el mismo aviso y el texto empieza por el frío', () => {
+    const avisos = evaluarClima(
+      pronostico({
+        horas: [
+          hora('2026-10-13', 22, { t: 2 }),
+          hora('2026-10-14', 4, { t: -1 }),
+          hora('2026-10-14', 11, { p: 80, mm: 6 }),
+          hora('2026-10-15', 15, { p: 70, mm: 5 }),
+        ],
+        fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+      }),
+      config(),
+      'noche',
+      noche,
+    );
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].titulo).toBe('Se espera helada esta noche');
+    expect(avisos[0].clave).toBe('clima_frio_20261013_noche');
+    expect(avisos[0].cuerpo.startsWith(`Mínima de -1 °C. ${CONSEJO_FRIO}`)).toBe(true);
+    expect(avisos[0].cuerpo.endsWith('Se vienen días de lluvia: mañana y pasado.')).toBe(true);
+    expect(avisos[0].rachaDesde).toBe('2026-10-14');
+    expect(avisos[0].rachaHasta).toBe('2026-10-15');
+  });
+
+  it('una llovizna no arma racha, y un solo día de lluvia fuerte sí', () => {
+    const llovizna = evaluarClima(
+      pronostico({
+        horas: [hora('2026-10-14', 10, { p: 80, mm: 0.3 }), hora('2026-10-15', 14, { p: 70, mm: 0.4 })],
+        fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+      }),
+      config(),
+      'noche',
+      noche,
+    );
+    expect(llovizna).toEqual([]);
+
+    const fuerte = evaluarClima(
+      pronostico({
+        horas: [hora('2026-10-14', 10, { p: 90, mm: 20 }), hora('2026-10-15', 14, { p: 10, mm: 0 })],
+        fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+      }),
+      config(),
+      'noche',
+      noche,
+    );
+    expect(fuerte).toHaveLength(1);
+    expect(fuerte[0].clave).toBe('clima_racha_2026-10-14');
+    expect(fuerte[0].cuerpo.startsWith('Mañana se espera lluvia fuerte.')).toBe(true);
+    expect(fuerte[0].rachaHasta).toBe('2026-10-14');
+  });
+
+  it('un día seco de por medio vuelve a avisar la racha', () => {
+    const avisos = evaluarClima(
+      pronostico({
+        horas: [hora('2026-10-14', 10, { p: 80, mm: 5 }), hora('2026-10-15', 14, { p: 70, mm: 4 })],
+        fechas: ['2026-10-13', '2026-10-14', '2026-10-15'],
+      }),
+      config(),
+      'noche',
+      noche,
+      { rachaAnterior: { desde: '2026-10-11', hasta: '2026-10-12' } },
+    );
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].clave).toBe('clima_racha_2026-10-14');
   });
 });

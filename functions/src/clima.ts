@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 import { ZONA } from './alarmas.js';
 
-export type MomentoClima = 'manana' | 'noche';
+export type MomentoClima = 'manana' | 'mediodia' | 'noche';
 export type CategoriaClima =
   | 'lluvia'
   | 'calor'
@@ -22,6 +22,19 @@ export interface AvisoClima {
   categoria: CategoriaClima;
   titulo: string;
   cuerpo: string;
+  /** Si el aviso anunció una racha, el período para no repetirla. */
+  rachaDesde?: string;
+  rachaHasta?: string;
+}
+
+export interface RachaGuardada {
+  desde: string;
+  hasta: string;
+}
+
+export interface ContextoClima {
+  categoriaManana?: CategoriaClima | null;
+  rachaAnterior?: RachaGuardada | null;
 }
 
 export interface ConfigClima {
@@ -104,6 +117,18 @@ const PRIORIDAD: Record<CategoriaClima, number> = {
   frio: 11,
 };
 
+const IMPORTANTES_MEDIODIA = new Set<CategoriaClima>([
+  'granizo',
+  'tormenta',
+  'lluvia_fuerte',
+  'calor',
+  'viento',
+  'lluvia',
+]);
+
+const LLUVIA_DE_VERDAD = new Set<CategoriaClima>(['granizo', 'tormenta', 'lluvia_fuerte', 'lluvia']);
+const LLUVIA_GRAVE = new Set<CategoriaClima>(['granizo', 'tormenta', 'lluvia_fuerte']);
+
 interface HoraPronostico {
   instante: DateTime;
   temperatura: number | null;
@@ -172,11 +197,28 @@ export function normalizarConfig(data: unknown): ConfigClima {
   };
 }
 
+export function momentoClima(ahora: DateTime): MomentoClima {
+  const hora = ahora.setZone(ZONA).hour;
+  if (hora < 12) return 'manana';
+  if (hora < 18) return 'mediodia';
+  return 'noche';
+}
+
+export function rachaGuardada(data: unknown): RachaGuardada | null {
+  if (!esRegistro(data)) return null;
+  const desde = data.racha_desde;
+  const hasta = data.racha_hasta;
+  if (typeof desde !== 'string' || desde.trim() === '') return null;
+  if (typeof hasta !== 'string' || hasta.trim() === '') return null;
+  return { desde, hasta };
+}
+
 export function evaluarClima(
   pronostico: unknown,
   config: ConfigClima,
   momento: MomentoClima,
   ahora: DateTime,
+  contexto: ContextoClima = {},
 ): AvisoClima[] {
   if (!config.activo) return [];
   const datos = interpretar(pronostico);
@@ -190,8 +232,15 @@ export function evaluarClima(
     return manana ? [manana] : [];
   }
 
+  if (momento === 'mediodia') {
+    const tarde = evaluarMediodia(datos, config, hoy, ahora, contexto.categoriaManana ?? null);
+    return tarde ? [tarde] : [];
+  }
+
   const frio = evaluarNoche(datos, config, hoy, ahora);
-  return frio ? [frio] : [];
+  const racha = evaluarRacha(datos, config, hoy, contexto.rachaAnterior ?? null);
+  const noche = unirNocheYRacha(frio, racha);
+  return noche ? [noche] : [];
 }
 
 function evaluarManana(
@@ -206,8 +255,39 @@ function evaluarManana(
   return avisoManana(elegido.categoria, ahora, elegido.titulo, elegido.cuerpo);
 }
 
-function detectarCondiciones(datos: Pronostico, config: ConfigClima, hoy: DateTime): Hallazgo[] {
-  const horas = horasDelDia(datos, hoy);
+function evaluarMediodia(
+  datos: Pronostico,
+  config: ConfigClima,
+  hoy: DateTime,
+  ahora: DateTime,
+  categoriaManana: CategoriaClima | null,
+): AvisoClima | null {
+  const hallazgos = detectarCondiciones(datos, config, hoy, 12, 22, true).filter((hallazgo) =>
+    IMPORTANTES_MEDIODIA.has(hallazgo.categoria),
+  );
+  if (hallazgos.length === 0) return null;
+  const elegido = armarHallazgos(hallazgos);
+  if (!convieneMediodia(categoriaManana, elegido.categoria)) return null;
+  return avisoMediodia(elegido.categoria, ahora, elegido.titulo, elegido.cuerpo);
+}
+
+function convieneMediodia(anterior: CategoriaClima | null, nueva: CategoriaClima): boolean {
+  if (!IMPORTANTES_MEDIODIA.has(nueva)) return false;
+  if (anterior == null || anterior === 'lindo') return true;
+  const gravedadPrevia = PRIORIDAD[anterior];
+  if (gravedadPrevia == null) return true;
+  return PRIORIDAD[nueva] < gravedadPrevia;
+}
+
+function detectarCondiciones(
+  datos: Pronostico,
+  config: ConfigClima,
+  hoy: DateTime,
+  desdeHora = 8,
+  hastaHora = 22,
+  maximaDeHoras = false,
+): Hallazgo[] {
+  const horas = horasDelDia(datos, hoy, desdeHora, hastaHora);
   const diario = datos.dias.find((dia) => dia.fecha === hoy.toISODate());
   const precipitacion = leerPrecipitacion(horas, diario);
   const hallazgos: Hallazgo[] = [];
@@ -215,7 +295,7 @@ function detectarCondiciones(datos: Pronostico, config: ConfigClima, hoy: DateTi
   const precip = hallazgoPrecipitacion(precipitacion, config);
   if (precip) hallazgos.push(precip);
 
-  const maxima = diario?.maxima ?? null;
+  const maxima = maximaDelTramo(horas, diario, maximaDeHoras);
   if (maxima != null && maxima >= config.calorMax) {
     hallazgos.push({
       categoria: 'calor',
@@ -414,10 +494,119 @@ function evaluarNoche(datos: Pronostico, config: ConfigClima, hoy: DateTime, aho
   return null;
 }
 
-function horasDelDia(datos: Pronostico, hoy: DateTime): HoraPronostico[] {
-  const desde = hoy.set({ hour: 8 });
-  const hasta = hoy.set({ hour: 22 });
+interface Racha {
+  desde: string;
+  hasta: string;
+  frase: string;
+  consejo: string;
+}
+
+function evaluarRacha(
+  datos: Pronostico,
+  config: ConfigClima,
+  hoy: DateTime,
+  anterior: RachaGuardada | null,
+): Racha | null {
+  const manana = hoy.plus({ days: 1 });
+  const pasado = hoy.plus({ days: 2 });
+  const primera = lluviaDelDia(datos, config, manana);
+  const segunda = lluviaDelDia(datos, config, pasado);
+  const humedaPrimera = primera != null && LLUVIA_DE_VERDAD.has(primera);
+  const humedaSegunda = segunda != null && LLUVIA_DE_VERDAD.has(segunda);
+  const gravePrimera = primera != null && LLUVIA_GRAVE.has(primera);
+  const graveSegunda = segunda != null && LLUVIA_GRAVE.has(segunda);
+  if (!(humedaPrimera && humedaSegunda) && !gravePrimera && !graveSegunda) return null;
+
+  const desdeDia = humedaPrimera ? manana : pasado;
+  const hastaDia = humedaSegunda ? pasado : manana;
+  const desde = desdeDia.toISODate();
+  const hasta = hastaDia.toISODate();
+  if (!desde || !hasta || continuaRacha(anterior, desde)) return null;
+
+  return {
+    desde,
+    hasta,
+    frase: fraseRacha(humedaPrimera, humedaSegunda, primera, segunda),
+    consejo: consejoRacha(primera, segunda),
+  };
+}
+
+function lluviaDelDia(datos: Pronostico, config: ConfigClima, dia: DateTime): CategoriaClima | null {
+  const horas = horasDelDia(datos, dia);
+  const diario = datos.dias.find((item) => item.fecha === dia.toISODate());
+  return hallazgoPrecipitacion(leerPrecipitacion(horas, diario), config)?.categoria ?? null;
+}
+
+function continuaRacha(anterior: RachaGuardada | null, desde: string): boolean {
+  if (!anterior) return false;
+  const inicio = DateTime.fromISO(desde, { zone: ZONA }).startOf('day');
+  const fin = DateTime.fromISO(anterior.hasta, { zone: ZONA }).startOf('day');
+  if (!inicio.isValid || !fin.isValid) return false;
+  return inicio <= fin.plus({ days: 1 });
+}
+
+function fraseRacha(
+  humedaPrimera: boolean,
+  humedaSegunda: boolean,
+  primera: CategoriaClima | null,
+  segunda: CategoriaClima | null,
+): string {
+  if (humedaPrimera && humedaSegunda) return 'Se vienen días de lluvia: mañana y pasado.';
+  if (humedaPrimera) return `Mañana se espera ${nombreLluvia(primera)}.`;
+  return `Pasado mañana se espera ${nombreLluvia(segunda)}.`;
+}
+
+function nombreLluvia(categoria: CategoriaClima | null): string {
+  if (categoria === 'granizo') return 'granizo';
+  if (categoria === 'tormenta') return 'tormenta eléctrica';
+  if (categoria === 'lluvia_fuerte') return 'lluvia fuerte';
+  return 'lluvia';
+}
+
+function consejoRacha(primera: CategoriaClima | null, segunda: CategoriaClima | null): string {
+  const categorias = [primera, segunda].filter((categoria): categoria is CategoriaClima => categoria != null);
+  const peor = categorias.sort((a, b) => PRIORIDAD[a] - PRIORIDAD[b])[0];
+  if (peor === 'granizo') return CONSEJO_GRANIZO;
+  if (peor === 'tormenta') return CONSEJO_TORMENTA;
+  if (peor === 'lluvia_fuerte') return CONSEJO_LLUVIA_FUERTE;
+  return CONSEJO_LLUVIA;
+}
+
+function unirNocheYRacha(frio: AvisoClima | null, racha: Racha | null): AvisoClima | null {
+  if (!frio && !racha) return null;
+  if (frio && racha) {
+    return {
+      ...frio,
+      cuerpo: `${frio.cuerpo} ${racha.frase}`,
+      rachaDesde: racha.desde,
+      rachaHasta: racha.hasta,
+    };
+  }
+  if (frio) return frio;
+  if (!racha) return null;
+  return {
+    clave: `clima_racha_${racha.desde}`,
+    tipo: 'clima',
+    categoria: 'lluvia',
+    titulo: 'Se vienen días de lluvia',
+    cuerpo: `${racha.frase} ${racha.consejo}`,
+    rachaDesde: racha.desde,
+    rachaHasta: racha.hasta,
+  };
+}
+
+function horasDelDia(datos: Pronostico, hoy: DateTime, desdeHora = 8, hastaHora = 22): HoraPronostico[] {
+  const desde = hoy.set({ hour: desdeHora });
+  const hasta = hoy.set({ hour: hastaHora });
   return datos.horas.filter((hora) => hora.instante >= desde && hora.instante <= hasta);
+}
+
+function maximaDelTramo(horas: HoraPronostico[], diario: DiaPronostico | undefined, deHoras: boolean): number | null {
+  if (deHoras) {
+    const temperaturas = valores(horas.map((hora) => hora.temperatura));
+    if (temperaturas.length > 0) return Math.max(...temperaturas);
+  }
+  return diario?.maxima ?? null;
 }
 
 function leerPrecipitacion(horas: HoraPronostico[], diario: DiaPronostico | undefined): Precipitacion {
@@ -448,6 +637,17 @@ function avisoManana(categoria: CategoriaClima, ahora: DateTime, titulo: string,
   const fecha = ahora.setZone(ZONA).toFormat('yyyyMMdd');
   return {
     clave: `clima_manana_${fecha}`,
+    tipo: 'clima',
+    categoria,
+    titulo,
+    cuerpo,
+  };
+}
+
+function avisoMediodia(categoria: CategoriaClima, ahora: DateTime, titulo: string, cuerpo: string): AvisoClima {
+  const fecha = ahora.setZone(ZONA).toFormat('yyyyMMdd');
+  return {
+    clave: `clima_mediodia_${fecha}`,
     tipo: 'clima',
     categoria,
     titulo,

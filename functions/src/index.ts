@@ -17,7 +17,7 @@ import {
   tokensParaAlarma,
 } from './alarmas.js';
 import { esMananaDeAniversario, mensajeAniversario } from './aniversario.js';
-import { type MomentoClima, evaluarClima, normalizarConfig } from './clima.js';
+import { type CategoriaClima, evaluarClima, momentoClima, normalizarConfig, rachaGuardada } from './clima.js';
 import { crearNotificacion, enviarAlarma } from './envio.js';
 
 if (getApps().length === 0) initializeApp();
@@ -88,78 +88,104 @@ export const enviarNotificaciones = onSchedule(
   },
 );
 
+const OPCIONES_CLIMA = {
+  timeZone: ZONA,
+  timeoutSeconds: 60,
+  maxInstances: 1,
+  region: REGION,
+};
+
 export const enviarAvisosClima = onSchedule(
-  {
-    schedule: '0 8,19 * * *',
-    timeZone: ZONA,
-    timeoutSeconds: 60,
-    maxInstances: 1,
-    region: REGION,
-  },
-  async () => {
-    const db = getFirestore();
-    const ahora = DateTime.now().setZone(ZONA);
-    if (esMananaDeAniversario(ahora)) {
-      const mensaje = { ...mensajeAniversario(ahora), fecha: ahora };
-      const creada = await crearNotificacion(db, mensaje);
-      if (creada) {
-        const dispositivos = await db.collection('dispositivos').get();
-        const tokens = dispositivos.docs.map((doc) => doc.id);
-        const resultado = await enviarAlarma(tokens, mensaje);
-        for (const token of resultado.invalidos) {
-          await db.collection('dispositivos').doc(token).delete();
-        }
-        logger.info('aniversario', { anio: ahora.year, enviados: resultado.enviados });
-      }
-    }
-
-    const config = normalizarConfig((await db.doc('config/clima').get()).data());
-    if (!config.activo) {
-      logger.info('enviarAvisosClima', { avisos: 0, enviados: 0 });
-      return;
-    }
-
-    const crudo = await consultarOpenMeteo(config.latitud, config.longitud);
-    if (crudo == null) return;
-
-    const momento: MomentoClima = ahora.hour < 12 ? 'manana' : 'noche';
-    const avisos = evaluarClima(crudo, config, momento, ahora);
-    const dispositivos = await db.collection('dispositivos').get();
-    const tokens = dispositivos.docs.map((doc) => doc.id);
-    let enviados = 0;
-    const tokensMalos = new Set<string>();
-
-    for (const aviso of avisos) {
-      const mensaje = {
-        clave: aviso.clave,
-        titulo: aviso.titulo,
-        cuerpo: aviso.cuerpo,
-        idPerro: '',
-        categoria: aviso.categoria,
-        tipo: aviso.tipo,
-        fecha: ahora,
-      };
-      const creada = await crearNotificacion(db, mensaje);
-      if (!creada) continue;
-      const resultado = await enviarAlarma(tokens, mensaje);
-      enviados += resultado.enviados;
-      for (const token of resultado.invalidos) tokensMalos.add(token);
-    }
-
-    for (const token of tokensMalos) {
-      await db.collection('dispositivos').doc(token).delete();
-    }
-
-    logger.info('enviarAvisosClima', { avisos: avisos.length, enviados });
-  },
+  { ...OPCIONES_CLIMA, schedule: '0 8,19 * * *' },
+  correrAvisosClima,
 );
+
+export const enviarAvisosClimaMediodia = onSchedule(
+  { ...OPCIONES_CLIMA, schedule: '30 12 * * *' },
+  correrAvisosClima,
+);
+
+async function correrAvisosClima(): Promise<void> {
+  const db = getFirestore();
+  const ahora = DateTime.now().setZone(ZONA);
+  if (esMananaDeAniversario(ahora)) {
+    const mensaje = { ...mensajeAniversario(ahora), fecha: ahora };
+    const creada = await crearNotificacion(db, mensaje);
+    if (creada) {
+      const dispositivos = await db.collection('dispositivos').get();
+      const tokens = dispositivos.docs.map((doc) => doc.id);
+      const resultado = await enviarAlarma(tokens, mensaje);
+      for (const token of resultado.invalidos) {
+        await db.collection('dispositivos').doc(token).delete();
+      }
+      logger.info('aniversario', { anio: ahora.year, enviados: resultado.enviados });
+    }
+  }
+
+  const configDoc = await db.doc('config/clima').get();
+  const config = normalizarConfig(configDoc.data());
+  if (!config.activo) {
+    logger.info('enviarAvisosClima', { avisos: 0, enviados: 0 });
+    return;
+  }
+
+  const crudo = await consultarOpenMeteo(config.latitud, config.longitud);
+  if (crudo == null) return;
+
+  const momento = momentoClima(ahora);
+  const categoriaManana = momento === 'mediodia' ? await categoriaDeLaManana(db, ahora) : null;
+  const avisos = evaluarClima(crudo, config, momento, ahora, {
+    categoriaManana,
+    rachaAnterior: rachaGuardada(configDoc.data()),
+  });
+  const dispositivos = await db.collection('dispositivos').get();
+  const tokens = dispositivos.docs.map((doc) => doc.id);
+  let enviados = 0;
+  const tokensMalos = new Set<string>();
+
+  for (const aviso of avisos) {
+    const mensaje = {
+      clave: aviso.clave,
+      titulo: aviso.titulo,
+      cuerpo: aviso.cuerpo,
+      idPerro: '',
+      categoria: aviso.categoria,
+      tipo: aviso.tipo,
+      fecha: ahora,
+    };
+    const creada = await crearNotificacion(db, mensaje);
+    if (!creada) continue;
+    if (aviso.rachaDesde && aviso.rachaHasta) {
+      await db.doc('config/clima').set(
+        { racha_desde: aviso.rachaDesde, racha_hasta: aviso.rachaHasta },
+        { merge: true },
+      );
+    }
+    const resultado = await enviarAlarma(tokens, mensaje);
+    enviados += resultado.enviados;
+    for (const token of resultado.invalidos) tokensMalos.add(token);
+  }
+
+  for (const token of tokensMalos) {
+    await db.collection('dispositivos').doc(token).delete();
+  }
+
+  logger.info('enviarAvisosClima', { avisos: avisos.length, enviados, momento });
+}
+
+async function categoriaDeLaManana(db: Firestore, ahora: DateTime): Promise<CategoriaClima | null> {
+  const fecha = ahora.toFormat('yyyyMMdd');
+  const doc = await db.doc(`notificaciones/clima_manana_${fecha}`).get();
+  const categoria = doc.get('categoria');
+  return typeof categoria === 'string' ? (categoria as CategoriaClima) : null;
+}
 
 async function consultarOpenMeteo(latitud: number, longitud: number): Promise<unknown | null> {
   const url = new URL('https://api.open-meteo.com/v1/forecast');
   url.searchParams.set('latitude', String(latitud));
   url.searchParams.set('longitude', String(longitud));
   url.searchParams.set('timezone', ZONA);
-  url.searchParams.set('forecast_days', '2');
+  url.searchParams.set('forecast_days', '3');
   url.searchParams.set(
     'hourly',
     'temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m',

@@ -107,7 +107,13 @@ Cada corrida deja un log `enviarNotificaciones` con la cantidad de alarmas, env�
 
 ## 7. Clima
 
-Hay una segunda función, `enviarAvisosClima`. Corre a las 08:00 y a las 19:00, hora de Buenos Aires, en la misma región `southamerica-east1`. A la mañana manda un solo aviso: la condición más importante del día (granizo, tormenta, lluvia fuerte, calor, viento, lluvia, llovizna, frío durante el día, nublado o, si no hay ninguna, un día lindo para trabajar). El resto queda en una línea que empieza con "También". A la noche evalúa el frío o la helada de la noche que empieza. El frío de día (la máxima no sube) es distinto de la helada nocturna. Manda el push a los mismos documentos de `dispositivos` y guarda el aviso en `notificaciones`. Los visitantes no tienen token y no lo reciben.
+Hay dos funciones con la misma corrida, `enviarAvisosClima` y `enviarAvisosClimaMediodia`. Corren a las 08:00, a las 12:30 y a las 19:00, hora de Buenos Aires, en la misma región `southamerica-east1`. La hora local decide el momento: antes de las 12 es la mañana, de las 12 a las 18 es el mediodía, y desde las 18 es la noche. Una prueba forzada a las 15 evalúa el mediodía.
+
+A la mañana manda un solo aviso: la condición más importante del día (granizo, tormenta, lluvia fuerte, calor, viento, lluvia, llovizna, frío durante el día, nublado o, si no hay ninguna, un día lindo para trabajar). El resto queda en una línea que empieza con "También". El mediodía mira de las 12 a las 22 y solo avisa si aparece lluvia, lluvia fuerte, calor, viento, tormenta o granizo, y esa condición es más grave que la de la mañana. Sin aviso matutino, o con un día lindo, cualquiera de esas cuenta. Lluvia a la mañana y lluvia al mediodía no se repite. Lluvia a la mañana y granizo, tormenta o lluvia fuerte al mediodía sí. No avisa día lindo, nublado, llovizna ni frío de día.
+
+A la noche evalúa el frío o la helada de la noche que empieza. El frío de día (la máxima no sube) es distinto de la helada nocturna. También mira mañana y pasado: hay racha si los dos días traen lluvia de verdad (lluvia, lluvia fuerte, tormenta o granizo entre las 8 y las 22; una llovizna no cuenta), o si uno solo trae lluvia fuerte, tormenta o granizo. Si el período nuevo se solapa o sigue al que ya se avisó, no se repite. Si hay un día seco de por medio, es otra racha y sí se avisa. Si esa noche también hay frío o helada, sale un solo aviso: el texto del frío primero y, al final, que se vienen días de lluvia.
+
+Manda el push a los mismos documentos de `dispositivos` y guarda el aviso en `notificaciones`. Los visitantes no tienen token y no lo reciben.
 
 ### Documento `config/clima`
 
@@ -131,14 +137,16 @@ Crearlo a mano en la consola de Firestore, colección `config`, id `clima`. Si n
 | `nublado_min` | `80` | Porcentaje de nubosidad promedio. Solo si no hay precipitación. |
 | `lindo_min` | `15` | °C. Piso de la máxima para el aviso de día lindo. |
 | `lindo_max` | `28` | °C. Techo de la máxima para el aviso de día lindo. |
+| `racha_desde` | — | Fecha `aaaa-mm-dd`. La escribe la función cuando avisa una racha. |
+| `racha_hasta` | — | Fecha `aaaa-mm-dd`. Cierra el período de esa racha. |
 
 Para mudar el refugio, cambiá `latitud` y `longitud`. Para avisar con menos calor, por ejemplo, poné `calor_max` en `10`.
 
 ### Probar una corrida
 
-En Google Cloud, Cloud Scheduler, abrí el trabajo de `enviarAvisosClima` y usá **Forzar ejecución**. La hora local de esa corrida decide si evalúa la mañana (antes de las 12) o la noche.
+En Google Cloud, Cloud Scheduler, abrí el trabajo de `enviarAvisosClima` o el de `enviarAvisosClimaMediodia` y usá **Forzar ejecución**. La hora local de esa corrida decide si evalúa la mañana (antes de las 12), el mediodía (de las 12 a las 18) o la noche.
 
-El id de la mañana es fijo: `clima_manana_{yyyyMMdd}`, por ejemplo `notificaciones/clima_manana_20261013`. El de la noche sigue siendo `clima_frio_{yyyyMMdd}_noche`. `create()` no lo vuelve a escribir si ya existe, así que una segunda corrida del mismo día no manda otro push aunque el pronóstico cambie. Para repetir la prueba, borrá ese documento en la consola y forzá de nuevo.
+El id de la mañana es fijo: `clima_manana_{yyyyMMdd}`, por ejemplo `notificaciones/clima_manana_20261013`. El del mediodía es `clima_mediodia_{yyyyMMdd}`. El de la noche fría sigue siendo `clima_frio_{yyyyMMdd}_noche`. El de una racha sin frío es `clima_racha_{aaaa-mm-dd}`, con la fecha en que empieza. `create()` no lo vuelve a escribir si ya existe, así que una segunda corrida del mismo momento no manda otro push aunque el pronóstico cambie. Para repetir la prueba, borrá ese documento en la consola y forzá de nuevo. Si la prueba era de una racha, borrá también `racha_desde` y `racha_hasta` en `config/clima`.
 
 El día lindo sale solo si no hay ninguna otra alerta: máxima entre `lindo_min` y `lindo_max`, nubosidad de hasta 40 %, probabilidad de lluvia de hasta 20 % y viento de hasta 25 km/h.
 
@@ -152,7 +160,7 @@ Cada corrida deja `avisos` y `enviados`. Si Open-Meteo no responde, el log es `e
 
 ### Costo y atribución
 
-Son dos llamadas por día a Open-Meteo, sin clave. El uso no comercial de esa API es gratis. Hay que atribuir la fuente: la pantalla de notificaciones muestra `Datos del clima: Open-Meteo.com`.
+Son tres llamadas por día a Open-Meteo, sin clave. El uso no comercial de esa API es gratis. Hay que atribuir la fuente: la pantalla de notificaciones muestra `Datos del clima: Open-Meteo.com`.
 
 
 ## 8. Seguimientos

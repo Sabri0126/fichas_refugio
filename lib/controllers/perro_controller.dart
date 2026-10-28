@@ -194,6 +194,23 @@ class PerroController {
     ];
   }
 
+  /// Campos `editado_por` y `editado_en` de una edición con sesión.
+  /// El nombre visible gana sobre el email; si ambos están vacíos, queda "Administrador".
+  static Map<String, dynamic> marcaEdicion({
+    required String? nombreVisible,
+    required String? email,
+    required DateTime ahora,
+  }) {
+    final nombre = nombreVisible?.trim() ?? '';
+    final correo = email?.trim() ?? '';
+    return {
+      'editado_por': nombre.isNotEmpty
+          ? nombre
+          : (correo.isNotEmpty ? correo : 'Administrador'),
+      'editado_en': Timestamp.fromDate(ahora),
+    };
+  }
+
   /// Null si el egreso se puede guardar.
   static String? validarEgreso(EgresoModel egreso) {
     final hoy = DateTime.now();
@@ -243,6 +260,17 @@ class PerroController {
     return _agregarEnLista(idPerro, 'seguimientos', seguimiento.id, seguimiento.toMap());
   }
 
+  /// Marca de la sesión actual. Vacía si no hay usuario logueado.
+  Map<String, dynamic> _marcaEdicionActual() {
+    final usuario = FirebaseAuth.instance.currentUser;
+    if (usuario == null) return const {};
+    return marcaEdicion(
+      nombreVisible: NombreUsuario.visible(usuario),
+      email: usuario.email,
+      ahora: DateTime.now(),
+    );
+  }
+
   Future<void> _agregarEnLista(
     String idPerro,
     String campo,
@@ -262,7 +290,10 @@ class PerroController {
       });
       if (yaEsta) return;
       lista.add(mapa);
-      tx.update(ref, {campo: lista});
+      tx.update(ref, {
+        campo: lista,
+        ..._marcaEdicionActual(),
+      });
     });
   }
 
@@ -376,15 +407,7 @@ class PerroController {
     if (perro.fechaEgreso == null) datosPerro['fecha_egreso'] = FieldValue.delete();
     if (perro.notaEgreso == null) datosPerro['nota_egreso'] = FieldValue.delete();
     if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
-    final usuario = FirebaseAuth.instance.currentUser;
-    if (usuario != null) {
-      final nombre = NombreUsuario.visible(usuario);
-      final email = usuario.email?.trim() ?? '';
-      datosPerro['editado_por'] = nombre.isNotEmpty
-          ? nombre
-          : (email.isNotEmpty ? email : 'Administrador');
-      datosPerro['editado_en'] = Timestamp.fromDate(DateTime.now());
-    }
+    datosPerro.addAll(_marcaEdicionActual());
 
     // La galería y los estudios se gestionan desde sus propios métodos
     // (agregarFotoAGaleria, agregarFotoAEstudios, etc.), no desde este
