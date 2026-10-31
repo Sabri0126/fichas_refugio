@@ -177,6 +177,60 @@ class TratamientoController {
     return editado.copyWith(activo: reactivar);
   }
 
+  /// Período de un diario con duración fija: el día de inicio cuenta como día 1
+  /// y el último es el inicio más [TratamientoModel.diasDuracion] menos uno.
+  /// Un indefinido, un evento puntual o un diario sin fecha no tienen período.
+  static ({DateTime inicio, DateTime fin})? periodoFijo(TratamientoModel tratamiento) {
+    if (tratamiento.categoria != 'diario' ||
+        tratamiento.diasDuracion <= 0 ||
+        tratamiento.fechaInicio == null) {
+      return null;
+    }
+    final inicio = DateTime(
+      tratamiento.fechaInicio!.year,
+      tratamiento.fechaInicio!.month,
+      tratamiento.fechaInicio!.day,
+    );
+    final fin = DateTime(inicio.year, inicio.month, inicio.day + tratamiento.diasDuracion - 1);
+    return (inicio: inicio, fin: fin);
+  }
+
+  /// Fechas de [TratamientoModel.registroDosis] anteriores al inicio o
+  /// posteriores al fin de [periodoFijo]. Un diario indefinido no tiene
+  /// dosis fuera de período.
+  static List<String> dosisFueraDePeriodo(TratamientoModel tratamiento) {
+    final periodo = periodoFijo(tratamiento);
+    if (periodo == null) return const [];
+    final fuera = <String>[];
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      final dia = DateTime(fecha.year, fecha.month, fecha.day);
+      if (dia.isBefore(periodo.inicio) || dia.isAfter(periodo.fin)) fuera.add(texto);
+    }
+    return fuera;
+  }
+
+  /// Aplica la decisión de la persona sobre las dosis fuera de período.
+  /// [borrar] en `true` las quita. En `false` las deja y marca que se conservan,
+  /// para que el calendario pueda mostrarlas.
+  static TratamientoModel resolverDosisFueraDePeriodo(
+    TratamientoModel tratamiento, {
+    required bool borrar,
+  }) {
+    final fuera = dosisFueraDePeriodo(tratamiento).toSet();
+    if (fuera.isEmpty || !borrar) {
+      return tratamiento.copyWith(conservarDosisFuera: fuera.isNotEmpty && !borrar);
+    }
+    return tratamiento.copyWith(
+      registroDosis: [
+        for (final dosis in tratamiento.registroDosis)
+          if (!fuera.contains(dosis)) dosis,
+      ],
+      conservarDosisFuera: false,
+    );
+  }
+
   /// Pausa o reanuda un tratamiento diario. Solo altera [TratamientoModel.activo];
   /// categoría, fechas y recordatorios se conservan intactos.
   /// No aplica a eventos puntuales (`categoria != 'diario'`): se devuelve igual.
@@ -680,6 +734,8 @@ class TratamientoController {
   /// Días en los que el historial muestra el tratamiento.
   /// Un evento puntual vive en `fechaInicio`. Si esa fecha todavía no está,
   /// se usa el registro. Un diario sigue el registro de dosis dadas.
+  /// En un diario con duración fija, una dosis fuera del período no entra,
+  /// salvo que la persona haya decidido conservarla.
   List<DateTime> _diasEnCalendario(TratamientoModel tratamiento) {
     if (tratamiento.categoria != 'diario') {
       final inicio = tratamiento.fechaInicio;
@@ -687,17 +743,26 @@ class TratamientoController {
         return [DateTime.utc(inicio.year, inicio.month, inicio.day)];
       }
     }
+    final periodo = periodoFijo(tratamiento);
+    final mostrarFuera = tratamiento.conservarDosisFuera;
     final dias = <DateTime>[];
     for (final texto in tratamiento.registroDosis) {
       final fecha = DateTime.tryParse(texto);
       if (fecha == null) continue;
+      final dia = DateTime(fecha.year, fecha.month, fecha.day);
+      if (periodo != null &&
+          !mostrarFuera &&
+          (dia.isBefore(periodo.inicio) || dia.isAfter(periodo.fin))) {
+        continue;
+      }
       dias.add(DateTime.utc(fecha.year, fecha.month, fecha.day));
     }
     return dias;
   }
 
   /// Una fila por tratamiento, de más nuevo a más viejo.
-  /// Los diarios usan el rango de dosis; el resto, su fecha.
+  /// Un diario con duración fija usa su período, aunque haya dosis afuera.
+  /// Uno indefinido usa el rango de dosis. El resto usa su fecha.
   List<EntradaHistorial> construirHistorialLista(List<TratamientoModel> tratamientos) {
     final entradas = <EntradaHistorial>[];
     for (final tratamiento in tratamientos) {
@@ -717,15 +782,22 @@ class TratamientoController {
               tratamiento.fechaInicio!.day,
             );
       final puntual = tratamiento.categoria != 'diario';
-      if (puntual && inicio != null) {
+      final periodo = periodoFijo(tratamiento);
+      DateTime? fin;
+      if (periodo != null) {
+        inicio = periodo.inicio;
+        if (!_mismoDia(periodo.inicio, periodo.fin)) fin = periodo.fin;
+      } else if (puntual && inicio != null) {
         dosis
           ..clear()
           ..add(inicio);
       } else if (dosis.isNotEmpty && (inicio == null || dosis.first.isBefore(inicio))) {
         inicio = dosis.first;
       }
-      DateTime? fin;
-      if (dosis.isNotEmpty && inicio != null && !_mismoDia(inicio, dosis.last)) {
+      if (periodo == null &&
+          dosis.isNotEmpty &&
+          inicio != null &&
+          !_mismoDia(inicio, dosis.last)) {
         fin = dosis.last;
       }
 

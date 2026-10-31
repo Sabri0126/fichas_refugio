@@ -64,6 +64,10 @@ class TratamientoModel {
   /// `false` lo calla en todos. Si el campo no viene de Firestore, sigue avisando.
   final bool notificar;
 
+  /// La persona eligió dejar dosis registradas fuera del período del diario.
+  /// Si es `false`, el calendario no las muestra como parte del tratamiento.
+  final bool conservarDosisFuera;
+
   /// Crea una instancia inmutable de [TratamientoModel].
   TratamientoModel({
     required this.id,
@@ -80,6 +84,7 @@ class TratamientoModel {
     this.activo = true,
     this.fechaProximoRecordatorio,
     this.notificar = true,
+    this.conservarDosisFuera = false,
   });
 
   /// Construye un [TratamientoModel] a partir del mapa `data` obtenido de
@@ -103,6 +108,7 @@ class TratamientoModel {
         data['fecha_proximo_recordatorio'],
       ),
       notificar: data['notificar'] != false,
+      conservarDosisFuera: data['conservar_dosis_fuera'] == true,
     );
   }
 
@@ -128,6 +134,7 @@ class TratamientoModel {
           ? Timestamp.fromDate(fechaProximoRecordatorio!)
           : null,
       'notificar': notificar,
+      'conservar_dosis_fuera': conservarDosisFuera,
     };
   }
 
@@ -147,6 +154,7 @@ class TratamientoModel {
     bool? activo,
     DateTime? fechaProximoRecordatorio,
     bool? notificar,
+    bool? conservarDosisFuera,
   }) {
     return TratamientoModel(
       id: id ?? this.id,
@@ -163,6 +171,7 @@ class TratamientoModel {
       activo: activo ?? this.activo,
       fechaProximoRecordatorio: fechaProximoRecordatorio ?? this.fechaProximoRecordatorio,
       notificar: notificar ?? this.notificar,
+      conservarDosisFuera: conservarDosisFuera ?? this.conservarDosisFuera,
     );
   }
 

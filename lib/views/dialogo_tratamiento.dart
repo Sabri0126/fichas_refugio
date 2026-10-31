@@ -244,7 +244,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final diagnostico = esVisita ? _diagnostico.text.trim() : (widget.actual?.diagnostico ?? '');
     final actual = widget.actual;
     final avisa = _alcance != _AlcanceAviso.nadie;
-    final modelo = actual == null
+    var modelo = actual == null
         ? widget.controller.crearTratamiento(
             categoria: widget.categoria,
             medicacion: medicacion,
@@ -269,6 +269,16 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             horaRecordatorio: _esDiario ? hora : (actual.horaRecordatorio ?? hora),
             notificar: _esDiario ? avisa : null,
           );
+    if (_esDiario && actual != null) {
+      final fuera = TratamientoController.dosisFueraDePeriodo(modelo);
+      var borrar = false;
+      if (fuera.isNotEmpty) {
+        final respuesta = await _preguntarBorrarDosisFuera(fuera.length);
+        if (!mounted) return;
+        borrar = respuesta == true;
+      }
+      modelo = TratamientoController.resolverDosisFueraDePeriodo(modelo, borrar: borrar);
+    }
     if (_esDiario) {
       try {
         await MensajeriaService.instance.definirSilencio(
@@ -287,6 +297,29 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     }
     if (!mounted) return;
     Navigator.pop(context, modelo);
+  }
+
+  Future<bool?> _preguntarBorrarDosisFuera(int cantidad) {
+    final texto = cantidad == 1
+        ? 'Hay 1 dosis registrada fuera del nuevo período. ¿Querés borrarla?'
+        : 'Hay $cantidad dosis registradas fuera del nuevo período. ¿Querés borrarlas?';
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dosis fuera del período'),
+        content: Text(texto),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Conservar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _opcionAviso(_AlcanceAviso valor, String texto) {

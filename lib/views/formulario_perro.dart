@@ -914,6 +914,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                             onPressed: () =>
                                 _mostrarDialogoEditarTratamiento(i),
                           ),
+                          const SizedBox(width: 4),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_forever,
@@ -1611,11 +1612,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
     if (!mounted || actualizado == null) return;
     final silenciados = await MensajeriaService.leerSilenciados();
     if (!mounted) return;
+    final resultado = TratamientoController.resolverActivoTrasEditar(
+      original,
+      actualizado,
+    );
     setState(() {
-      _tratamientos[indice] = TratamientoController.resolverActivoTrasEditar(
-        original,
-        actualizado,
-      );
+      _tratamientos[indice] = resultado;
+      if (!original.activo && resultado.activo) {
+        _idsReanudadosManualmente.add(original.id);
+      }
       _silenciados = silenciados;
       _hayCambios = true;
     });

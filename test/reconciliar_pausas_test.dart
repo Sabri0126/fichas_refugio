@@ -39,6 +39,16 @@ void main() {
     expect(resultado.single.activo, isTrue);
   });
 
+  test('pausado en la base y reactivado por edición queda activo', () {
+    final resultado = TratamientoController.reconciliarPausas(
+      [_tratamiento(id: 'doxi', activo: true)],
+      [_tratamiento(id: 'doxi', activo: false)],
+      {'doxi'},
+    );
+
+    expect(resultado.single.activo, isTrue);
+  });
+
   test('un id que no está en el servidor no cambia', () {
     final local = _tratamiento(id: 'nuevo', activo: true);
     final resultado = TratamientoController.reconciliarPausas(
