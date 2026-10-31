@@ -30,6 +30,7 @@ import '../models/tratamiento_model.dart';
 import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
 import '../theme/encabezado_seccion.dart';
+import '../util/plataforma.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
@@ -795,14 +796,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 decoration: BoxDecoration(
                   color: fondo,
                   shape: BoxShape.circle,
-                  border: esHoy ? Border.all(color: AppColors.navy, width: 2) : null,
+                  border: esHoy ? Border.all(color: colorIconoSeccion(context), width: 2) : null,
                 ),
                 child: icono == null ? null : Icon(icono, size: 14, color: Colors.white),
               ),
               Text(
-                _inicialesDia[marca.dia.weekday - 1],
+                esWindows ? '${marca.dia.day}' : _inicialesDia[marca.dia.weekday - 1],
                 style: textTheme.labelMedium?.copyWith(
-                  color: esHoy ? AppColors.navy : context.paleta.textoSuave,
+                  color: esHoy ? colorIconoSeccion(context) : context.paleta.textoSuave,
                   fontWeight: esHoy ? FontWeight.w800 : FontWeight.w600,
                   height: 1.1,
                 ),
@@ -829,7 +830,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           children: [
             Row(
               children: [
-                Icon(icono, size: 22, color: AppColors.navy),
+                Icon(icono, size: 22, color: colorIconoSeccion(context)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -873,7 +874,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icono, size: 18, color: AppColors.navy),
+          Icon(icono, size: 18, color: colorIconoSeccion(context)),
           const SizedBox(width: 6),
           Text(
             texto,
@@ -956,6 +957,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     final ValueChanged<bool?>? alCambiar = esInvitado ? null : (_) => _toggleDosis(t, DateTime.now());
     final fijo = t.tipoDuracion == TratamientoModel.tipoDias && t.diasDuracion > 0;
     final hastaAviso = t.tipoDuracion == TratamientoModel.tipoHastaAviso;
+    final tacharHoy = marcadoHoy && !esWindows;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -980,7 +982,16 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Checkbox(value: marcadoHoy, onChanged: alCambiar),
+                    Checkbox(
+                      value: marcadoHoy,
+                      onChanged: alCambiar,
+                      fillColor: esWindows
+                          ? WidgetStateProperty.resolveWith((estados) {
+                              if (estados.contains(WidgetState.selected)) return AppColors.dosisDada;
+                              return null;
+                            })
+                          : null,
+                    ),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(top: 10, bottom: 4),
@@ -995,8 +1006,8 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                                     duration: const Duration(milliseconds: 200),
                                     curve: Curves.easeOutCubic,
                                     style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
-                                      color: marcadoHoy ? context.paleta.textoSuave : context.paleta.texto,
-                                      decoration: marcadoHoy ? TextDecoration.lineThrough : TextDecoration.none,
+                                      color: tacharHoy ? context.paleta.textoSuave : context.paleta.texto,
+                                      decoration: tacharHoy ? TextDecoration.lineThrough : TextDecoration.none,
                                       decorationColor: context.paleta.textoSuave,
                                     ),
                                     child: Text(
@@ -1044,10 +1055,11 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   Widget _chipDuracion(TratamientoModel tratamiento) {
     final dePorVida = tratamiento.dePorVida;
+    final color = colorIconoSeccion(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.navy.withValues(alpha: 0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -1056,13 +1068,13 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           Icon(
             dePorVida ? Icons.all_inclusive : Icons.hourglass_empty,
             size: 14,
-            color: AppColors.navy,
+            color: color,
           ),
           const SizedBox(width: 4),
           Text(
             dePorVida ? 'De por vida' : 'Hasta nuevo aviso',
             textScaler: _escala,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.navy),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
           ),
         ],
       ),
@@ -1417,7 +1429,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.history, color: AppColors.navy),
+          leading: Icon(Icons.history, color: colorIconoSeccion(context)),
           title: Text(
             'Suspendidos y finalizados (${lista.length})',
             textScaler: _escala,
@@ -1473,7 +1485,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
             children: [
-              const Icon(Icons.calendar_month_outlined, size: 22, color: AppColors.navy),
+              Icon(Icons.calendar_month_outlined, size: 22, color: colorIconoSeccion(context)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1984,7 +1996,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       ?estudios,
     ];
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: esWindows ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
         Wrap(
@@ -2003,7 +2015,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   backgroundColor: context.temaOscuro
-                      ? Colors.transparent
+                      ? (esWindows ? context.paleta.relleno : Colors.transparent)
                       : Color.lerp(AppColors.arena, AppColors.navy, 0.14),
                   foregroundColor: context.paleta.texto,
                   side: BorderSide(
@@ -2064,7 +2076,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   final idDoc = familiar['id_documento']?.toString() ?? '';
                   return ActionChip(
                     backgroundColor: context.paleta.relleno,
-                    avatar: const Icon(Icons.pets, size: 18, color: AppColors.navy),
+                    avatar: Icon(Icons.pets, size: 18, color: colorIconoSeccion(context)),
                     label: Text('$nombre ($relacion)', textScaler: _escala),
                     onPressed: idDoc.isEmpty
                         ? null
@@ -2672,47 +2684,61 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 700;
                 final mostrarCaja = galeria.isNotEmpty || _modoReordenar;
+                final panelScroll = SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+                  child: _buildInfoContenido(perro, esInvitado),
+                );
                 final panelInfo = Center(
                   child: Container(
                     margin: const EdgeInsets.all(20),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 450),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-                        child: _buildInfoContenido(perro, esInvitado),
-                      ),
+                      child: panelScroll,
                     ),
                   ),
                 );
+                final zonaFotos = mostrarCaja
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: _rotuloFotos(),
+                          ),
+                          Expanded(child: _buildGaleria(galeria, esInvitado, perro)),
+                        ],
+                      )
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: _zonaPrimeraFoto(),
+                          ),
+                        ),
+                      );
 
                 if (isWide) {
                   if (!mostrarCaja && esInvitado) return panelInfo;
+                  if (esWindows) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: panelScroll,
+                          ),
+                        ),
+                        Expanded(flex: 3, child: zonaFotos),
+                      ],
+                    );
+                  }
                   return Row(
                     children: [
                       panelInfo,
-                      Expanded(
-                        flex: 2,
-                        child: mostrarCaja
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                                    child: _rotuloFotos(),
-                                  ),
-                                  Expanded(child: _buildGaleria(galeria, esInvitado, perro)),
-                                ],
-                              )
-                            : Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 420),
-                                    child: _zonaPrimeraFoto(),
-                                  ),
-                                ),
-                              ),
-                      ),
+                      Expanded(flex: 2, child: zonaFotos),
                     ],
                   );
                 }
@@ -2894,7 +2920,7 @@ class _HojaDosisPeriodoState extends State<_HojaDosisPeriodo> {
         fondo = AppColors.dosisOlvidada;
         icono = Icons.close;
     }
-    final texto = esHoy ? AppColors.navy : context.paleta.texto;
+    final texto = esHoy ? colorIconoSeccion(context) : context.paleta.texto;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -2914,7 +2940,7 @@ class _HojaDosisPeriodoState extends State<_HojaDosisPeriodo> {
           decoration: BoxDecoration(
             color: fondo,
             shape: BoxShape.circle,
-            border: esHoy ? Border.all(color: AppColors.navy, width: 1.6) : null,
+            border: esHoy ? Border.all(color: colorIconoSeccion(context), width: 1.6) : null,
           ),
           child: icono == null ? null : Icon(icono, size: 10, color: Colors.white),
         ),

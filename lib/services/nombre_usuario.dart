@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../util/plataforma.dart';
 
 /// Nombre con el que la persona aparece en las fichas.
 ///
@@ -13,8 +14,7 @@ abstract final class NombreUsuario {
 
   static String _clave(String uid) => '$_prefijo$uid';
 
-  static bool get _perfilNativoInestable =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+  static bool get _perfilNativoInestable => esWindows;
 
   static Future<void> cargar(String uid) async {
     final prefs = await SharedPreferences.getInstance();

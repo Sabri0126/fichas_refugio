@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
+import '../util/plataforma.dart';
 
-TextTheme _buildTextTheme(PaletaApp paleta) {
+TextTheme _buildTextTheme(PaletaApp paleta, {required bool windows}) {
   final base = GoogleFonts.nunitoTextTheme().apply(
     bodyColor: paleta.texto,
     displayColor: paleta.texto,
@@ -14,12 +15,16 @@ TextTheme _buildTextTheme(PaletaApp paleta) {
     titleLarge: base.titleLarge?.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
     titleMedium: base.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w700),
     bodyMedium: base.bodyMedium?.copyWith(fontSize: 15, height: 1.4),
-    labelMedium: base.labelMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+    bodySmall: windows ? base.bodySmall?.copyWith(fontSize: 13) : base.bodySmall,
+    labelMedium: base.labelMedium?.copyWith(fontSize: windows ? 13 : 12, fontWeight: FontWeight.w600),
   );
 }
 
 ThemeData buildAppTheme({bool oscuro = false}) {
-  final paleta = oscuro ? PaletaApp.oscura : PaletaApp.clara;
+  final basePaleta = oscuro ? PaletaApp.oscura : PaletaApp.clara;
+  final paleta = !oscuro && esWindows
+      ? basePaleta.copyWith(textoSuave: const Color(0xFF4E4840))
+      : basePaleta;
   final colorScheme = ColorScheme.fromSeed(
     seedColor: AppColors.navy,
     brightness: oscuro ? Brightness.dark : Brightness.light,
@@ -32,7 +37,7 @@ ThemeData buildAppTheme({bool oscuro = false}) {
     error: AppColors.error,
   );
 
-  final textTheme = _buildTextTheme(paleta);
+  final textTheme = _buildTextTheme(paleta, windows: esWindows);
 
   OutlineInputBorder bordeInput(Color color, [double ancho = 1]) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),

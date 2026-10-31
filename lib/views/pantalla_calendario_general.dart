@@ -13,6 +13,7 @@ import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+import '../util/plataforma.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
@@ -779,9 +780,9 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
             children: [
               for (final clave in claves)
                 Container(
-                  width: 6,
-                  height: 6,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  width: esWindows ? 9 : 6,
+                  height: esWindows ? 9 : 6,
+                  margin: EdgeInsets.symmetric(horizontal: esWindows ? 1.5 : 1),
                   decoration: BoxDecoration(
                     color: CalendarioGeneralController.colorMarcador(clave),
                     shape: BoxShape.circle,

@@ -13,6 +13,7 @@ import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/tema_app.dart';
+import '../util/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
 import 'pantalla_calendario_general.dart';
 import 'pantalla_login.dart';
@@ -201,7 +202,8 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                     final cuidado = activos.length == 1
                                         ? '1 perrito a nuestro cuidado'
                                         : '${activos.length} perritos a nuestro cuidado';
-                                    return Column(
+                                    return AnchoVentana(
+                                      child: Column(
                                       children: [
                                         if (datos != null)
                                           Text(
@@ -315,6 +317,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                           ),
                                         ),
                                       ],
+                                      ),
                                     );
                                   },
                                 ),
@@ -350,8 +353,9 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   ),
                 ),
                 Positioned(
-                  top: 12,
-                  left: 8,
+                  top: esWindows ? 64 : 12,
+                  left: esWindows ? null : 8,
+                  right: esWindows ? 8 : null,
                   child: IconButton(
                     tooltip: 'Cerrar sesión',
                     onPressed: () async {
@@ -393,7 +397,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                 if (!esInvitado)
                   Positioned(
                     top: 16,
-                    left: 60,
+                    left: esWindows ? 16 : 60,
                     right: 120,
                     child: Align(
                       alignment: Alignment.centerLeft,
@@ -534,7 +538,7 @@ class BotonMenu extends StatelessWidget {
                       detalle!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 13,
+                        fontSize: esWindows ? 15 : 13,
                       ),
                     ),
                 ],

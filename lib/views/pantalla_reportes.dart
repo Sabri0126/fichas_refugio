@@ -4,6 +4,7 @@ import '../controllers/perro_controller.dart';
 import '../controllers/reportes_controller.dart';
 import '../models/perro_model.dart';
 import '../theme/app_colors.dart';
+import '../util/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
 import '../widgets/grafico_poblacion.dart';
 import 'ficha_detalle_perro.dart';
@@ -65,7 +66,8 @@ class _PantallaReportesState extends State<PantallaReportes> {
           }
           final hoy = DateTime.now();
           final reporte = ReportesController.calcular(snapshot.data!, hoy: hoy, mes: _mes);
-          return ListView(
+          return AnchoVentana(
+            child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
               Text(
@@ -143,6 +145,7 @@ class _PantallaReportesState extends State<PantallaReportes> {
                 ),
               ),
             ],
+            ),
           );
         },
       ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../controllers/peso_controller.dart';
 import '../models/peso_model.dart';
 import '../theme/app_colors.dart';
+import '../util/plataforma.dart';
 
 /// Evolución del peso. Los puntos estimados se dibujan huecos.
 class GraficoPeso extends StatelessWidget {
@@ -33,8 +34,10 @@ class GraficoPeso extends StatelessWidget {
     final minY = (minKg - margen).clamp(0.0, minKg);
     final maxY = maxKg + margen;
     final etiquetasY = _etiquetasY(minY, maxY);
+    final etiquetasEje = esWindows ? _espaciarEtiquetas(etiquetasY, minY, maxY) : etiquetasY;
     final intervaloY = etiquetasY.length < 2 ? (maxY - minY).clamp(0.5, 80.0) : (maxY - minY) / (etiquetasY.length - 1);
-    final anchoEjeY = _anchoEjeY(etiquetasY);
+    final ticksEje = esWindows ? _ticksGanadores(etiquetasEje, minY, maxY, intervaloY) : const <double>[];
+    final anchoEjeY = _anchoEjeY(etiquetasEje);
     final cruzaAnio = ordenados.first.fecha.year != ordenados.last.fecha.year;
     final colorLinea = paleta.lienzo;
     final hayEstimado = ordenados.any((peso) => peso.estimado);
@@ -72,6 +75,18 @@ class GraficoPeso extends StatelessWidget {
                         reservedSize: anchoEjeY,
                         interval: intervaloY,
                         getTitlesWidget: (valor, _) {
+                          if (esWindows) {
+                            final margen = (intervaloY * 0.08).clamp(0.001, 0.05);
+                            final gana = ticksEje.any((tick) => (tick - valor).abs() <= margen);
+                            if (!gana) return const SizedBox.shrink();
+                            final texto = _textoSiCabe(valor, etiquetasEje, minY, maxY) ?? formatearKg(valor);
+                            return Text(
+                              texto,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: estiloEje,
+                            );
+                          }
                           if (!_cercaDeEtiqueta(valor, etiquetasY, intervaloY)) {
                             return const SizedBox.shrink();
                           }
@@ -186,6 +201,88 @@ class GraficoPeso extends StatelessWidget {
       valores.add(valor);
     }
     return valores;
+  }
+
+  /// Un solo tick por etiqueta, para que dos valores cercanos no se dibujen juntos.
+  List<double> _ticksGanadores(List<double> etiquetas, double minY, double maxY, double intervalo) {
+    if (etiquetas.isEmpty || intervalo <= 0) return etiquetas;
+    final candidatos = <double>[minY, maxY];
+    var tick = (minY / intervalo).floor() * intervalo;
+    if (tick < minY - intervalo * 0.01) tick += intervalo;
+    for (var i = 0; i < 24 && tick <= maxY + intervalo * 0.01; i++) {
+      if (tick >= minY - 0.0001) candidatos.add(tick);
+      tick += intervalo;
+    }
+    final span = (maxY - minY).abs();
+    final altoPlot = _alto - _altoEjeX;
+    final ganadores = <double>[];
+    final usados = <int>{};
+    for (final etiqueta in etiquetas) {
+      var mejor = -1;
+      var distancia = double.infinity;
+      for (var i = 0; i < candidatos.length; i++) {
+        if (usados.contains(i)) continue;
+        final d = (candidatos[i] - etiqueta).abs();
+        if (d < distancia) {
+          distancia = d;
+          mejor = i;
+        }
+      }
+      if (mejor < 0 || span <= 0 || altoPlot <= 0) continue;
+      final px = distancia / span * altoPlot;
+      if (px > 14) continue;
+      usados.add(mejor);
+      ganadores.add(candidatos[mejor]);
+    }
+    return ganadores;
+  }
+
+  /// En Windows deja al menos 28 px entre rótulos para que no se pisen.
+  List<double> _espaciarEtiquetas(List<double> valores, double minY, double maxY) {
+    const minPx = 28.0;
+    final span = maxY - minY;
+    final altoPlot = _alto - _altoEjeX;
+    if (valores.length < 2 || span <= 0 || altoPlot <= 0) return valores;
+    bool cabe(double a, double b) => (a - b).abs() / span * altoPlot >= minPx;
+    final elegidos = <double>[valores.first];
+    for (var i = 1; i < valores.length - 1; i++) {
+      if (cabe(valores[i], elegidos.last)) elegidos.add(valores[i]);
+    }
+    final ultimo = valores.last;
+    if (cabe(ultimo, elegidos.last)) {
+      elegidos.add(ultimo);
+    } else if (elegidos.length == 1) {
+      elegidos[0] = ultimo;
+    } else {
+      elegidos.removeLast();
+      if (elegidos.isEmpty || cabe(ultimo, elegidos.last)) {
+        elegidos.add(ultimo);
+      } else {
+        elegidos[elegidos.length - 1] = ultimo;
+      }
+    }
+    return elegidos;
+  }
+
+  /// Solo el tick pegado a una etiqueta ya espaciada. El texto es el de esa etiqueta.
+  String? _textoSiCabe(double valor, List<double> etiquetas, double minY, double maxY) {
+    if (etiquetas.isEmpty) return null;
+    final span = (maxY - minY).abs();
+    final altoPlot = _alto - _altoEjeX;
+    if (span <= 0 || altoPlot <= 0) return null;
+    double? mejor;
+    var distancia = double.infinity;
+    for (final etiqueta in etiquetas) {
+      final d = (valor - etiqueta).abs();
+      if (d < distancia) {
+        distancia = d;
+        mejor = etiqueta;
+      }
+    }
+    if (mejor == null) return null;
+    final px = distancia / span * altoPlot;
+    if (px > 12) return null;
+    return formatearKg(mejor);
   }
 
   bool _cercaDeEtiqueta(double valor, List<double> etiquetas, double intervalo) {

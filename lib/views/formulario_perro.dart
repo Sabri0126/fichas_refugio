@@ -23,6 +23,7 @@ import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
+import '../util/plataforma.dart';
 import '../theme/category_colors.dart';
 import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
@@ -769,7 +770,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
               Row(
                 children: [
                   if (icono != null) ...[
-                    Icon(icono, size: 22, color: AppColors.navy),
+                    Icon(icono, size: 22, color: colorIconoSeccion(context)),
                     const SizedBox(width: 8),
                   ],
                   Expanded(
@@ -816,7 +817,33 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
+  Widget _presentarSeccion(Widget child) {
+    if (!esWindows) return child;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: child,
+      ),
+    );
+  }
+
   Widget _tituloSeccion(String titulo, int cantidad, {IconData icono = Icons.medical_services_outlined}) {
+    if (esWindows) {
+      return Row(
+        children: [
+          Icon(icono, size: 22, color: colorIconoSeccion(context)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(titulo, style: Theme.of(context).textTheme.titleLarge),
+          ),
+          Text(
+            '$cantidad',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.textoSuave),
+          ),
+        ],
+      );
+    }
     return EncabezadoSeccion(
       titulo: titulo,
       icono: icono,
@@ -1220,7 +1247,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final visibles = [..._pesos]..sort((a, b) => b.fecha.compareTo(a.fecha));
     final textTheme = Theme.of(context).textTheme;
 
-    return Column(
+    return _presentarSeccion(
+      Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _tituloSeccion('Peso', visibles.length, icono: Icons.monitor_weight_outlined),
@@ -1247,6 +1275,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ),
         ],
       ],
+      ),
     );
   }
 
@@ -1298,6 +1327,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                 color: context.paleta.textoSuave,
                 onPressed: () => _mostrarDialogoPeso(actual: peso),
               ),
+              if (esWindows) const SizedBox(width: 12),
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 20),
                 tooltip: 'Eliminar',
@@ -1353,7 +1383,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final cerrados = _seguimientoController.cerrados(_seguimientos);
     final textTheme = Theme.of(context).textTheme;
 
-    return Column(
+    return _presentarSeccion(
+      Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _tituloSeccion('Seguimientos', vigentes.length, icono: Icons.visibility_outlined),
@@ -1415,6 +1446,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ),
         ],
       ],
+      ),
     );
   }
 
@@ -1521,7 +1553,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final vencidos = _recordatorioController.vencidos(_recordatorios);
     final textTheme = Theme.of(context).textTheme;
 
-    return Column(
+    return _presentarSeccion(
+      Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _tituloSeccion('Recordatorios', proximos.length, icono: Icons.alarm_rounded),
@@ -1596,6 +1629,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
             ),
         ],
       ],
+      ),
     );
   }
 
@@ -1856,8 +1890,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-              child: Column(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, esWindows ? 56 : 40),
+              child: AnchoVentana(
+                child: Column(
                 children: [
                   // --- SECCIÓN: Foto de perfil ---
                   Center(
@@ -2295,6 +2330,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
                   _seccionRecordatorios(),
                   const SizedBox(height: 32),
                   // --- SECCIÓN 1: Tratamientos Diarios (solo categoría diario) ---
+                  _presentarSeccion(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   Align(
                     alignment: Alignment.centerLeft,
                     child: _tituloSeccion(
@@ -2401,8 +2440,15 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       );
                     },
                   ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   // --- SECCIÓN 2: Eventos y Visitas (categoría != diario) ---
+                  _presentarSeccion(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   Align(
                     alignment: Alignment.centerLeft,
                     child: _tituloSeccion(
@@ -2449,6 +2495,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
                       );
                     },
                   ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Ubicación (en casa / refugio) ---
                   Card(
@@ -2456,7 +2505,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     clipBehavior: Clip.antiAlias,
                     child: CheckboxListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      secondary: const Icon(Icons.home_outlined, color: AppColors.navy),
+                      secondary: Icon(Icons.home_outlined, color: colorIconoSeccion(context)),
                       title: const Text('Este perrito/a está en casa'),
                       value: _enCasa,
                       onChanged: (valor) =>
@@ -2464,17 +2513,32 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     ),
                   ),
                   if (widget.idDocumento != null) ...[
-                    const SizedBox(height: 24),
-                    TextButton.icon(
-                      onPressed: _confirmarEliminarFicha,
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Eliminar ficha'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.error,
+                    SizedBox(height: esWindows ? 48 : 24),
+                    if (esWindows)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _confirmarEliminarFicha,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Eliminar ficha'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                          ),
+                        ),
+                      )
+                    else
+                      TextButton.icon(
+                        onPressed: _confirmarEliminarFicha,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Eliminar ficha'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                        ),
                       ),
-                    ),
                   ],
                 ],
+                ),
               ),
             ),
           ),
@@ -2536,6 +2600,33 @@ class SelectorEstadoPerro extends StatelessWidget {
     return SegmentedButton<String>(
       expandedInsets: EdgeInsets.zero,
       showSelectedIcon: false,
+      style: esWindows
+          ? ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((estados) {
+                if (estados.contains(WidgetState.selected)) {
+                  return AppColors.terracota.withValues(alpha: 0.16);
+                }
+                return context.paleta.superficie;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith((estados) {
+                if (estados.contains(WidgetState.selected)) return AppColors.terracota;
+                return context.paleta.texto;
+              }),
+              side: WidgetStateProperty.resolveWith((estados) {
+                if (estados.contains(WidgetState.selected)) {
+                  return const BorderSide(color: AppColors.terracota, width: 1.6);
+                }
+                return BorderSide(color: context.paleta.borde);
+              }),
+              textStyle: WidgetStateProperty.resolveWith((estados) {
+                final base = Theme.of(context).textTheme.labelLarge;
+                if (estados.contains(WidgetState.selected)) {
+                  return base?.copyWith(fontWeight: FontWeight.w800);
+                }
+                return base;
+              }),
+            )
+          : null,
       segments: const [
         ButtonSegment(value: 'activo', label: Text('Activo', overflow: TextOverflow.ellipsis)),
         ButtonSegment(value: 'inactivo', label: Text('Fallecido', overflow: TextOverflow.ellipsis)),

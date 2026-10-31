@@ -11,6 +11,7 @@ import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
+import '../util/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 
@@ -169,6 +170,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
   }
 
   String _detalleLista(PerroModel perro) {
+    if (_sinEdadUtil(perro)) return '';
     final edad = PerroController.formatearEdadTexto(perro);
     if (edad.startsWith('Edad: ') || edad.startsWith('Edad estimada: ')) {
       return edad;
@@ -225,6 +227,13 @@ class _PantallaPerrosState extends State<PantallaPerros> {
     return false;
   }
 
+  bool _sinEdadUtil(PerroModel perro) =>
+      esWindows &&
+      widget.seccion == SeccionPerros.difuntos &&
+      !perro.edadIndeterminada &&
+      perro.edad == 0 &&
+      perro.meses == 0;
+
   String _edadCorta(PerroModel perro) {
     final texto = PerroController.formatearEdadTexto(perro);
     return texto
@@ -234,6 +243,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
 
   String _datoDistintivo(PerroModel perro) {
     final sexo = perro.sexo == 'hembra' ? 'Hembra' : 'Macho';
+    if (_sinEdadUtil(perro)) return sexo;
     return '$sexo · ${_edadCorta(perro)}';
   }
 
@@ -324,10 +334,11 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                     perro.sexo == 'hembra' ? 'Sexo: Hembra' : 'Sexo: Macho',
                                     style: estiloDato,
                                   ),
-                                  Text(
-                                    PerroController.formatearEdadTexto(perro),
-                                    style: estiloDato,
-                                  ),
+                                  if (!_sinEdadUtil(perro))
+                                    Text(
+                                      PerroController.formatearEdadTexto(perro),
+                                      style: estiloDato,
+                                    ),
                                   Text(
                                     PerroController.formatearCastracion(perro),
                                     style: estiloDato,
@@ -579,10 +590,11 @@ class _PantallaPerrosState extends State<PantallaPerros> {
                                       style: Theme.of(context).textTheme.titleMedium,
                                     ),
                                     const SizedBox(height: 2),
-                                    Text(
-                                      _detalleLista(perro),
-                                      style: Theme.of(context).textTheme.bodyMedium,
-                                    ),
+                                    if (_detalleLista(perro).isNotEmpty)
+                                      Text(
+                                        _detalleLista(perro),
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
                                     if (widget.seccion == SeccionPerros.egresados && _lineaMotivo(perro) != null)
                                       Text(
                                         _lineaMotivo(perro)!,
@@ -989,7 +1001,9 @@ class _PantallaPerrosState extends State<PantallaPerros> {
         ],
       ),
       // --- SECCIÓN: Botón flotante para dar de alta un nuevo perro ---
-      floatingActionButton: esInvitado
+      floatingActionButton: esInvitado ||
+              (esWindows &&
+                  (widget.seccion == SeccionPerros.difuntos || widget.seccion == SeccionPerros.egresados))
           ? null
           : FloatingActionButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FormularioPerro())),
