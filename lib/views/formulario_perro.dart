@@ -850,7 +850,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         margin: const EdgeInsets.only(bottom: 12),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: pausado ? null : () => _mostrarDialogoEditarTratamiento(i),
+          onTap: () => _mostrarDialogoEditarTratamiento(i),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
             child: Column(
@@ -908,6 +908,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
                             onPressed: () => _alternarPausaTratamiento(i),
                           ),
                           const SizedBox(width: 4),
+                          IconButton.outlined(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Editar',
+                            onPressed: () =>
+                                _mostrarDialogoEditarTratamiento(i),
+                          ),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_forever,
@@ -1596,16 +1602,20 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   Future<void> _mostrarDialogoEditarTratamiento(int indice) async {
+    final original = _tratamientos[indice];
     final actualizado = await mostrarDialogoEditarTratamiento(
       context,
       controller: _tratamientoController,
-      actual: _tratamientos[indice],
+      actual: original,
     );
     if (!mounted || actualizado == null) return;
     final silenciados = await MensajeriaService.leerSilenciados();
     if (!mounted) return;
     setState(() {
-      _tratamientos[indice] = actualizado;
+      _tratamientos[indice] = TratamientoController.resolverActivoTrasEditar(
+        original,
+        actualizado,
+      );
       _silenciados = silenciados;
       _hayCambios = true;
     });

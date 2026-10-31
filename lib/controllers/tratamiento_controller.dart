@@ -152,6 +152,31 @@ class TratamientoController {
     );
   }
 
+  /// Decide si un diario pausado vuelve a estar activo después de editarlo.
+  /// Solo se reactiva cuando antes estaba [FaseTratamiento.finalizado] y la
+  /// edición lo saca de esa fase (más días, otra fecha de inicio o indefinido).
+  /// Una pausa hecha a mano, o un tratamiento que sigue terminado, queda pausado.
+  /// Un diario que ya estaba activo, y cualquier evento puntual, se devuelven igual.
+  ///
+  /// @param original el tratamiento antes de la edición.
+  /// @param editado el tratamiento con los campos ya editados.
+  /// @param hoy fecha de referencia para la fase. Por defecto, la fecha actual.
+  /// @return [editado] con `activo` según la regla anterior.
+  static TratamientoModel resolverActivoTrasEditar(
+    TratamientoModel original,
+    TratamientoModel editado, {
+    DateTime? hoy,
+  }) {
+    if (original.categoria != 'diario' || original.activo) return editado;
+
+    final antes = calcularEstadoDuracion(original, hoy: hoy).fase;
+    final despues = calcularEstadoDuracion(editado, hoy: hoy).fase;
+    final reactivar =
+        antes == FaseTratamiento.finalizado && despues != FaseTratamiento.finalizado;
+    if (editado.activo == reactivar) return editado;
+    return editado.copyWith(activo: reactivar);
+  }
+
   /// Pausa o reanuda un tratamiento diario. Solo altera [TratamientoModel.activo];
   /// categoría, fechas y recordatorios se conservan intactos.
   /// No aplica a eventos puntuales (`categoria != 'diario'`): se devuelve igual.
