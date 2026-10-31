@@ -21,6 +21,7 @@ TratamientoModel diario({
   String indicaciones = '1 comprimido',
   DateTime? inicio,
   int dias = 10,
+  String? tipo,
   bool activo = true,
   List<String> dosis = const [],
   String? hora,
@@ -32,6 +33,7 @@ TratamientoModel diario({
     indicaciones: indicaciones,
     fechaInicio: inicio ?? DateTime(2026, 6, 10),
     diasDuracion: dias,
+    tipoDuracion: tipo,
     activo: activo,
     registroDosis: dosis,
     horaRecordatorio: hora,
@@ -185,6 +187,13 @@ void main() {
       id: 'vida',
       medicacion: 'Fenobarbital',
       dias: 0,
+      tipo: TratamientoModel.tipoDePorVida,
+      dosis: [iso(ayer)],
+    );
+    final hastaAviso = diario(
+      id: 'aviso',
+      medicacion: 'Actrin',
+      dias: 0,
       dosis: [iso(ayer)],
     );
     final deTreinta = diario(
@@ -198,7 +207,9 @@ void main() {
     final juntos = [perro(tratamientos: [dePorVida, deTreinta])];
 
     expect(resumen(soloVida, ayer).dadas.single.titulo, 'Fenobarbital');
+    expect(resumen(soloVida, ayer).dadas.single.pintaPunto, isFalse);
     expect(marcadores(soloVida, ayer), isEmpty);
+    expect(marcadores([perro(tratamientos: [hastaAviso])], ayer), ['diario']);
     expect(marcadores([perro(tratamientos: [diario(dias: 0)])], hoy), ['pendiente']);
 
     final dia = resumen(juntos, ayer);

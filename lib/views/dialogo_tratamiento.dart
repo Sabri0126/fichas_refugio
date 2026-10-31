@@ -133,6 +133,8 @@ Future<TratamientoModel?> mostrarDialogoEditarTratamiento(
   BuildContext context, {
   required TratamientoController controller,
   required TratamientoModel actual,
+  String? titulo,
+  bool preguntarCambioDosis = true,
 }) {
   return showDialog<TratamientoModel>(
     context: context,
@@ -140,6 +142,8 @@ Future<TratamientoModel?> mostrarDialogoEditarTratamiento(
       controller: controller,
       categoria: actual.categoria,
       actual: actual,
+      titulo: titulo,
+      preguntarCambioDosis: preguntarCambioDosis,
     ),
   );
 }
@@ -149,12 +153,16 @@ class _DialogoTratamiento extends StatefulWidget {
   final String categoria;
   final TratamientoModel? actual;
   final DateTime? fechaInicial;
+  final String? titulo;
+  final bool preguntarCambioDosis;
 
   const _DialogoTratamiento({
     required this.controller,
     required this.categoria,
     this.actual,
     this.fechaInicial,
+    this.titulo,
+    this.preguntarCambioDosis = true,
   });
 
   @override
@@ -170,6 +178,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   late final TextEditingController _dias;
   late DateTime _fecha;
   late TimeOfDay _hora;
+  late String _tipo;
+  DateTime? _fechaSuspension;
   var _cerrando = false;
   var _alcance = _AlcanceAviso.todos;
   var _avisoListo = true;
@@ -191,8 +201,18 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     _notas = TextEditingController(text: actual?.notas ?? '');
     _veterinario = TextEditingController(text: actual?.veterinario ?? '');
     _diagnostico = TextEditingController(text: actual?.diagnostico ?? '');
-    _dias = TextEditingController(text: (actual?.diasDuracion ?? 0).toString());
+    _tipo = actual?.tipoDuracion ?? TratamientoModel.tipoHastaAviso;
+    final diasIniciales = actual?.diasDuracion ?? 0;
+    _dias = TextEditingController(text: diasIniciales > 0 ? diasIniciales.toString() : '');
     _fecha = actual?.fechaInicio ?? widget.fechaInicial ?? DateTime.now();
+    if (actual != null && !actual.activo && actual.categoria == 'diario') {
+      final etiqueta = TratamientoController.etiquetaEstado(actual);
+      if (actual.fechaSuspension != null || etiqueta != 'Finalizado') {
+        _fechaSuspension = actual.fechaSuspension ??
+            TratamientoController.periodoEfectivo(actual)?.fin ??
+            DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      }
+    }
     final partes = (actual?.horaRecordatorio ?? '09:00').split(':');
     _hora = TimeOfDay(
       hour: int.tryParse(partes.isNotEmpty ? partes[0] : '') ?? 9,
@@ -244,6 +264,16 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final diagnostico = esVisita ? _diagnostico.text.trim() : (widget.actual?.diagnostico ?? '');
     final actual = widget.actual;
     final avisa = _alcance != _AlcanceAviso.nadie;
+    final dias = _esDiario && _tipo == TratamientoModel.tipoDias
+        ? (int.tryParse(_dias.text.trim()) ?? 0)
+        : 0;
+    if (_esDiario && _tipo == TratamientoModel.tipoDias && dias < 1) {
+      _cerrando = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Indicá cuántos días dura')),
+      );
+      return;
+    }
     var modelo = actual == null
         ? widget.controller.crearTratamiento(
             categoria: widget.categoria,
@@ -253,9 +283,10 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             veterinario: veterinario,
             diagnostico: diagnostico,
             fechaInicio: _fecha,
-            diasDuracion: int.tryParse(_dias.text.trim()) ?? 0,
+            diasDuracion: dias,
             horaRecordatorio: hora,
             notificar: _esDiario ? avisa : true,
+            tipoDuracion: _tipo,
           )
         : widget.controller.editarTratamiento(
             actual,
@@ -264,11 +295,47 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             notas: notas,
             veterinario: veterinario,
             diagnostico: diagnostico,
-            diasDuracion: _esDiario ? (int.tryParse(_dias.text.trim()) ?? 0) : actual.diasDuracion,
+            diasDuracion: _esDiario ? dias : actual.diasDuracion,
             fechaInicio: _fecha,
             horaRecordatorio: _esDiario ? hora : (actual.horaRecordatorio ?? hora),
             notificar: _esDiario ? avisa : null,
+            tipoDuracion: _esDiario ? _tipo : null,
+            fechaSuspension: _fechaSuspension,
           );
+    if (_esDiario && actual != null && widget.preguntarCambioDosis) {
+      final nueva = _indicaciones.text.trim();
+      if (nueva != actual.indicaciones.trim()) {
+        final eleccion = await _preguntarCambioOCorreccion();
+        if (!mounted) return;
+        if (eleccion == null) {
+          _cerrando = false;
+          return;
+        }
+        final base = modelo.copyWith(
+          indicaciones: actual.indicaciones,
+          cambiosDosis: actual.cambiosDosis,
+        );
+        if (eleccion == 'cambio') {
+          final hoy = DateTime.now();
+          final hoyFecha = DateTime(hoy.year, hoy.month, hoy.day);
+          final comienzo = DateTime(_fecha.year, _fecha.month, _fecha.day);
+          final desde = await showDatePicker(
+            context: context,
+            initialDate: hoyFecha.isBefore(comienzo) ? comienzo : hoyFecha,
+            firstDate: comienzo,
+            lastDate: hoyFecha.isBefore(comienzo) ? comienzo : hoyFecha,
+            helpText: 'Desde cuándo rige la dosis nueva',
+          );
+          if (!mounted || desde == null) {
+            _cerrando = false;
+            return;
+          }
+          modelo = TratamientoController.cambiarDosis(base, nueva, desde: desde);
+        } else {
+          modelo = TratamientoController.corregirTextoDosis(base, nueva);
+        }
+      }
+    }
     if (_esDiario && actual != null) {
       final fuera = TratamientoController.dosisFueraDePeriodo(modelo);
       if (fuera.isNotEmpty) {
@@ -297,6 +364,26 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     }
     if (!mounted) return;
     Navigator.pop(context, modelo);
+  }
+
+  Future<String?> _preguntarCambioOCorreccion() {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cambió la dosis'),
+        content: const Text('¿Es un cambio de dosis o una corrección del texto?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'correccion'),
+            child: const Text('Corrección'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'cambio'),
+            child: const Text('Cambio de dosis'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool?> _ofrecerBorrarDosisFuera(int cantidad) {
@@ -352,7 +439,9 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final rotuloNotas = _rotuloNotas;
 
     return AlertDialog(
-      title: Text(actual == null ? _tituloAlta(widget.categoria) : 'Editar tratamiento'),
+      title: Text(
+        widget.titulo ?? (actual == null ? _tituloAlta(widget.categoria) : 'Editar tratamiento'),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -401,17 +490,44 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             ],
             if (_esDiario) ...[
               const SizedBox(height: 16),
-              TextField(
-                controller: _dias,
-                scrollPadding: EdgeInsets.zero,
-                keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: 'Días de duración (0 = indefinido)',
-                  helperText: _helperDias(_dias.text, _fecha),
-                  helperMaxLines: 2,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Duración', style: Theme.of(context).textTheme.titleSmall),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: TratamientoModel.tipoDias, label: Text('Días fijos')),
+                    ButtonSegment(value: TratamientoModel.tipoHastaAviso, label: Text('Hasta nuevo aviso')),
+                    ButtonSegment(value: TratamientoModel.tipoDePorVida, label: Text('De por vida')),
+                  ],
+                  selected: {_tipo},
+                  onSelectionChanged: (elegido) => setState(() => _tipo = elegido.first),
                 ),
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _ayudaDuracion(_tipo, _dias.text, _fecha),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              if (_tipo == TratamientoModel.tipoDias) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _dias,
+                  scrollPadding: EdgeInsets.zero,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Cantidad de días',
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 16),
             ListTile(
@@ -429,6 +545,29 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
                 setState(() => _fecha = seleccionada);
               },
             ),
+            if (_fechaSuspension != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Suspendido el: ${_fechaTexto(_fechaSuspension!)}'),
+                trailing: const Icon(Icons.event_busy_outlined),
+                onTap: () async {
+                  final hoy = DateTime.now();
+                  final hoyFecha = DateTime(hoy.year, hoy.month, hoy.day);
+                  final comienzo = DateTime(_fecha.year, _fecha.month, _fecha.day);
+                  final actual = _fechaSuspension!;
+                  final inicial = actual.isBefore(comienzo)
+                      ? comienzo
+                      : (actual.isAfter(hoyFecha) ? hoyFecha : actual);
+                  final seleccionada = await showDatePicker(
+                    context: context,
+                    initialDate: inicial,
+                    firstDate: comienzo,
+                    lastDate: hoyFecha.isBefore(comienzo) ? comienzo : hoyFecha,
+                  );
+                  if (seleccionada == null) return;
+                  setState(() => _fechaSuspension = seleccionada);
+                },
+              ),
             if (_esDiario)
               InkWell(
                 onTap: () async {
@@ -516,11 +655,22 @@ String _rotuloFecha(String categoria) => switch (categoria) {
       _ => 'Fecha de inicio',
     };
 
-String _helperDias(String texto, DateTime inicio) {
-  final dias = int.tryParse(texto.trim()) ?? 0;
-  if (dias <= 0) return 'Sin fecha de fin.';
-  final ultimo = DateTime(inicio.year, inicio.month, inicio.day + dias - 1);
-  final dia = ultimo.day.toString().padLeft(2, '0');
-  final mes = ultimo.month.toString().padLeft(2, '0');
-  return 'El día de inicio cuenta como día 1. Último día de medicación: $dia/$mes/${ultimo.year}';
+String _fechaTexto(DateTime fecha) {
+  final dia = fecha.day.toString().padLeft(2, '0');
+  final mes = fecha.month.toString().padLeft(2, '0');
+  return '$dia/$mes/${fecha.year}';
+}
+
+String _ayudaDuracion(String tipo, String texto, DateTime inicio) {
+  switch (tipo) {
+    case TratamientoModel.tipoDePorVida:
+      return 'Medicación crónica. No se cuentan dosis; podés registrar cambios de dosis.';
+    case TratamientoModel.tipoHastaAviso:
+      return 'Sigue hasta que lo suspendas. Las dosis se cuentan.';
+    default:
+      final dias = int.tryParse(texto.trim()) ?? 0;
+      if (dias <= 0) return 'El día de inicio cuenta como día 1.';
+      final ultimo = DateTime(inicio.year, inicio.month, inicio.day + dias - 1);
+      return 'El día de inicio cuenta como día 1. Último día: ${_fechaTexto(ultimo)}.';
+  }
 }

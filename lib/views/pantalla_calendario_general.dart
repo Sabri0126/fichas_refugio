@@ -446,7 +446,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
         desde.month == entrada.fecha.month &&
         desde.day == entrada.fecha.day;
     final rango = desde == null || mismoDia ? fin : '${_fechaCorta(desde)} – $fin';
-    if (entrada.categoria != 'diario') return '$nombre · $rango';
+    if (entrada.categoria != 'diario' || !entrada.cuentaDosis) return '$nombre · $rango';
     if (entrada.cantidadDosis <= 0) return '$nombre · $rango · sin dosis registradas';
     final dosis = entrada.cantidadDosis == 1 ? '1 dosis' : '${entrada.cantidadDosis} dosis';
     return '$nombre · $rango · $dosis';

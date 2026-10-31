@@ -11,6 +11,7 @@ import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
+import '../controllers/tratamiento_controller.dart';
 import '../models/tratamiento_model.dart';
 
 /// Arma el PDF de una ficha y lo abre en la hoja de compartir.
@@ -343,15 +344,36 @@ abstract final class ExportarFicha {
     );
   }
 
+  static String _lineaCambio(TramoDosis tramo) {
+    final desde = tramo.desde == null ? '' : _fecha(tramo.desde);
+    if (tramo.hasta == null) {
+      return desde.isEmpty ? tramo.indicaciones : '${tramo.indicaciones} · desde $desde';
+    }
+    return '${tramo.indicaciones} · $desde – ${_fecha(tramo.hasta)}';
+  }
+
   static pw.Widget _tarjetaTratamiento(TratamientoModel tratamiento) {
     final nombre = tratamiento.medicacion.trim().isEmpty ? 'Sin nombre' : tratamiento.medicacion.trim();
     final indicaciones = tratamiento.indicaciones.trim();
     final notas = tratamiento.notas.trim();
+    final periodo = tratamiento.categoria == 'diario'
+        ? TratamientoController.periodoEfectivo(tratamiento)
+        : null;
+    final rango = periodo == null
+        ? ''
+        : periodo.fin == null
+            ? 'Desde ${_fecha(periodo.inicio)}'
+            : '${_fecha(periodo.inicio)} – ${_fecha(periodo.fin)}';
+    final cantidad = TratamientoController.contarDosisEnPeriodo(tratamiento);
     final detalle = <String>[
       _categoria(tratamiento.categoria),
-      if (tratamiento.fechaInicio != null) 'Desde ${_fecha(tratamiento.fechaInicio)}',
-      if (tratamiento.categoria == 'diario' && tratamiento.diasDuracion > 0) '${tratamiento.diasDuracion} días',
-      if (tratamiento.categoria == 'diario') (tratamiento.activo ? 'Activo' : 'Pausado'),
+      if (tratamiento.categoria == 'diario') TratamientoController.etiquetaDuracion(tratamiento),
+      if (rango.isNotEmpty) rango,
+      if (tratamiento.categoria == 'diario' && tratamiento.cuentaDosis)
+        (cantidad == 1 ? '1 dosis' : '$cantidad dosis'),
+      if (tratamiento.categoria == 'diario') TratamientoController.etiquetaEstado(tratamiento),
+      if (tratamiento.categoria != 'diario' && tratamiento.fechaInicio != null)
+        'Desde ${_fecha(tratamiento.fechaInicio)}',
     ];
     return pw.Container(
       width: double.infinity,
@@ -376,6 +398,15 @@ abstract final class ExportarFicha {
             pw.SizedBox(height: 3),
             pw.Text(notas, style: const pw.TextStyle(fontSize: 11, color: _texto, lineSpacing: 2)),
           ],
+          if (tratamiento.cambiosDosis.isNotEmpty)
+            for (final tramo in TratamientoController.tramosDosis(tratamiento))
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 2),
+                child: pw.Text(
+                  _lineaCambio(tramo),
+                  style: const pw.TextStyle(fontSize: 10, color: _texto, lineSpacing: 2),
+                ),
+              ),
         ],
       ),
     );

@@ -36,7 +36,9 @@ import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import '../widgets/grafico_peso.dart';
 import 'dialogo_peso.dart';
+import 'dialogo_tratamiento.dart';
 import 'formulario_perro.dart';
+import 'hojas_tratamiento.dart';
 import 'pantalla_tarjeta_perro.dart';
 
 /// Texto que se lee al abrir la foto. Vacío y «Sin descripción» no se muestran.
@@ -152,6 +154,14 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   }
 
   Future<bool> _toggleDosis(TratamientoModel tratamiento, DateTime fecha) async {
+    if (!TratamientoController.puedeMarcarDosis(tratamiento, fecha)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ese día está fuera del período del tratamiento')),
+        );
+      }
+      return false;
+    }
     try {
       return await _tratamientoController.toggleDosis(widget.idDocumento, tratamiento, fecha);
     } catch (_) {
@@ -185,6 +195,15 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     if (tratamiento == null) return;
     final marcada = tratamiento.registroDosis.contains(aviso.dia);
     final medicacion = tratamiento.medicacion.trim().isEmpty ? 'La medicación' : tratamiento.medicacion.trim();
+    final fechaAviso = DateTime.tryParse(aviso.dia);
+    final ahora = DateTime.now();
+    final esHoy = fechaAviso != null &&
+        fechaAviso.year == ahora.year &&
+        fechaAviso.month == ahora.month &&
+        fechaAviso.day == ahora.day;
+    final tituloDosis = esHoy || fechaAviso == null
+        ? '$medicacion de hoy'
+        : '$medicacion del ${_fechaCorta(fechaAviso)}';
     final hora = tratamiento.horaRecordatorio?.trim() ?? '';
     final texto = marcada
         ? 'Quedó marcada como dada${hora.isEmpty ? '.' : ' a las $hora.'}'
@@ -201,7 +220,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$medicacion de hoy', style: Theme.of(sheetContext).textTheme.titleLarge),
+                Text(tituloDosis, style: Theme.of(sheetContext).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(texto),
                 const SizedBox(height: 16),
@@ -742,7 +761,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       case EstadoMarcaDosis.pausa:
         fondo = AppColors.pausado;
         icono = Icons.pause;
-        estado = 'tratamiento en pausa';
+        estado = 'tratamiento suspendido';
       case EstadoMarcaDosis.olvidada:
         fondo = AppColors.dosisOlvidada;
         icono = Icons.close;
@@ -926,11 +945,17 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     );
   }
 
-  Widget _buildTarjetaTratamiento(TratamientoModel t, String fechaHoy, bool esInvitado) {
+  Widget _buildTarjetaTratamiento(
+    TratamientoModel t,
+    String fechaHoy,
+    bool esInvitado,
+    String nombrePerro,
+  ) {
     final textTheme = Theme.of(context).textTheme;
     final marcadoHoy = t.registroDosis.contains(fechaHoy);
-    final diasDuracion = t.diasDuracion;
     final ValueChanged<bool?>? alCambiar = esInvitado ? null : (_) => _toggleDosis(t, DateTime.now());
+    final fijo = t.tipoDuracion == TratamientoModel.tipoDias && t.diasDuracion > 0;
+    final hastaAviso = t.tipoDuracion == TratamientoModel.tipoHastaAviso;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -962,26 +987,33 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
-                                color: marcadoHoy ? context.paleta.textoSuave : context.paleta.texto,
-                                decoration: marcadoHoy ? TextDecoration.lineThrough : TextDecoration.none,
-                                decorationColor: context.paleta.textoSuave,
-                              ),
-                              child: Text(
-                                _capitalizar(t.medicacion),
-                                textScaler: _escala,
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Flexible(
+                                  child: AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutCubic,
+                                    style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
+                                      color: marcadoHoy ? context.paleta.textoSuave : context.paleta.texto,
+                                      decoration: marcadoHoy ? TextDecoration.lineThrough : TextDecoration.none,
+                                      decorationColor: context.paleta.textoSuave,
+                                    ),
+                                    child: Text(
+                                      _capitalizar(t.medicacion),
+                                      textScaler: _escala,
+                                    ),
+                                  ),
+                                ),
+                                if (!fijo) ...[
+                                  const SizedBox(width: 6),
+                                  _chipDuracion(t),
+                                ],
+                              ],
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              '${t.indicaciones} \u00b7 ${diasDuracion > 0 ? '$diasDuracion d\u00edas' : 'Indefinido'}',
-                              textScaler: _escala,
-                              style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                            ),
-                            _progresoDuracion(t),
+                            _resumenTarjeta(t, fijo),
+                            if (fijo) _progresoDuracion(t),
                           ],
                         ),
                       ),
@@ -1003,10 +1035,178 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   label: Text('Marcar un día anterior', textScaler: _escala),
                 ),
               ),
+            if (!esInvitado) _accionesTratamiento(t, nombrePerro, hastaAviso: hastaAviso),
           ],
         ),
       ),
     );
+  }
+
+  Widget _chipDuracion(TratamientoModel tratamiento) {
+    final dePorVida = tratamiento.dePorVida;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.navy.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            dePorVida ? Icons.all_inclusive : Icons.hourglass_empty,
+            size: 14,
+            color: AppColors.navy,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            dePorVida ? 'De por vida' : 'Hasta nuevo aviso',
+            textScaler: _escala,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.navy),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _resumenTarjeta(TratamientoModel tratamiento, bool fijo) {
+    final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave);
+    if (fijo) {
+      return Text(
+        '${tratamiento.indicaciones} · ${tratamiento.diasDuracion} días',
+        textScaler: _escala,
+        style: estilo,
+      );
+    }
+    if (tratamiento.dePorVida) {
+      final desde = tratamiento.fechaInicio == null ? '' : 'Desde ${_fechaCorta(tratamiento.fechaInicio!)}';
+      final actual = tratamiento.indicaciones.trim();
+      final tramos = TratamientoController.tramosDosis(tratamiento);
+      final ultimo = tramos.isEmpty ? null : tramos.last.desde;
+      final cambio = tratamiento.cambiosDosis.isEmpty || ultimo == null
+          ? ''
+          : ' (desde ${TratamientoController.fechaCorta(ultimo)})';
+      final dosis = actual.isEmpty ? '' : 'Dosis actual: $actual$cambio';
+      final texto = [desde, dosis].where((parte) => parte.isNotEmpty).join(' · ');
+      return Text(texto, textScaler: _escala, style: estilo);
+    }
+    final dia = TratamientoController.diaDeTratamiento(tratamiento);
+    final desde = tratamiento.fechaInicio == null ? '' : 'desde ${_fechaCorta(tratamiento.fechaInicio!)}';
+    final cantidad = TratamientoController.contarDosisEnPeriodo(tratamiento);
+    final dosis = cantidad == 1 ? '1 dosis dada' : '$cantidad dosis dadas';
+    final partes = [
+      if (tratamiento.indicaciones.trim().isNotEmpty) tratamiento.indicaciones.trim(),
+      if (dia > 0) 'Día $dia',
+      if (desde.isNotEmpty) desde,
+      dosis,
+    ];
+    return Text(partes.join(' · '), textScaler: _escala, style: estilo);
+  }
+
+  Widget _accionesTratamiento(
+    TratamientoModel tratamiento,
+    String nombrePerro, {
+    required bool hastaAviso,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, top: 4),
+      child: Row(
+        children: [
+          if (hastaAviso)
+            OutlinedButton.icon(
+              onPressed: () => _suspenderDesdeFicha(tratamiento, nombrePerro),
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: Text('Suspender', textScaler: _escala),
+            ),
+          if (tratamiento.dePorVida)
+            OutlinedButton.icon(
+              onPressed: () => _cambiarDosisDesdeFicha(tratamiento),
+              icon: const Icon(Icons.tune),
+              label: Text('Cambiar dosis', textScaler: _escala),
+            ),
+          if (!hastaAviso)
+            PopupMenuButton<String>(
+              tooltip: 'Más acciones',
+              onSelected: (valor) {
+                if (valor == 'suspender') _suspenderDesdeFicha(tratamiento, nombrePerro);
+              },
+              itemBuilder: (ctx) => const [
+                PopupMenuItem(value: 'suspender', child: Text('Suspender')),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _suspenderDesdeFicha(TratamientoModel tratamiento, String nombrePerro) async {
+    final confirmacion = await mostrarHojaSuspender(
+      context,
+      tratamiento: tratamiento,
+      nombrePerro: nombrePerro,
+    );
+    if (confirmacion == null || !mounted) return;
+    try {
+      await _tratamientoController.persistirTratamiento(widget.idDocumento, confirmacion.tratamiento);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo suspender el tratamiento')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Se suspendió ${_capitalizar(tratamiento.medicacion)}'),
+        action: SnackBarAction(
+          label: 'Deshacer',
+          textColor: AppColors.arena,
+          onPressed: () async {
+            try {
+              await _tratamientoController.persistirTratamiento(widget.idDocumento, tratamiento);
+            } catch (_) {}
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cambiarDosisDesdeFicha(TratamientoModel tratamiento) async {
+    final actualizado = await mostrarHojaCambioDosis(context, tratamiento: tratamiento);
+    if (actualizado == null || !mounted) return;
+    try {
+      await _tratamientoController.persistirTratamiento(widget.idDocumento, actualizado);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo guardar el cambio de dosis')),
+      );
+    }
+  }
+
+  Future<void> _reanudarDesdeFicha(TratamientoModel tratamiento) async {
+    final base = _tratamientoController.reanudarComoNuevo(tratamiento);
+    final creado = await mostrarDialogoEditarTratamiento(
+      context,
+      controller: _tratamientoController,
+      actual: base,
+      titulo: 'Reanudar tratamiento',
+      preguntarCambioDosis: false,
+    );
+    if (creado == null || !mounted) return;
+    try {
+      await _tratamientoController.agregarTratamiento(
+        widget.idDocumento,
+        creado,
+        anterior: TratamientoController.cerrarPeriodoLegacy(tratamiento),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo reanudar el tratamiento')),
+      );
+    }
   }
 
   Future<void> _abrirDosisAnteriores(TratamientoModel tratamiento) async {
@@ -1053,7 +1253,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
         final quedan = estado.restantes == 1 ? 'queda 1 día' : 'quedan ${estado.restantes} días';
         return 'Día ${estado.diaActual} de ${estado.total} · $quedan';
       case FaseTratamiento.ultimoDia:
-        return 'Último día de medicación. Mañana el tratamiento se pausará automáticamente.';
+        return 'Último día de medicación. Mañana el tratamiento finaliza automáticamente.';
       case FaseTratamiento.noIniciado:
         return estado.diasParaInicio == 1 ? 'Empieza mañana' : 'Empieza en ${estado.diasParaInicio} días';
       case FaseTratamiento.finalizado:
@@ -1105,7 +1305,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
             _barraDuracion(1, AppColors.pausado),
             const SizedBox(height: 6),
             Text(
-              'Mañana el tratamiento se pausará automáticamente.',
+              'Mañana el tratamiento finaliza automáticamente.',
               textScaler: _escala,
               style: secundario,
             ),
@@ -1193,13 +1393,73 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                   indice: n,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _buildTarjetaTratamiento(tratamientosActivos[n], fechaHoy, esInvitado),
+                    child: _buildTarjetaTratamiento(
+                      tratamientosActivos[n],
+                      fechaHoy,
+                      esInvitado,
+                      perro.nombre,
+                    ),
                   ),
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget? _buildSuspendidos(PerroModel perro, bool esInvitado) {
+    final lista = perro.tratamientos.where((t) => t.categoria == 'diario' && !t.activo).toList();
+    if (lista.isEmpty) return null;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: const Icon(Icons.history, color: AppColors.navy),
+          title: Text(
+            'Suspendidos y finalizados (${lista.length})',
+            textScaler: _escala,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          children: [
+            for (final tratamiento in lista)
+              _filaSuspendido(tratamiento, esInvitado),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filaSuspendido(TratamientoModel tratamiento, bool esInvitado) {
+    final periodo = TratamientoController.periodoEfectivo(tratamiento);
+    final inicio = periodo?.inicio ?? tratamiento.fechaInicio;
+    final fin = periodo?.fin;
+    final rango = inicio == null
+        ? 'Sin fecha'
+        : fin == null
+            ? 'Desde ${_fechaCorta(inicio)}'
+            : '${_fechaCorta(inicio)} – ${_fechaCorta(fin)}';
+    final cuenta = tratamiento.cuentaDosis;
+    final cantidad = TratamientoController.contarDosisEnPeriodo(tratamiento);
+    final dosis = !cuenta
+        ? ''
+        : cantidad == 1
+            ? ' · 1 dosis'
+            : ' · $cantidad dosis';
+    return ListTile(
+      title: Text(_capitalizar(tratamiento.medicacion), textScaler: _escala),
+      subtitle: Text(
+        '${TratamientoController.etiquetaEstado(tratamiento)} · $rango$dosis',
+        textScaler: _escala,
+      ),
+      trailing: esInvitado
+          ? null
+          : TextButton(
+              onPressed: () => _reanudarDesdeFicha(tratamiento),
+              child: const Text('Reanudar'),
+            ),
     );
   }
 
@@ -1709,6 +1969,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     final fichaMedica = _buildFichaMedica(perro);
     final peso = _buildPeso(perro, esInvitado);
     final tratamientos = _buildTratamientosActuales(perro, esInvitado);
+    final suspendidos = _buildSuspendidos(perro, esInvitado);
     final seguimiento = esInvitado ? null : _seguimientosEnCurso(perro);
     final recordatorios = esInvitado ? null : _proximosRecordatorios(perro);
     final estudios = _buildEstudios(perro, esInvitado);
@@ -1716,6 +1977,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
       ?fichaMedica,
       ?peso,
       ?tratamientos,
+      ?suspendidos,
       if (perro.tratamientos.isNotEmpty) _botonHistorial(perro.tratamientos, esInvitado),
       ?seguimiento,
       ?recordatorios,
@@ -3091,6 +3353,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     final desde = _fechaCortaHistorial(inicio ?? fin!);
     final rango = fin == null ? desde : '$desde – ${_fechaCortaHistorial(fin)}';
     if (entrada.categoria == 'diario') {
+      if (!entrada.cuentaDosis) return rango;
       final cantidad = _dosisEnPeriodo(entrada);
       if (cantidad <= 0) return '$rango · sin dosis registradas';
       final dosis = cantidad == 1 ? '1 dosis' : '$cantidad dosis';
@@ -3142,11 +3405,24 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     );
   }
 
+  String _textoTramo(TramoDosis tramo) {
+    final desde = tramo.desde == null ? '' : _fechaCortaHistorial(tramo.desde!);
+    if (tramo.hasta == null) {
+      return desde.isEmpty ? tramo.indicaciones : '${tramo.indicaciones} · desde $desde';
+    }
+    return '${tramo.indicaciones} · $desde – ${_fechaCortaHistorial(tramo.hasta!)}';
+  }
+
   Widget _filaHistorial(EntradaHistorial entrada) {
     final textTheme = Theme.of(context).textTheme;
     final fecha = entrada.fechaInicio ?? entrada.fechaFin;
-    final enCurso = entrada.activo && entrada.categoria == 'diario';
+    final etiqueta = entrada.categoria == 'diario'
+        ? TratamientoController.etiquetaEstado(entrada.origen)
+        : '';
     final corregir = _puedeCorregir(entrada);
+    final tramos = entrada.origen.cambiosDosis.isEmpty
+        ? const <TramoDosis>[]
+        : TratamientoController.tramosDosis(entrada.origen);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -3191,9 +3467,32 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(entrada.titulo, style: textTheme.titleMedium),
+                          if (etiqueta.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: entrada.activo
+                                      ? AppColors.activo.withValues(alpha: 0.14)
+                                      : AppColors.pausado.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  etiqueta,
+                                  style: textTheme.labelMedium?.copyWith(
+                                    color: entrada.activo
+                                        ? context.paleta.activoTexto
+                                        : context.paleta.pausadoTexto,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 2),
                           Text(
-                            enCurso ? '${_resumenHistorial(entrada)} · En curso' : _resumenHistorial(entrada),
+                            _resumenHistorial(entrada),
                             style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                           ),
                           if (entrada.indicaciones.isNotEmpty) ...[
@@ -3210,6 +3509,25 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
                 ),
               ),
             ),
+            if (entrada.origen.cambiosDosis.isNotEmpty)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.only(left: 64, right: 12),
+                  childrenPadding: const EdgeInsets.fromLTRB(64, 0, 16, 8),
+                  title: Text('Cambios de dosis', style: textTheme.bodyMedium),
+                  children: [
+                    for (final tramo in tramos)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(_textoTramo(tramo), style: textTheme.bodyMedium),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             if (corregir)
               Padding(
                 padding: const EdgeInsets.only(left: 52),

@@ -9,11 +9,52 @@ DateTime? _fechaDesdeValor(dynamic valor) {
   return null;
 }
 
+/// Un tramo de dosis: desde [desde] (`yyyy-MM-dd`) rige [indicaciones].
+class CambioDosis {
+  final String desde;
+  final String indicaciones;
+
+  const CambioDosis({required this.desde, required this.indicaciones});
+
+  factory CambioDosis.fromMap(Map<String, dynamic> data) {
+    return CambioDosis(
+      desde: data['desde']?.toString() ?? '',
+      indicaciones: data['indicaciones']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'desde': desde,
+        'indicaciones': indicaciones,
+      };
+}
+
+List<CambioDosis> _cambiosDesdeValor(dynamic valor) {
+  if (valor is! List) return const [];
+  final cambios = <CambioDosis>[];
+  for (final item in valor) {
+    if (item is! Map) continue;
+    final cambio = CambioDosis.fromMap(Map<String, dynamic>.from(item));
+    if (cambio.desde.isEmpty) continue;
+    cambios.add(cambio);
+  }
+  return cambios;
+}
+
 /// Representa un tratamiento médico asociado a un perro (medicación, vacuna,
 /// evento veterinario, etc.). Los tratamientos se almacenan como una lista de
 /// mapas dentro del documento del perro en la colección `perros` de Firestore
 /// (campo `tratamientos`), por lo que no poseen una colección propia.
 class TratamientoModel {
+  /// Duración de una cantidad fija de días.
+  static const String tipoDias = 'dias';
+
+  /// Sigue hasta que alguien lo suspende. Las dosis se cuentan.
+  static const String tipoHastaAviso = 'hasta_aviso';
+
+  /// Medicación crónica. No se cuenta el total de dosis.
+  static const String tipoDePorVida = 'de_por_vida';
+
   /// Identificador único del tratamiento, generado con
   /// `FirebaseFirestore.instance.collection('perros').doc().id` al crearlo.
   final String id;
@@ -64,6 +105,17 @@ class TratamientoModel {
   /// `false` lo calla en todos. Si el campo no viene de Firestore, sigue avisando.
   final bool notificar;
 
+  /// `'dias'`, `'hasta_aviso'` o `'de_por_vida'`.
+  /// Si el documento viejo no trae el campo, se deduce de [diasDuracion].
+  final String tipoDuracion;
+
+  /// Último día de medicación cuando se suspendió a mano.
+  /// Es null si sigue activo o si terminó solo, al cumplirse los días.
+  final DateTime? fechaSuspension;
+
+  /// Cambios de dosis, del más viejo al más nuevo. Vacío si nunca cambió.
+  final List<CambioDosis> cambiosDosis;
+
   /// Crea una instancia inmutable de [TratamientoModel].
   TratamientoModel({
     required this.id,
@@ -80,7 +132,29 @@ class TratamientoModel {
     this.activo = true,
     this.fechaProximoRecordatorio,
     this.notificar = true,
-  });
+    String? tipoDuracion,
+    this.fechaSuspension,
+    List<CambioDosis>? cambiosDosis,
+  })  : tipoDuracion = normalizarTipo(guardado: tipoDuracion, diasDuracion: diasDuracion),
+        cambiosDosis = List<CambioDosis>.unmodifiable(cambiosDosis ?? const []);
+
+  /// Un valor guardado válido se respeta. Si falta, más de 0 días es fijo
+  /// y 0 es hasta nuevo aviso. Así se leen las fichas que ya están cargadas.
+  static String normalizarTipo({String? guardado, required int diasDuracion}) {
+    switch (guardado) {
+      case tipoDias:
+      case tipoHastaAviso:
+      case tipoDePorVida:
+        return guardado!;
+      default:
+        return diasDuracion > 0 ? tipoDias : tipoHastaAviso;
+    }
+  }
+
+  /// La medicación crónica no muestra un total de dosis.
+  bool get cuentaDosis => tipoDuracion != tipoDePorVida;
+
+  bool get dePorVida => tipoDuracion == tipoDePorVida;
 
   /// Construye un [TratamientoModel] a partir del mapa `data` obtenido de
   /// Firestore. Si `data` no incluye un campo `id`, se utiliza el parámetro
@@ -103,6 +177,9 @@ class TratamientoModel {
         data['fecha_proximo_recordatorio'],
       ),
       notificar: data['notificar'] != false,
+      tipoDuracion: data['tipo_duracion']?.toString(),
+      fechaSuspension: _fechaDesdeValor(data['fecha_suspension']),
+      cambiosDosis: _cambiosDesdeValor(data['cambios_dosis']),
     );
   }
 
@@ -128,6 +205,9 @@ class TratamientoModel {
           ? Timestamp.fromDate(fechaProximoRecordatorio!)
           : null,
       'notificar': notificar,
+      'tipo_duracion': tipoDuracion,
+      'fecha_suspension': fechaSuspension != null ? Timestamp.fromDate(fechaSuspension!) : null,
+      'cambios_dosis': [for (final cambio in cambiosDosis) cambio.toMap()],
     };
   }
 
@@ -147,6 +227,10 @@ class TratamientoModel {
     bool? activo,
     DateTime? fechaProximoRecordatorio,
     bool? notificar,
+    String? tipoDuracion,
+    DateTime? fechaSuspension,
+    bool limpiarSuspension = false,
+    List<CambioDosis>? cambiosDosis,
   }) {
     return TratamientoModel(
       id: id ?? this.id,
@@ -163,6 +247,9 @@ class TratamientoModel {
       activo: activo ?? this.activo,
       fechaProximoRecordatorio: fechaProximoRecordatorio ?? this.fechaProximoRecordatorio,
       notificar: notificar ?? this.notificar,
+      tipoDuracion: tipoDuracion ?? this.tipoDuracion,
+      fechaSuspension: limpiarSuspension ? null : (fechaSuspension ?? this.fechaSuspension),
+      cambiosDosis: cambiosDosis ?? this.cambiosDosis,
     );
   }
 

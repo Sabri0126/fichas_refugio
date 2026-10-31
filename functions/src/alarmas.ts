@@ -216,7 +216,7 @@ function alarmaDiaria(
     const aviso = 'Si no se la diste, tocá para dejarla pendiente.';
     const titulo = esUltimo ? 'Último día de medicación' : 'Medicación dada';
     const cuerpo = esUltimo
-      ? `Hoy es el último día de ${medicacion} para ${nombre}. Mañana el tratamiento se pausará automáticamente. ${aviso}`
+      ? `Hoy es el último día de ${medicacion} para ${nombre}. Mañana el tratamiento finalizará automáticamente. ${aviso}`
       : `Se marcó ${medicacion} para ${nombre}. ${aviso}`;
 
     alarmas.push({

@@ -88,14 +88,15 @@ void main() {
     expect(historial.single.cantidadDosis, 1);
   });
 
-  test('un diario indefinido mantiene el rango de dosis', () {
+  test('un diario indefinido activo empieza en su fecha y no tiene fin', () {
     final historial = controller.construirHistorialLista([
       _diario(dias: 0, inicio: inicio, registroDosis: const ['2026-10-15', '2026-10-31']),
     ]);
 
-    expect(historial.single.fechaInicio, DateTime(2026, 10, 15));
-    expect(historial.single.fechaFin, DateTime(2026, 10, 31));
-    expect(historial.single.cantidadDosis, 2);
+    expect(historial.single.fechaInicio, DateTime(2026, 10, 19));
+    expect(historial.single.fechaFin, isNull);
+    expect(historial.single.cantidadDosis, 1);
+    expect(historial.single.cuentaDosis, isTrue);
   });
 
   test('el calendario del historial omite una dosis fuera de período', () {

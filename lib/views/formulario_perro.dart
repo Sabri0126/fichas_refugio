@@ -32,6 +32,7 @@ import 'dialogo_peso.dart';
 import 'dialogo_recordatorio.dart';
 import 'dialogo_seguimiento.dart';
 import 'dialogo_tratamiento.dart';
+import 'hojas_tratamiento.dart';
 
 class FormularioPerro extends StatefulWidget {
   final String? idDocumento;
@@ -80,6 +81,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   List<TratamientoModel> _tratamientos = [];
   Set<String> _silenciados = {};
   final Set<String> _idsReanudadosManualmente = {};
+  final Set<String> _idsDosisFueraRespondidas = {};
   final Set<String> _idsInicialesTratamientos = {};
   List<RecordatorioModel> _recordatorios = [];
   final Set<String> _idsInicialesRecordatorios = {};
@@ -580,14 +582,23 @@ class _FormularioPerroState extends State<FormularioPerro> {
           seguimientosAGuardar = SeguimientoController.cerrarActivos(seguimientosAGuardar);
         }
 
-        final dosisFuera = TratamientoController.cantidadDosisFueraDePeriodo(tratamientosAGuardar);
+        final aRevisar = [
+          for (final tratamiento in tratamientosAGuardar)
+            if (!_idsDosisFueraRespondidas.contains(tratamiento.id)) tratamiento,
+        ];
+        final dosisFuera = TratamientoController.cantidadDosisFueraDePeriodo(aRevisar);
         if (dosisFuera > 0) {
           final borrar = await _ofrecerBorrarDosisFuera(dosisFuera);
           if (!mounted) return;
-          tratamientosAGuardar = TratamientoController.limpiarDosisFueraDePeriodo(
-            tratamientosAGuardar,
-            borrar: borrar == true,
-          );
+          if (borrar == true) {
+            tratamientosAGuardar = [
+              for (final tratamiento in tratamientosAGuardar)
+                if (_idsDosisFueraRespondidas.contains(tratamiento.id))
+                  tratamiento
+                else
+                  TratamientoController.quitarDosisFueraDePeriodo(tratamiento),
+            ];
+          }
         }
 
         final perro = PerroModel(
@@ -813,7 +824,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
   }
 
-  Widget _chipEstado({required bool activo}) {
+  Widget _chipEstado(TratamientoModel tratamiento) {
+    final activo = tratamiento.activo;
     final color = activo ? AppColors.activo : AppColors.pausado;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -822,7 +834,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        activo ? 'Activo' : 'Pausado',
+        TratamientoController.etiquetaEstado(tratamiento),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
           color: activo ? context.paleta.activoTexto : context.paleta.pausadoTexto,
         ),
@@ -855,7 +867,6 @@ class _FormularioPerroState extends State<FormularioPerro> {
     required bool pausado,
   }) {
     final textTheme = Theme.of(context).textTheme;
-    final dias = t.diasDuracion;
     final fechaTexto = t.fechaInicio != null
         ? '${t.fechaInicio!.day.toString().padLeft(2, '0')}/${t.fechaInicio!.month.toString().padLeft(2, '0')}/${t.fechaInicio!.year}'
         : '';
@@ -863,7 +874,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
     final sufijo = pausado ? '' : _sufijoDuracion(t);
     final datos = <String>[
       if (t.indicaciones.trim().isNotEmpty) t.indicaciones.trim(),
-      dias > 0 ? '$dias días' : 'Indefinido',
+      TratamientoController.etiquetaDuracion(t),
       if (!pausado && fechaTexto.isNotEmpty) 'Desde $fechaTexto',
       if (!pausado && !t.notificar)
         'Sin notificación'
@@ -900,7 +911,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        pausado ? Icons.pause_circle_outline : Icons.medication,
+                        pausado ? Icons.stop_circle_outlined : Icons.medication,
                         size: 22,
                         color: colorIcono,
                       ),
@@ -926,7 +937,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                     const SizedBox(width: 8),
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: _chipEstado(activo: !pausado),
+                      child: _chipEstado(t),
                     ),
                   ],
                 ),
@@ -938,7 +949,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
                           FilledButton.tonalIcon(
                             icon: const Icon(Icons.play_arrow),
                             label: const Text('Reanudar'),
-                            onPressed: () => _alternarPausaTratamiento(i),
+                            onPressed: () => _reanudarTratamiento(i),
                           ),
                           const SizedBox(width: 4),
                           IconButton.outlined(
@@ -954,17 +965,14 @@ class _FormularioPerroState extends State<FormularioPerro> {
                               color: AppColors.error,
                             ),
                             tooltip: 'Eliminar definitivamente',
-                            onPressed: () => setState(() {
-                              _tratamientos.removeAt(i);
-                              _hayCambios = true;
-                            }),
+                            onPressed: () => _confirmarEliminarDefinitivo(i),
                           ),
                         ]
                       : [
                           FilledButton.tonalIcon(
-                            icon: const Icon(Icons.pause),
-                            label: const Text('Pausar'),
-                            onPressed: () => _alternarPausaTratamiento(i),
+                            icon: const Icon(Icons.stop_circle_outlined),
+                            label: const Text('Suspender'),
+                            onPressed: () => _suspenderTratamiento(i),
                           ),
                           const SizedBox(width: 4),
                           IconButton.outlined(
@@ -1103,41 +1111,109 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
   Color _colorCategoria(String categoria) => CategoryColors.base(categoria);
 
-  Future<void> _alternarPausaTratamiento(int indice) async {
+  Future<void> _suspenderTratamiento(int indice) async {
     final actual = _tratamientos[indice];
     if (actual.categoria != 'diario') return;
+    final confirmacion = await mostrarHojaSuspender(
+      context,
+      tratamiento: actual,
+      nombrePerro: _nombreController.text.trim(),
+    );
+    if (confirmacion == null || !mounted) return;
 
-    final estabaReanudado = _idsReanudadosManualmente.contains(actual.id);
     setState(() {
-      final actualizado = _tratamientoController.alternarPausa(actual);
-      _tratamientos[indice] = actualizado;
-      if (actualizado.activo) {
-        _idsReanudadosManualmente.add(actual.id);
-      } else {
-        _idsReanudadosManualmente.remove(actual.id);
-      }
+      final destino = _tratamientos.indexWhere((item) => item.id == actual.id);
+      if (destino != -1) _tratamientos[destino] = confirmacion.tratamiento;
+      _idsReanudadosManualmente.remove(actual.id);
       _hayCambios = true;
     });
 
     final idDocumento = widget.idDocumento;
-    if (idDocumento == null || idDocumento.isEmpty) return;
-
-    try {
-      await _tratamientoController.persistirAlternarPausa(idDocumento, actual.id);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _tratamientos[indice] = actual;
-        if (estabaReanudado) {
-          _idsReanudadosManualmente.add(actual.id);
-        } else {
-          _idsReanudadosManualmente.remove(actual.id);
-        }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo actualizar el estado del tratamiento')),
-      );
+    if (idDocumento != null && idDocumento.isNotEmpty) {
+      try {
+        await _tratamientoController.persistirTratamiento(idDocumento, confirmacion.tratamiento);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          final destino = _tratamientos.indexWhere((item) => item.id == actual.id);
+          if (destino != -1) _tratamientos[destino] = actual;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo suspender el tratamiento')),
+        );
+        return;
+      }
     }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Se suspendió ${_capitalizarPrimera(actual.medicacion)}'),
+        action: SnackBarAction(
+          label: 'Deshacer',
+          textColor: AppColors.arena,
+          onPressed: () async {
+            if (!mounted) return;
+            setState(() {
+              final destino = _tratamientos.indexWhere((item) => item.id == actual.id);
+              if (destino != -1) _tratamientos[destino] = actual;
+              _hayCambios = true;
+            });
+            if (idDocumento == null || idDocumento.isEmpty) return;
+            try {
+              await _tratamientoController.persistirTratamiento(idDocumento, actual);
+            } catch (_) {}
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reanudarTratamiento(int indice) async {
+    final actual = _tratamientos[indice];
+    final base = _tratamientoController.reanudarComoNuevo(actual);
+    final creado = await mostrarDialogoEditarTratamiento(
+      context,
+      controller: _tratamientoController,
+      actual: base,
+      titulo: 'Reanudar tratamiento',
+      preguntarCambioDosis: false,
+    );
+    if (creado == null || !mounted) return;
+    setState(() {
+      final destino = _tratamientos.indexWhere((item) => item.id == actual.id);
+      if (destino != -1) {
+        _tratamientos[destino] = TratamientoController.cerrarPeriodoLegacy(actual);
+      }
+      _tratamientos.add(creado);
+      _hayCambios = true;
+    });
+  }
+
+  Future<void> _confirmarEliminarDefinitivo(int indice) async {
+    final tratamiento = _tratamientos[indice];
+    final dosis = tratamiento.registroDosis.length;
+    final nombre = _capitalizarPrimera(tratamiento.medicacion);
+    final texto = dosis == 0
+        ? 'Se va a borrar $nombre. No tiene dosis registradas y no se puede deshacer.'
+        : dosis == 1
+            ? 'Se va a borrar $nombre y 1 dosis registrada. No se puede deshacer.'
+            : 'Se va a borrar $nombre y $dosis dosis registradas. No se puede deshacer.';
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar definitivamente'),
+        content: Text(texto),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    setState(() {
+      _tratamientos.removeWhere((item) => item.id == tratamiento.id);
+      _hayCambios = true;
+    });
   }
 
   Widget _seccionPeso() {
@@ -1651,6 +1727,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
     );
     setState(() {
       _tratamientos[indice] = resultado;
+      if (resultado.categoria == 'diario') {
+        _idsDosisFueraRespondidas.add(resultado.id);
+      }
       if (!original.activo && resultado.activo) {
         _idsReanudadosManualmente.add(original.id);
       }
@@ -1661,7 +1740,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
 
 
   Future<void> _mostrarDialogoEliminarTratamiento(int indice) async {
-    final esDiario = _tratamientos[indice].categoria == 'diario';
+    final tratamiento = _tratamientos[indice];
+    final esDiario = tratamiento.categoria == 'diario';
+    final dosis = tratamiento.registroDosis.length;
+    final dosisTexto = dosis == 1 ? '1 dosis registrada' : '$dosis dosis registradas';
 
     await showDialog<void>(
       context: context,
@@ -1669,7 +1751,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
         title: Text(esDiario ? 'Eliminar tratamiento' : 'Eliminar registro'),
         content: Text(
           esDiario
-              ? '¿Qué querés hacer con este tratamiento?'
+              ? 'Podés suspender ${_capitalizarPrimera(tratamiento.medicacion)}, o eliminarlo junto con $dosisTexto.'
               : '¿Querés eliminar este registro médico? Esta acción no se puede deshacer.',
         ),
         actions: [
@@ -1681,9 +1763,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                _alternarPausaTratamiento(indice);
+                _suspenderTratamiento(indice);
               },
-              child: const Text('Pausar'),
+              child: const Text('Suspender'),
             ),
           TextButton(
             onPressed: () {
@@ -2280,13 +2362,13 @@ class _FormularioPerroState extends State<FormularioPerro> {
                               title: Row(
                                 children: [
                                   const Icon(
-                                    Icons.pause_circle_outline,
+                                    Icons.stop_circle_outlined,
                                     size: 20,
                                     color: AppColors.pausado,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Pausados (${diariosPausados.length})',
+                                    'Suspendidos y finalizados (${diariosPausados.length})',
                                     style: textTheme.titleMedium?.copyWith(
                                       color: context.paleta.textoSuave,
                                     ),

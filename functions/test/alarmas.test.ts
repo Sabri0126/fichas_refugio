@@ -77,7 +77,7 @@ describe('calcularAlarmas', () => {
     expect(dia30[0].tipo).toBe('ultimo_dia');
     expect(dia30[0].titulo).toBe('Último día de medicación');
     expect(dia30[0].cuerpo).toBe(
-      'Hoy es el último día de Doxiciclina para Canelo. Mañana el tratamiento se pausará automáticamente. Si no se la diste, tocá para dejarla pendiente.',
+      'Hoy es el último día de Doxiciclina para Canelo. Mañana el tratamiento finalizará automáticamente. Si no se la diste, tocá para dejarla pendiente.',
     );
 
     const dia31 = calcularAlarmas(perro(), ba('2026-01-31T08:00:00'), ba('2026-01-31T10:00:00'));

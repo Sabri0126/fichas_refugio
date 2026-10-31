@@ -32,9 +32,21 @@ class TratamientoController {
   ///
   /// @param fecha la fecha a formatear.
   /// @return el `String` con la fecha en formato ISO.
-  String formatearFechaISO(DateTime fecha) {
+  String formatearFechaISO(DateTime fecha) => fechaIso(fecha);
+
+  /// Fecha calendario en `yyyy-MM-dd`, sin hora.
+  static String fechaIso(DateTime fecha) {
     return '${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
   }
+
+  /// Día y mes, `dd/mm`.
+  static String fechaCorta(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes';
+  }
+
+  static DateTime soloFecha(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
 
   /// Crea un nuevo [TratamientoModel] aplicando las reglas de negocio según
   /// su categoría:
@@ -70,6 +82,7 @@ class TratamientoController {
     String? horaRecordatorio,
     DateTime? fechaProximoRecordatorio,
     bool notificar = true,
+    String tipoDuracion = TratamientoModel.tipoHastaAviso,
   }) {
     final esEventoUnico = categoria != 'diario';
 
@@ -95,6 +108,7 @@ class TratamientoController {
       );
     }
 
+    final duracion = _duracionDiaria(tipo: tipoDuracion, dias: diasDuracion);
     return TratamientoModel(
       id: generarId(),
       categoria: categoria,
@@ -104,12 +118,20 @@ class TratamientoController {
       veterinario: veterinario,
       diagnostico: diagnostico,
       fechaInicio: fechaInicio,
-      diasDuracion: diasDuracion,
+      diasDuracion: duracion.dias,
       horaRecordatorio: horaRecordatorio,
       registroDosis: const [],
       activo: true,
       notificar: notificar,
+      tipoDuracion: duracion.tipo,
     );
+  }
+
+  /// Días fijos con 0 días pasan a hasta nuevo aviso. Los otros tipos no guardan días.
+  static ({String tipo, int dias}) _duracionDiaria({required String tipo, required int dias}) {
+    if (tipo == TratamientoModel.tipoDePorVida) return (tipo: tipo, dias: 0);
+    if (tipo == TratamientoModel.tipoDias && dias > 0) return (tipo: tipo, dias: dias);
+    return (tipo: TratamientoModel.tipoHastaAviso, dias: 0);
   }
 
   /// Edita los campos editables de un tratamiento existente (medicación,
@@ -137,18 +159,29 @@ class TratamientoController {
     required DateTime fechaInicio,
     required String horaRecordatorio,
     bool? notificar,
+    String? tipoDuracion,
+    DateTime? fechaSuspension,
+    bool limpiarSuspension = false,
+    List<CambioDosis>? cambiosDosis,
   }) {
+    final duracion = actual.categoria == 'diario'
+        ? _duracionDiaria(tipo: tipoDuracion ?? actual.tipoDuracion, dias: diasDuracion)
+        : (tipo: actual.tipoDuracion, dias: diasDuracion);
     return actual.copyWith(
       medicacion: medicacion,
       indicaciones: indicaciones,
       notas: notas,
       veterinario: veterinario,
       diagnostico: diagnostico,
-      diasDuracion: diasDuracion,
+      diasDuracion: duracion.dias,
+      tipoDuracion: duracion.tipo,
       fechaInicio: fechaInicio,
       horaRecordatorio: horaRecordatorio,
       registroDosis: actual.categoria == 'diario' ? null : [formatearFechaISO(fechaInicio)],
       notificar: notificar,
+      fechaSuspension: fechaSuspension,
+      limpiarSuspension: limpiarSuspension,
+      cambiosDosis: cambiosDosis,
     );
   }
 
@@ -173,43 +206,47 @@ class TratamientoController {
     final despues = calcularEstadoDuracion(editado, hoy: hoy).fase;
     final reactivar =
         antes == FaseTratamiento.finalizado && despues != FaseTratamiento.finalizado;
-    if (editado.activo == reactivar) return editado;
-    return editado.copyWith(activo: reactivar);
+    if (!reactivar) {
+      if (editado.activo == false) return editado;
+      return editado.copyWith(activo: false);
+    }
+    return editado.copyWith(activo: true, limpiarSuspension: true);
   }
 
-  /// Período de un diario con duración fija: el día de inicio cuenta como día 1
-  /// y el último es el inicio más [TratamientoModel.diasDuracion] menos uno.
-  /// Un indefinido, un evento puntual o un diario sin fecha no tienen período.
-  static ({DateTime inicio, DateTime fin})? periodoFijo(TratamientoModel tratamiento) {
-    if (tratamiento.categoria != 'diario' ||
-        tratamiento.diasDuracion <= 0 ||
-        tratamiento.fechaInicio == null) {
-      return null;
+  /// Período en el que el diario puede tener dosis.
+  /// El fin es el más temprano entre el último día fijo y [TratamientoModel.fechaSuspension].
+  /// Un indefinido activo no tiene fin. Uno suspendido sin fecha usa la última dosis.
+  /// Un evento puntual o un diario sin fecha de inicio no tienen período.
+  static ({DateTime inicio, DateTime? fin})? periodoEfectivo(TratamientoModel tratamiento) {
+    if (tratamiento.categoria != 'diario' || tratamiento.fechaInicio == null) return null;
+    final inicio = soloFecha(tratamiento.fechaInicio!);
+    DateTime? fin;
+    if (tratamiento.tipoDuracion == TratamientoModel.tipoDias && tratamiento.diasDuracion > 0) {
+      fin = DateTime(inicio.year, inicio.month, inicio.day + tratamiento.diasDuracion - 1);
     }
-    final inicio = DateTime(
-      tratamiento.fechaInicio!.year,
-      tratamiento.fechaInicio!.month,
-      tratamiento.fechaInicio!.day,
-    );
-    final fin = DateTime(inicio.year, inicio.month, inicio.day + tratamiento.diasDuracion - 1);
+    if (tratamiento.fechaSuspension != null) {
+      final suspension = soloFecha(tratamiento.fechaSuspension!);
+      if (fin == null || suspension.isBefore(fin)) fin = suspension;
+    } else if (!tratamiento.activo && fin == null) {
+      fin = _ultimaDosis(tratamiento, inicio);
+    }
     return (inicio: inicio, fin: fin);
   }
 
-  /// `true` si [dia] cae dentro de [periodoFijo]. Un diario indefinido, un
-  /// evento puntual o un diario sin fecha no tienen tope, así que cualquier
-  /// día cuenta como dentro.
+  /// `true` si [dia] cae dentro de [periodoEfectivo]. Sin período, cualquier día cuenta.
+  /// Un fin abierto acepta desde el inicio en adelante.
   static bool diaDentroDePeriodo(TratamientoModel tratamiento, DateTime dia) {
-    final periodo = periodoFijo(tratamiento);
+    final periodo = periodoEfectivo(tratamiento);
     if (periodo == null) return true;
-    final fecha = DateTime(dia.year, dia.month, dia.day);
-    return !fecha.isBefore(periodo.inicio) && !fecha.isAfter(periodo.fin);
+    final fecha = soloFecha(dia);
+    if (fecha.isBefore(periodo.inicio)) return false;
+    if (periodo.fin != null && fecha.isAfter(periodo.fin!)) return false;
+    return true;
   }
 
-  /// Fechas de [TratamientoModel.registroDosis] anteriores al inicio o
-  /// posteriores al fin de [periodoFijo]. Un diario indefinido no tiene
-  /// dosis fuera de período.
+  /// Fechas de [TratamientoModel.registroDosis] que caen fuera de [periodoEfectivo].
   static List<String> dosisFueraDePeriodo(TratamientoModel tratamiento) {
-    final periodo = periodoFijo(tratamiento);
+    final periodo = periodoEfectivo(tratamiento);
     if (periodo == null) return const [];
     final fuera = <String>[];
     for (final texto in tratamiento.registroDosis) {
@@ -220,7 +257,7 @@ class TratamientoController {
     return fuera;
   }
 
-  /// Dosis de [TratamientoModel.registroDosis] que caen dentro de [periodoFijo].
+  /// Dosis de [TratamientoModel.registroDosis] que caen dentro de [periodoEfectivo].
   /// Las que están afuera no se cuentan, aunque sigan guardadas.
   static int contarDosisEnPeriodo(TratamientoModel tratamiento) {
     final fuera = dosisFueraDePeriodo(tratamiento).toSet();
@@ -232,7 +269,7 @@ class TratamientoController {
     return total;
   }
 
-  /// Cuántas dosis de [tratamientos] caen fuera de [periodoFijo].
+  /// Cuántas dosis de [tratamientos] caen fuera de [periodoEfectivo].
   static int cantidadDosisFueraDePeriodo(Iterable<TratamientoModel> tratamientos) {
     var total = 0;
     for (final tratamiento in tratamientos) {
@@ -251,7 +288,7 @@ class TratamientoController {
     return [for (final tratamiento in tratamientos) quitarDosisFueraDePeriodo(tratamiento)];
   }
 
-  /// Quita de [TratamientoModel.registroDosis] las fechas fuera de [periodoFijo].
+  /// Quita de [TratamientoModel.registroDosis] las fechas fuera de [periodoEfectivo].
   static TratamientoModel quitarDosisFueraDePeriodo(TratamientoModel tratamiento) {
     final fuera = dosisFueraDePeriodo(tratamiento).toSet();
     if (fuera.isEmpty) return tratamiento;
@@ -261,6 +298,233 @@ class TratamientoController {
           if (!fuera.contains(dosis)) dosis,
       ],
     );
+  }
+
+  /// Dosis marcadas después de [ultimoDia]. Sirve para avisarlo antes de suspender.
+  static int contarDosisPosteriores(TratamientoModel tratamiento, DateTime ultimoDia) {
+    final limite = soloFecha(ultimoDia);
+    var total = 0;
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      if (soloFecha(fecha).isAfter(limite)) total++;
+    }
+    return total;
+  }
+
+  /// Cierra el diario en [ultimoDia], lo deja inactivo y saca las dosis posteriores.
+  static TratamientoModel suspender(
+    TratamientoModel tratamiento, {
+    required DateTime ultimoDia,
+  }) {
+    if (tratamiento.categoria != 'diario') return tratamiento;
+    final fin = soloFecha(ultimoDia);
+    return tratamiento.copyWith(
+      activo: false,
+      fechaSuspension: fin,
+      registroDosis: [
+        for (final texto in tratamiento.registroDosis)
+          if (!_esPosterior(texto, fin)) texto,
+      ],
+    );
+  }
+
+  static bool _esPosterior(String texto, DateTime limite) {
+    final fecha = DateTime.tryParse(texto);
+    if (fecha == null) return false;
+    return soloFecha(fecha).isAfter(limite);
+  }
+
+  /// Cómo quedaría el historial si se suspende en [ultimoDia].
+  static ({DateTime? inicio, int enPeriodo, int posteriores}) resumenSuspension(
+    TratamientoModel tratamiento, {
+    required DateTime ultimoDia,
+  }) {
+    final fin = soloFecha(ultimoDia);
+    final inicio = tratamiento.fechaInicio == null ? null : soloFecha(tratamiento.fechaInicio!);
+    var enPeriodo = 0;
+    var posteriores = 0;
+    for (final texto in tratamiento.registroDosis) {
+      final fecha = DateTime.tryParse(texto);
+      if (fecha == null) continue;
+      final dia = soloFecha(fecha);
+      if (inicio != null && dia.isBefore(inicio)) continue;
+      if (dia.isAfter(fin)) {
+        posteriores++;
+      } else {
+        enPeriodo++;
+      }
+    }
+    return (inicio: inicio, enPeriodo: enPeriodo, posteriores: posteriores);
+  }
+
+  /// Tratamiento nuevo, con la dosis y el tipo actuales, empezando en [hoy].
+  /// [id] permite armarlo en tests sin tocar Firebase.
+  TratamientoModel reanudarComoNuevo(
+    TratamientoModel tratamiento, {
+    DateTime? hoy,
+    String? id,
+  }) {
+    final inicio = soloFecha(hoy ?? DateTime.now());
+    final tipo = tratamiento.tipoDuracion;
+    return TratamientoModel(
+      id: id ?? generarId(),
+      categoria: 'diario',
+      medicacion: tratamiento.medicacion,
+      indicaciones: tratamiento.indicaciones,
+      notas: tratamiento.notas,
+      fechaInicio: inicio,
+      diasDuracion: tipo == TratamientoModel.tipoDias ? tratamiento.diasDuracion : 0,
+      horaRecordatorio: tratamiento.horaRecordatorio,
+      registroDosis: const [],
+      activo: true,
+      notificar: tratamiento.notificar,
+      tipoDuracion: tipo,
+    );
+  }
+
+  /// Si un indefinido viejo no tiene fecha de suspensión, la cierra en la última dosis.
+  /// Un tratamiento de días fijos no se toca: su fin ya está en la duración.
+  static TratamientoModel cerrarPeriodoLegacy(TratamientoModel tratamiento) {
+    if (tratamiento.activo ||
+        tratamiento.fechaSuspension != null ||
+        tratamiento.categoria != 'diario' ||
+        tratamiento.tipoDuracion == TratamientoModel.tipoDias) {
+      return tratamiento;
+    }
+    final inicio = tratamiento.fechaInicio;
+    if (inicio == null) return tratamiento;
+    final ultima = _ultimaDosis(tratamiento, soloFecha(inicio));
+    if (ultima == null) return tratamiento;
+    return tratamiento.copyWith(fechaSuspension: ultima);
+  }
+
+  /// Anota [nueva] desde [desde]. El primer cambio también guarda la dosis anterior.
+  static TratamientoModel cambiarDosis(
+    TratamientoModel tratamiento,
+    String nueva, {
+    required DateTime desde,
+  }) {
+    final iso = fechaIso(desde);
+    final cambios = [...tratamiento.cambiosDosis];
+    if (cambios.isEmpty) {
+      final inicio = tratamiento.fechaInicio;
+      final isoInicio = inicio == null ? iso : fechaIso(inicio);
+      if (isoInicio != iso) {
+        cambios.add(CambioDosis(desde: isoInicio, indicaciones: tratamiento.indicaciones));
+      }
+    }
+    final indice = cambios.indexWhere((cambio) => cambio.desde == iso);
+    if (indice >= 0) {
+      cambios[indice] = CambioDosis(desde: iso, indicaciones: nueva);
+    } else {
+      cambios.add(CambioDosis(desde: iso, indicaciones: nueva));
+    }
+    cambios.sort((a, b) => a.desde.compareTo(b.desde));
+    return tratamiento.copyWith(indicaciones: nueva, cambiosDosis: cambios);
+  }
+
+  /// Corrige el texto de la dosis vigente sin abrir un tramo nuevo.
+  static TratamientoModel corregirTextoDosis(TratamientoModel tratamiento, String nuevoTexto) {
+    if (tratamiento.cambiosDosis.isEmpty) {
+      return tratamiento.copyWith(indicaciones: nuevoTexto);
+    }
+    final cambios = [...tratamiento.cambiosDosis]..sort((a, b) => a.desde.compareTo(b.desde));
+    final ultimo = cambios.last;
+    if (ultimo.indicaciones.trim() == tratamiento.indicaciones.trim()) {
+      cambios[cambios.length - 1] = CambioDosis(desde: ultimo.desde, indicaciones: nuevoTexto);
+    }
+    return tratamiento.copyWith(indicaciones: nuevoTexto, cambiosDosis: cambios);
+  }
+
+  /// Dosis que regía en [dia]. Sin cambios, es la indicación actual.
+  static String dosisVigenteEn(TratamientoModel tratamiento, DateTime dia) {
+    if (tratamiento.cambiosDosis.isEmpty) return tratamiento.indicaciones;
+    final iso = fechaIso(dia);
+    final ordenados = [...tratamiento.cambiosDosis]..sort((a, b) => a.desde.compareTo(b.desde));
+    CambioDosis? vigente;
+    for (final cambio in ordenados) {
+      if (cambio.desde.compareTo(iso) <= 0) vigente = cambio;
+    }
+    return vigente?.indicaciones ?? ordenados.first.indicaciones;
+  }
+
+  /// Tramos para mostrarlos en la ficha, del más viejo al más nuevo.
+  static List<TramoDosis> tramosDosis(TratamientoModel tratamiento) {
+    if (tratamiento.cambiosDosis.isEmpty) {
+      final texto = tratamiento.indicaciones.trim();
+      if (texto.isEmpty) return const [];
+      final desde = tratamiento.fechaInicio == null ? null : soloFecha(tratamiento.fechaInicio!);
+      return [TramoDosis(indicaciones: texto, desde: desde, hasta: null)];
+    }
+    final ordenados = [...tratamiento.cambiosDosis]..sort((a, b) => a.desde.compareTo(b.desde));
+    final tramos = <TramoDosis>[];
+    for (var i = 0; i < ordenados.length; i++) {
+      final desde = DateTime.tryParse(ordenados[i].desde);
+      DateTime? hasta;
+      if (i + 1 < ordenados.length) {
+        final siguiente = DateTime.tryParse(ordenados[i + 1].desde);
+        if (siguiente != null) hasta = soloFecha(siguiente).subtract(const Duration(days: 1));
+      }
+      tramos.add(TramoDosis(
+        indicaciones: ordenados[i].indicaciones,
+        desde: desde == null ? null : soloFecha(desde),
+        hasta: hasta,
+      ));
+    }
+    return tramos;
+  }
+
+  /// Texto corto del estado, para la ficha, el formulario y la exportación.
+  static String etiquetaEstado(TratamientoModel tratamiento, {DateTime? hoy}) {
+    if (tratamiento.categoria != 'diario') return '';
+    if (!tratamiento.activo) {
+      if (tratamiento.fechaSuspension != null) {
+        return 'Suspendido el ${fechaCorta(tratamiento.fechaSuspension!)}';
+      }
+      final fase = calcularEstadoDuracion(tratamiento, hoy: hoy).fase;
+      if (fase == FaseTratamiento.finalizado &&
+          tratamiento.tipoDuracion == TratamientoModel.tipoDias) {
+        return 'Finalizado';
+      }
+      final inicio = tratamiento.fechaInicio;
+      final ultima = inicio == null ? null : _ultimaDosis(tratamiento, soloFecha(inicio));
+      if (ultima != null) return 'Suspendido el ${fechaCorta(ultima)}';
+      return 'Suspendido';
+    }
+    switch (calcularEstadoDuracion(tratamiento, hoy: hoy).fase) {
+      case FaseTratamiento.noIniciado:
+        return 'Programado';
+      case FaseTratamiento.ultimoDia:
+        return 'Último día';
+      case FaseTratamiento.finalizado:
+        return 'Finalizado';
+      case FaseTratamiento.indefinido:
+      case FaseTratamiento.enCurso:
+        return 'En curso';
+    }
+  }
+
+  /// Nombre del tipo de duración, para chips y la exportación.
+  static String etiquetaDuracion(TratamientoModel tratamiento) {
+    switch (tratamiento.tipoDuracion) {
+      case TratamientoModel.tipoDePorVida:
+        return 'De por vida';
+      case TratamientoModel.tipoHastaAviso:
+        return 'Hasta nuevo aviso';
+      default:
+        return tratamiento.diasDuracion > 0 ? '${tratamiento.diasDuracion} días' : 'Hasta nuevo aviso';
+    }
+  }
+
+  /// Día de medicación contando el inicio como día 1. Antes del inicio es 0.
+  static int diaDeTratamiento(TratamientoModel tratamiento, {DateTime? hoy}) {
+    final inicio = tratamiento.fechaInicio;
+    if (inicio == null) return 0;
+    final referencia = soloFecha(hoy ?? DateTime.now());
+    final comienzo = soloFecha(inicio);
+    if (referencia.isBefore(comienzo)) return 0;
+    return _diasEntre(comienzo, referencia) + 1;
   }
 
   /// Pausa o reanuda un tratamiento diario. Solo altera [TratamientoModel.activo];
@@ -338,7 +602,7 @@ class TratamientoController {
   ///
   /// Lee el documento, cambia `registroDosis` en Dart y reescribe el array
   /// `tratamientos` completo. No usa rutas indexadas ni `FieldValue`.
-  /// Devuelve `false` sin escribir si el día queda fuera de [periodoFijo]
+  /// Devuelve `false` sin escribir si el día queda fuera de [periodoEfectivo]
   /// o de [periodoCorreccion].
   Future<bool> toggleDosis(
     String perroId,
@@ -378,12 +642,18 @@ class TratamientoController {
     return escrito;
   }
 
-  bool _diaDentroDeCorreccion(TratamientoModel tratamiento, DateTime dia) {
-    if (!diaDentroDePeriodo(tratamiento, dia)) return false;
+  bool _diaDentroDeCorreccion(TratamientoModel tratamiento, DateTime dia) =>
+      puedeMarcarDosis(tratamiento, dia);
+
+  /// `false` si [dia] está fuera del período o de lo que se puede corregir.
+  static bool puedeMarcarDosis(TratamientoModel tratamiento, DateTime dia) {
+    final fecha = soloFecha(dia);
+    if (!diaDentroDePeriodo(tratamiento, fecha)) return false;
     final inicio = tratamiento.fechaInicio;
-    if (inicio != null && dia.isBefore(normalizarDia(inicio))) return false;
+    if (inicio != null && fecha.isBefore(soloFecha(inicio))) return false;
     final periodo = periodoCorreccion(tratamiento);
-    if (periodo != null && dia.isAfter(periodo.fin)) return false;
+    if (periodo != null && fecha.isBefore(periodo.inicio)) return false;
+    if (periodo != null && fecha.isAfter(periodo.fin)) return false;
     return true;
   }
 
@@ -424,12 +694,16 @@ class TratamientoController {
     List<TratamientoModel> tratamientos,
   ) => tratamientos.where((t) => t.activo && t.categoria == 'diario').toList();
 
-  /// Pausa los diarios que siguen activos. Los eventos médicos no cambian.
-  static List<TratamientoModel> pausarDiariosActivos(List<TratamientoModel> tratamientos) {
+  /// Suspende los diarios que siguen activos y anota el día. Los eventos no cambian.
+  static List<TratamientoModel> pausarDiariosActivos(
+    List<TratamientoModel> tratamientos, {
+    DateTime? hoy,
+  }) {
+    final dia = soloFecha(hoy ?? DateTime.now());
     return [
       for (final tratamiento in tratamientos)
         tratamiento.categoria == 'diario' && tratamiento.activo
-            ? tratamiento.copyWith(activo: false)
+            ? tratamiento.copyWith(activo: false, fechaSuspension: dia)
             : tratamiento,
     ];
   }
@@ -498,11 +772,22 @@ class TratamientoController {
     return [...local, ...altas];
   }
 
-  /// Día de inicio = día 1. `diasDuracion == 0` o sin fecha queda indefinido.
+  /// Día de inicio = día 1. Sin días fijos queda indefinido.
+  /// Un indefinido con inicio futuro está programado, no en curso.
   static EstadoDuracion calcularEstadoDuracion(TratamientoModel tratamiento, {DateTime? hoy}) {
     final referencia = hoy ?? DateTime.now();
-    final hoyFecha = DateTime(referencia.year, referencia.month, referencia.day);
-    if (tratamiento.diasDuracion <= 0 || tratamiento.fechaInicio == null) {
+    final hoyFecha = soloFecha(referencia);
+    final esFijo = tratamiento.tipoDuracion == TratamientoModel.tipoDias && tratamiento.diasDuracion > 0;
+    if (!esFijo || tratamiento.fechaInicio == null) {
+      if (tratamiento.fechaInicio != null) {
+        final inicio = soloFecha(tratamiento.fechaInicio!);
+        if (hoyFecha.isBefore(inicio)) {
+          return EstadoDuracion(
+            fase: FaseTratamiento.noIniciado,
+            diasParaInicio: _diasEntre(hoyFecha, inicio),
+          );
+        }
+      }
       return const EstadoDuracion(fase: FaseTratamiento.indefinido);
     }
 
@@ -570,6 +855,7 @@ class TratamientoController {
     for (var i = 0; i < 21 && marcas.length < maximo; i++) {
       final dia = hoyFecha.subtract(Duration(days: i));
       if (inicioFecha != null && dia.isBefore(inicioFecha)) break;
+      if (!diaDentroDePeriodo(tratamiento, dia)) continue;
       final fase = calcularEstadoDuracion(tratamiento, hoy: dia).fase;
       if (fase == FaseTratamiento.noIniciado || fase == FaseTratamiento.finalizado) {
         continue;
@@ -610,10 +896,9 @@ class TratamientoController {
     final hoyFecha = DateTime(referencia.year, referencia.month, referencia.day);
     if (hoyFecha.isBefore(inicio)) return null;
     var fin = hoyFecha;
-    if (tratamiento.diasDuracion > 0) {
-      final ultimo = DateTime(inicio.year, inicio.month, inicio.day + tratamiento.diasDuracion - 1);
-      if (ultimo.isBefore(fin)) fin = ultimo;
-    }
+    final efectivo = periodoEfectivo(tratamiento);
+    if (efectivo?.fin != null && efectivo!.fin!.isBefore(fin)) fin = efectivo.fin!;
+    if (fin.isBefore(inicio)) return null;
     return (inicio: inicio, fin: fin);
   }
 
@@ -626,7 +911,9 @@ class TratamientoController {
     DateTime? hoy,
   }) {
     final periodo = periodoMarcable(tratamiento, hoy: hoy);
-    if (periodo == null || tratamiento.activo) return periodo;
+    if (periodo == null || tratamiento.activo || tratamiento.fechaSuspension != null) {
+      return periodo;
+    }
     final fase = calcularEstadoDuracion(tratamiento, hoy: hoy).fase;
     if (fase == FaseTratamiento.finalizado) return periodo;
     final ultima = _ultimaDosis(tratamiento, periodo.inicio);
@@ -716,6 +1003,49 @@ class TratamientoController {
     });
   }
 
+  /// Reemplaza en Firestore el tratamiento con el mismo id.
+  Future<void> persistirTratamiento(String idPerro, TratamientoModel actualizado) {
+    return _escribirTratamientos(idPerro, (tratamientos) {
+      final indice = tratamientos.indexWhere((t) => t.id == actualizado.id);
+      if (indice == -1) return false;
+      tratamientos[indice] = actualizado;
+      return true;
+    });
+  }
+
+  /// Cierra [anterior] si hacía falta y agrega [nuevo].
+  Future<void> agregarTratamiento(
+    String idPerro,
+    TratamientoModel nuevo, {
+    TratamientoModel? anterior,
+  }) {
+    return _escribirTratamientos(idPerro, (tratamientos) {
+      if (anterior != null) {
+        final indice = tratamientos.indexWhere((t) => t.id == anterior.id);
+        if (indice != -1) tratamientos[indice] = anterior;
+      }
+      if (tratamientos.every((t) => t.id != nuevo.id)) tratamientos.add(nuevo);
+      return true;
+    });
+  }
+
+  Future<void> _escribirTratamientos(
+    String idPerro,
+    bool Function(List<TratamientoModel> tratamientos) aplicar,
+  ) {
+    final docRef = _perrosRef.doc(idPerro);
+    return FirebaseFirestore.instance.runTransaction((tx) async {
+      final snapshot = await tx.get(docRef);
+      final data = snapshot.data();
+      if (data == null) return;
+      final tratamientos = _tratamientosDesdeDocumento(data['tratamientos']);
+      if (!aplicar(tratamientos)) return;
+      tx.update(docRef, {
+        'tratamientos': tratamientos.map((t) => t.toMap()).toList(),
+      });
+    });
+  }
+
   /// Aplica la regla de auto-archivado por vencimiento y, si hubo cambios,
   /// persiste el resultado en Firestore. Pensado para ejecutarse cada vez
   /// que se abre la ficha de un perro.
@@ -748,12 +1078,14 @@ class TratamientoController {
     final eventosCalendario = <DateTime, List<Map<String, dynamic>>>{};
 
     for (final tratamiento in tratamientos) {
-      final texto = tratamiento.detalleVisible;
-      final detalle = tratamiento.categoria == 'veterinaria'
-          ? '🏥 ${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}'
-          : '${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}';
-
       for (final fechaNormalizada in _diasEnCalendario(tratamiento)) {
+        final dia = DateTime(fechaNormalizada.year, fechaNormalizada.month, fechaNormalizada.day);
+        final texto = tratamiento.categoria == 'diario'
+            ? dosisVigenteEn(tratamiento, dia).trim()
+            : tratamiento.detalleVisible;
+        final detalle = tratamiento.categoria == 'veterinaria'
+            ? '🏥 ${tratamiento.medicacion}${texto.isEmpty ? '' : ' - $texto'}'
+            : '${tratamiento.medicacion}${texto.isEmpty ? '' : ' · $texto'}';
         eventosCalendario.putIfAbsent(fechaNormalizada, () => []).add({
           'medicacion': tratamiento.medicacion,
           'indicaciones': texto,
@@ -809,11 +1141,11 @@ class TratamientoController {
               tratamiento.fechaInicio!.day,
             );
       final puntual = tratamiento.categoria != 'diario';
-      final periodo = periodoFijo(tratamiento);
+      final periodo = periodoEfectivo(tratamiento);
       DateTime? fin;
       if (periodo != null) {
         inicio = periodo.inicio;
-        if (!_mismoDia(periodo.inicio, periodo.fin)) fin = periodo.fin;
+        if (periodo.fin != null && !_mismoDia(periodo.inicio, periodo.fin!)) fin = periodo.fin;
       } else if (puntual && inicio != null) {
         dosis
           ..clear()
@@ -837,6 +1169,7 @@ class TratamientoController {
           fechaInicio: inicio,
           fechaFin: fin,
           cantidadDosis: contarDosisEnPeriodo(tratamiento),
+          cuentaDosis: tratamiento.cuentaDosis,
           activo: tratamiento.activo,
           origen: tratamiento,
         ),
@@ -857,6 +1190,9 @@ class EntradaHistorial {
   final DateTime? fechaInicio;
   final DateTime? fechaFin;
   final int cantidadDosis;
+
+  /// Un tratamiento de por vida no muestra el total.
+  final bool cuentaDosis;
   final bool activo;
   final TratamientoModel origen;
 
@@ -867,10 +1203,24 @@ class EntradaHistorial {
     required this.fechaInicio,
     required this.fechaFin,
     required this.cantidadDosis,
+    this.cuentaDosis = true,
     required this.activo,
     required this.origen,
   });
 
   /// Fecha para ordenar y agrupar: la última dosis, o el inicio.
   DateTime get fechaReferencia => fechaFin ?? fechaInicio ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+/// Un tramo de la dosis, para la línea de tiempo.
+class TramoDosis {
+  final String indicaciones;
+  final DateTime? desde;
+  final DateTime? hasta;
+
+  const TramoDosis({
+    required this.indicaciones,
+    required this.desde,
+    required this.hasta,
+  });
 }

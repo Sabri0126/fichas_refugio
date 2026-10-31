@@ -100,7 +100,7 @@ abstract final class CalendarioGeneralController {
             dadas.add(_itemTratamiento(
               perro,
               tratamiento,
-              pintaPunto: tratamiento.diasDuracion > 0,
+              pintaPunto: !tratamiento.dePorVida,
             ));
           }
           // De un tratamiento pausado, o de un perro fallecido, solo se
@@ -256,6 +256,11 @@ abstract final class CalendarioGeneralController {
   }
 
   static bool _corresponde(TratamientoModel tratamiento, DateTime dia) {
+    if (tratamiento.fechaSuspension != null &&
+        dia.isAfter(_soloFecha(tratamiento.fechaSuspension!))) {
+      return false;
+    }
+    if (!TratamientoController.diaDentroDePeriodo(tratamiento, dia)) return false;
     final estado = TratamientoController.calcularEstadoDuracion(
       tratamiento,
       hoy: dia,
@@ -428,14 +433,14 @@ abstract final class CalendarioGeneralController {
     }
     dosis.sort();
 
-    DateTime? comienzo = tratamiento.fechaInicio == null ? null : _soloFecha(tratamiento.fechaInicio!);
-    if (dosis.isNotEmpty && (comienzo == null || dosis.first.isBefore(comienzo))) {
-      comienzo = dosis.first;
-    }
-    DateTime? cierre;
-    if (dosis.isNotEmpty && comienzo != null && !_mismoDia(comienzo, dosis.last)) {
+    final periodo = TratamientoController.periodoEfectivo(tratamiento);
+    DateTime? comienzo = periodo?.inicio ??
+        (tratamiento.fechaInicio == null ? null : _soloFecha(tratamiento.fechaInicio!));
+    DateTime? cierre = periodo?.fin;
+    if (cierre == null && dosis.isNotEmpty && comienzo != null && !_mismoDia(comienzo, dosis.last)) {
       cierre = dosis.last;
     }
+    if (cierre != null && comienzo != null && _mismoDia(comienzo, cierre)) cierre = null;
 
     DateTime? destino;
     for (final dia in dosis.reversed) {
@@ -458,6 +463,7 @@ abstract final class CalendarioGeneralController {
       detalle: tratamiento.detalleVisible,
       categoria: 'diario',
       cantidadDosis: TratamientoController.contarDosisEnPeriodo(tratamiento),
+      cuentaDosis: tratamiento.cuentaDosis,
     );
   }
 
@@ -529,6 +535,7 @@ class EntradaListaGeneral {
   final String categoria;
   final String? tipoRecordatorio;
   final int cantidadDosis;
+  final bool cuentaDosis;
 
   const EntradaListaGeneral({
     required this.fecha,
@@ -539,5 +546,6 @@ class EntradaListaGeneral {
     required this.categoria,
     this.tipoRecordatorio,
     this.cantidadDosis = 0,
+    this.cuentaDosis = true,
   });
 }
