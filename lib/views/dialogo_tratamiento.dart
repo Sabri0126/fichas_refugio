@@ -271,13 +271,13 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
           );
     if (_esDiario && actual != null) {
       final fuera = TratamientoController.dosisFueraDePeriodo(modelo);
-      var borrar = false;
       if (fuera.isNotEmpty) {
-        final respuesta = await _preguntarBorrarDosisFuera(fuera.length);
+        final borrar = await _ofrecerBorrarDosisFuera(fuera.length);
         if (!mounted) return;
-        borrar = respuesta == true;
+        if (borrar == true) {
+          modelo = TratamientoController.quitarDosisFueraDePeriodo(modelo);
+        }
       }
-      modelo = TratamientoController.resolverDosisFueraDePeriodo(modelo, borrar: borrar);
     }
     if (_esDiario) {
       try {
@@ -299,10 +299,10 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     Navigator.pop(context, modelo);
   }
 
-  Future<bool?> _preguntarBorrarDosisFuera(int cantidad) {
+  Future<bool?> _ofrecerBorrarDosisFuera(int cantidad) {
     final texto = cantidad == 1
-        ? 'Hay 1 dosis registrada fuera del nuevo período. ¿Querés borrarla?'
-        : 'Hay $cantidad dosis registradas fuera del nuevo período. ¿Querés borrarlas?';
+        ? 'Hay 1 dosis registrada fuera del período. ¿Querés borrarla?'
+        : 'Hay $cantidad dosis registradas fuera del período. ¿Querés borrarlas?';
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -311,7 +311,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Conservar'),
+            child: const Text('No'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),

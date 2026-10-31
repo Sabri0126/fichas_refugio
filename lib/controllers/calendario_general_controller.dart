@@ -94,7 +94,8 @@ abstract final class CalendarioGeneralController {
 
       for (final tratamiento in perro.tratamientos) {
         if (tratamiento.categoria == 'diario') {
-          final dada = tratamiento.registroDosis.contains(iso);
+          final enPeriodo = TratamientoController.diaDentroDePeriodo(tratamiento, diaFecha);
+          final dada = enPeriodo && tratamiento.registroDosis.contains(iso);
           if (dada) {
             dadas.add(_itemTratamiento(
               perro,
@@ -331,7 +332,10 @@ abstract final class CalendarioGeneralController {
       for (final tratamiento in perro.tratamientos) {
         tomar(tratamiento.fechaInicio);
         for (final texto in tratamiento.registroDosis) {
-          tomar(DateTime.tryParse(texto));
+          final fecha = DateTime.tryParse(texto);
+          if (fecha == null) continue;
+          if (!TratamientoController.diaDentroDePeriodo(tratamiento, fecha)) continue;
+          tomar(fecha);
         }
       }
       for (final recordatorio in perro.recordatorios) {
@@ -418,7 +422,9 @@ abstract final class CalendarioGeneralController {
     for (final texto in tratamiento.registroDosis) {
       final fecha = DateTime.tryParse(texto);
       if (fecha == null) continue;
-      dosis.add(_soloFecha(fecha));
+      final dia = _soloFecha(fecha);
+      if (!TratamientoController.diaDentroDePeriodo(tratamiento, dia)) continue;
+      dosis.add(dia);
     }
     dosis.sort();
 
@@ -451,7 +457,7 @@ abstract final class CalendarioGeneralController {
       titulo: titulo,
       detalle: tratamiento.detalleVisible,
       categoria: 'diario',
-      cantidadDosis: tratamiento.registroDosis.length,
+      cantidadDosis: TratamientoController.contarDosisEnPeriodo(tratamiento),
     );
   }
 

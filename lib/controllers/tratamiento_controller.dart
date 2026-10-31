@@ -195,6 +195,16 @@ class TratamientoController {
     return (inicio: inicio, fin: fin);
   }
 
+  /// `true` si [dia] cae dentro de [periodoFijo]. Un diario indefinido, un
+  /// evento puntual o un diario sin fecha no tienen tope, así que cualquier
+  /// día cuenta como dentro.
+  static bool diaDentroDePeriodo(TratamientoModel tratamiento, DateTime dia) {
+    final periodo = periodoFijo(tratamiento);
+    if (periodo == null) return true;
+    final fecha = DateTime(dia.year, dia.month, dia.day);
+    return !fecha.isBefore(periodo.inicio) && !fecha.isAfter(periodo.fin);
+  }
+
   /// Fechas de [TratamientoModel.registroDosis] anteriores al inicio o
   /// posteriores al fin de [periodoFijo]. Un diario indefinido no tiene
   /// dosis fuera de período.
@@ -205,29 +215,51 @@ class TratamientoController {
     for (final texto in tratamiento.registroDosis) {
       final fecha = DateTime.tryParse(texto);
       if (fecha == null) continue;
-      final dia = DateTime(fecha.year, fecha.month, fecha.day);
-      if (dia.isBefore(periodo.inicio) || dia.isAfter(periodo.fin)) fuera.add(texto);
+      if (!diaDentroDePeriodo(tratamiento, fecha)) fuera.add(texto);
     }
     return fuera;
   }
 
-  /// Aplica la decisión de la persona sobre las dosis fuera de período.
-  /// [borrar] en `true` las quita. En `false` las deja y marca que se conservan,
-  /// para que el calendario pueda mostrarlas.
-  static TratamientoModel resolverDosisFueraDePeriodo(
-    TratamientoModel tratamiento, {
+  /// Dosis de [TratamientoModel.registroDosis] que caen dentro de [periodoFijo].
+  /// Las que están afuera no se cuentan, aunque sigan guardadas.
+  static int contarDosisEnPeriodo(TratamientoModel tratamiento) {
+    final fuera = dosisFueraDePeriodo(tratamiento).toSet();
+    if (fuera.isEmpty) return tratamiento.registroDosis.length;
+    var total = 0;
+    for (final dosis in tratamiento.registroDosis) {
+      if (!fuera.contains(dosis)) total++;
+    }
+    return total;
+  }
+
+  /// Cuántas dosis de [tratamientos] caen fuera de [periodoFijo].
+  static int cantidadDosisFueraDePeriodo(Iterable<TratamientoModel> tratamientos) {
+    var total = 0;
+    for (final tratamiento in tratamientos) {
+      total += dosisFueraDePeriodo(tratamiento).length;
+    }
+    return total;
+  }
+
+  /// Si [borrar] es true, quita las dosis fuera de período. Si es false, devuelve
+  /// la misma lista: no se borra nada sin una confirmación explícita.
+  static List<TratamientoModel> limpiarDosisFueraDePeriodo(
+    List<TratamientoModel> tratamientos, {
     required bool borrar,
   }) {
+    if (!borrar) return tratamientos;
+    return [for (final tratamiento in tratamientos) quitarDosisFueraDePeriodo(tratamiento)];
+  }
+
+  /// Quita de [TratamientoModel.registroDosis] las fechas fuera de [periodoFijo].
+  static TratamientoModel quitarDosisFueraDePeriodo(TratamientoModel tratamiento) {
     final fuera = dosisFueraDePeriodo(tratamiento).toSet();
-    if (fuera.isEmpty || !borrar) {
-      return tratamiento.copyWith(conservarDosisFuera: fuera.isNotEmpty && !borrar);
-    }
+    if (fuera.isEmpty) return tratamiento;
     return tratamiento.copyWith(
       registroDosis: [
         for (final dosis in tratamiento.registroDosis)
           if (!fuera.contains(dosis)) dosis,
       ],
-      conservarDosisFuera: false,
     );
   }
 
@@ -306,7 +338,8 @@ class TratamientoController {
   ///
   /// Lee el documento, cambia `registroDosis` en Dart y reescribe el array
   /// `tratamientos` completo. No usa rutas indexadas ni `FieldValue`.
-  /// Devuelve `false` sin escribir si el día queda fuera de [periodoCorreccion].
+  /// Devuelve `false` sin escribir si el día queda fuera de [periodoFijo]
+  /// o de [periodoCorreccion].
   Future<bool> toggleDosis(
     String perroId,
     TratamientoModel tratamiento,
@@ -346,6 +379,7 @@ class TratamientoController {
   }
 
   bool _diaDentroDeCorreccion(TratamientoModel tratamiento, DateTime dia) {
+    if (!diaDentroDePeriodo(tratamiento, dia)) return false;
     final inicio = tratamiento.fechaInicio;
     if (inicio != null && dia.isBefore(normalizarDia(inicio))) return false;
     final periodo = periodoCorreccion(tratamiento);
@@ -359,6 +393,7 @@ class TratamientoController {
     DateTime fecha,
     bool marcar,
   ) {
+    if (marcar && !diaDentroDePeriodo(tratamiento, fecha)) return tratamiento;
     final fechaIso = formatearFechaISO(normalizarDia(fecha));
     final registroDosis = List<String>.from(tratamiento.registroDosis);
 
@@ -734,8 +769,7 @@ class TratamientoController {
   /// Días en los que el historial muestra el tratamiento.
   /// Un evento puntual vive en `fechaInicio`. Si esa fecha todavía no está,
   /// se usa el registro. Un diario sigue el registro de dosis dadas.
-  /// En un diario con duración fija, una dosis fuera del período no entra,
-  /// salvo que la persona haya decidido conservarla.
+  /// En un diario con duración fija, una dosis fuera del período no entra.
   List<DateTime> _diasEnCalendario(TratamientoModel tratamiento) {
     if (tratamiento.categoria != 'diario') {
       final inicio = tratamiento.fechaInicio;
@@ -743,18 +777,11 @@ class TratamientoController {
         return [DateTime.utc(inicio.year, inicio.month, inicio.day)];
       }
     }
-    final periodo = periodoFijo(tratamiento);
-    final mostrarFuera = tratamiento.conservarDosisFuera;
     final dias = <DateTime>[];
     for (final texto in tratamiento.registroDosis) {
       final fecha = DateTime.tryParse(texto);
       if (fecha == null) continue;
-      final dia = DateTime(fecha.year, fecha.month, fecha.day);
-      if (periodo != null &&
-          !mostrarFuera &&
-          (dia.isBefore(periodo.inicio) || dia.isAfter(periodo.fin))) {
-        continue;
-      }
+      if (!diaDentroDePeriodo(tratamiento, fecha)) continue;
       dias.add(DateTime.utc(fecha.year, fecha.month, fecha.day));
     }
     return dias;
@@ -809,7 +836,7 @@ class TratamientoController {
           indicaciones: tratamiento.detalleVisible,
           fechaInicio: inicio,
           fechaFin: fin,
-          cantidadDosis: tratamiento.registroDosis.length,
+          cantidadDosis: contarDosisEnPeriodo(tratamiento),
           activo: tratamiento.activo,
           origen: tratamiento,
         ),

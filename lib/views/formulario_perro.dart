@@ -580,6 +580,16 @@ class _FormularioPerroState extends State<FormularioPerro> {
           seguimientosAGuardar = SeguimientoController.cerrarActivos(seguimientosAGuardar);
         }
 
+        final dosisFuera = TratamientoController.cantidadDosisFueraDePeriodo(tratamientosAGuardar);
+        if (dosisFuera > 0) {
+          final borrar = await _ofrecerBorrarDosisFuera(dosisFuera);
+          if (!mounted) return;
+          tratamientosAGuardar = TratamientoController.limpiarDosisFueraDePeriodo(
+            tratamientosAGuardar,
+            borrar: borrar == true,
+          );
+        }
+
         final perro = PerroModel(
           id: widget.idDocumento ?? '',
           nombre: _nombreController.text.trim(),
@@ -646,6 +656,29 @@ class _FormularioPerroState extends State<FormularioPerro> {
         }
       }
     }
+  }
+
+  Future<bool?> _ofrecerBorrarDosisFuera(int cantidad) {
+    final texto = cantidad == 1
+        ? 'Hay 1 dosis registrada fuera del período. ¿Querés borrarla?'
+        : 'Hay $cantidad dosis registradas fuera del período. ¿Querés borrarlas?';
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dosis fuera del período'),
+        content: Text(texto),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<List<PerroModel>> _pedirPerros() async {

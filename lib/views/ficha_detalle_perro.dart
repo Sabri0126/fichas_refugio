@@ -3076,6 +3076,14 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     return '$dia/$mes/${fecha.year}';
   }
 
+  int _dosisEnPeriodo(EntradaHistorial entrada) {
+    final registro = _registros[entrada.origen.id];
+    if (registro == null) return entrada.cantidadDosis;
+    return TratamientoController.contarDosisEnPeriodo(
+      entrada.origen.copyWith(registroDosis: registro.toList()),
+    );
+  }
+
   String _resumenHistorial(EntradaHistorial entrada) {
     final inicio = entrada.fechaInicio;
     final fin = entrada.fechaFin;
@@ -3083,7 +3091,7 @@ class _CalendarioHistorialWidgetState extends State<CalendarioHistorialWidget> {
     final desde = _fechaCortaHistorial(inicio ?? fin!);
     final rango = fin == null ? desde : '$desde – ${_fechaCortaHistorial(fin)}';
     if (entrada.categoria == 'diario') {
-      final cantidad = _registros[entrada.origen.id]?.length ?? entrada.cantidadDosis;
+      final cantidad = _dosisEnPeriodo(entrada);
       if (cantidad <= 0) return '$rango · sin dosis registradas';
       final dosis = cantidad == 1 ? '1 dosis' : '$cantidad dosis';
       return '$rango · $dosis';
