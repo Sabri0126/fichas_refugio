@@ -20,6 +20,7 @@ import 'pantalla_login.dart';
 import 'pantalla_notificaciones.dart';
 import 'pantalla_perros.dart';
 import 'pantalla_reportes.dart';
+import 'pantalla_veterinarias.dart';
 
 class PantallaMenu extends StatefulWidget {
   const PantallaMenu({super.key});
@@ -306,6 +307,20 @@ class _PantallaMenuState extends State<PantallaMenu> {
                                               ),
                                             ),
                                           ),
+                                          const SizedBox(height: 16),
+                                          BotonMenu(
+                                            label: 'Veterinarias y contactos',
+                                            detalle: 'Llamar o compartir',
+                                            icon: Icons.local_hospital_outlined,
+                                            color: AppColors.arena,
+                                            textoOscuro: true,
+                                            onTap: () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => const PantallaVeterinarias(),
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                         const SizedBox(height: 28),
                                         Text(
@@ -482,6 +497,7 @@ class BotonMenu extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+  final bool textoOscuro;
 
   const BotonMenu({
     super.key,
@@ -490,27 +506,31 @@ class BotonMenu extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.onTap,
+    this.textoOscuro = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final oscuro = context.temaOscuro;
-    final fondo = oscuro ? Color.lerp(color, Colors.black, 0.35)! : color;
+    final fondo = textoOscuro || !oscuro ? color : Color.lerp(color, Colors.black, 0.35)!;
+    final tinta = textoOscuro ? AppColors.navy : Colors.white;
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: fondo,
-          foregroundColor: Colors.white,
+          foregroundColor: tinta,
           elevation: 0,
           minimumSize: const Size(0, 64),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-            side: oscuro
-                ? BorderSide(color: Colors.white.withValues(alpha: 0.22))
-                : BorderSide.none,
+            side: textoOscuro
+                ? BorderSide(color: AppColors.navy.withValues(alpha: 0.18))
+                : oscuro
+                    ? BorderSide(color: Colors.white.withValues(alpha: 0.22))
+                    : BorderSide.none,
           ),
         ),
         child: Row(
@@ -519,10 +539,12 @@ class BotonMenu extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: textoOscuro
+                    ? AppColors.navy.withValues(alpha: 0.12)
+                    : Colors.white.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 22),
+              child: Icon(icon, size: 22, color: tinta),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -531,13 +553,13 @@ class BotonMenu extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(color: tinta),
                   ),
                   if (detalle != null)
                     Text(
                       detalle!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: tinta.withValues(alpha: textoOscuro ? 0.8 : 0.9),
                         fontSize: esWindows ? 15 : 13,
                       ),
                     ),

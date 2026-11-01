@@ -22,5 +22,31 @@ service cloud.firestore {
       allow write: if false;        // Cloud Functions use Admin SDK (bypass rules)
     }
     match /config/{doc} { allow read, write: if false; }
+
+    // veterinarias/{id}
+    // nombre, ubicacion, telefono, notas. Solo el personal del refugio.
+    function esContactoVeterinario(data) {
+      return data.keys().hasOnly(['nombre', 'ubicacion', 'telefono', 'notas'])
+        && data.nombre is string
+        && data.nombre.size() > 0
+        && data.nombre.size() <= 80
+        && data.nombre.matches('.*\\S.*')
+        && data.ubicacion is string
+        && data.ubicacion.size() > 0
+        && data.ubicacion.size() <= 160
+        && data.ubicacion.matches('.*\\S.*')
+        && data.telefono is string
+        && data.telefono.size() > 0
+        && data.telefono.size() <= 40
+        && data.telefono.matches('^[0-9+() -]{1,40}$')
+        && data.telefono.matches('(.*[0-9]){6}.*')
+        && data.notas is string
+        && data.notas.size() <= 400;
+    }
+    match /veterinarias/{id} {
+      allow read: if isStaff();
+      allow create, update: if isStaff() && esContactoVeterinario(request.resource.data);
+      allow delete: if isStaff();
+    }
   }
 }
