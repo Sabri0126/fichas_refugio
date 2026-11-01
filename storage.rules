@@ -1,0 +1,35 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isStaff() {
+      return request.auth != null && request.auth.uid in [
+        'yOUYuJ0handglgCltQU4cqnURGn1', // sabribarrion@
+        'V4ok42JUpFXFolIMiEXEFuGzPmf1', // chiky.14.g@
+        'coEjVBdW9XVPaHCMdrOG3wWYtVs2'  // marilyn.vespoli@
+      ];
+    }
+    // App uploads via putFile without metadata: Android -> image/jpeg, Windows -> application/octet-stream
+    function validUpload() {
+      return request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/octet-stream');
+    }
+    match /fotos_perfil/{file} {
+      allow read: if true;
+      allow create, update: if isStaff() && validUpload();
+      allow delete: if isStaff();
+    }
+    match /galeria_perros/{file} {
+      allow read: if true;
+      allow create, update: if isStaff() && validUpload();
+      allow delete: if isStaff();
+    }
+    // Future: medical studies (needs app change; nothing uploads here yet)
+    match /estudios_medicos/{file} {
+      allow read: if isStaff();
+      allow create, update: if isStaff() && validUpload();
+      allow delete: if isStaff();
+    }
+    match /{other=**} { allow read, write: if false; }
+  }
+}
