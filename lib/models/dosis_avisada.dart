@@ -1,3 +1,13 @@
+/// El cartel puede abrirse. Una copia de caché sin el día se deja pasar:
+/// el servidor puede estar por escribir la marca automática.
+bool listoParaAvisoDosis({required bool desdeCache, required bool marcada}) {
+  if (!desdeCache) return true;
+  return marcada;
+}
+
+/// El día del aviso ya está en el registro de dosis.
+bool dosisAvisadaMarcada(Iterable<String> registroDosis, String dia) => registroDosis.contains(dia);
+
 /// Dosis diaria que la notificación acaba de marcar, para confirmarla en la ficha.
 class DosisAvisada {
   final String idTratamiento;

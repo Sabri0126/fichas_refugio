@@ -9,6 +9,7 @@ import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
+import '../models/dosis_avisada.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
@@ -1080,10 +1081,20 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
+              final idTratamiento = item.tratamientoId;
+              final dosis = permitirMarcar && idTratamiento != null
+                  ? DosisAvisada(
+                      idTratamiento: idTratamiento,
+                      dia: TratamientoController.fechaIso(_diaSeleccionado),
+                    )
+                  : null;
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => FichaDetallePerro(idDocumento: item.perro.id),
+                  builder: (_) => FichaDetallePerro(
+                    idDocumento: item.perro.id,
+                    dosisAvisada: dosis,
+                  ),
                 ),
               );
             },

@@ -138,6 +138,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   double _escalaTexto = 1.3;
   List<Map<String, dynamic>> _fotosReordenar = [];
   bool _hojaDosisMostrada = false;
+  final ValueNotifier<PerroModel?> _perroVisible = ValueNotifier<PerroModel?>(null);
 
   String _formatearFecha(DateTime? fecha) => _perroController.formatearFecha(fecha);
 
@@ -175,92 +176,115 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
     }
   }
 
-  void _prepararHojaDosis(PerroModel perro) {
+  TratamientoModel? _tratamientoDelAviso(PerroModel? perro, DosisAvisada aviso) {
+    if (perro == null) return null;
+    for (final item in perro.tratamientos) {
+      if (item.id == aviso.idTratamiento) return item;
+    }
+    return null;
+  }
+
+  void _programarAviso(PerroModel perro, {required bool desdeCache}) {
+    var mostrar = false;
     final aviso = widget.dosisAvisada;
-    if (aviso == null || _hojaDosisMostrada) return;
-    _hojaDosisMostrada = true;
+    if (aviso != null && !_hojaDosisMostrada) {
+      final tratamiento = _tratamientoDelAviso(perro, aviso);
+      if (tratamiento == null) {
+        if (!desdeCache) _hojaDosisMostrada = true;
+      } else if (listoParaAvisoDosis(
+        desdeCache: desdeCache,
+        marcada: dosisAvisadaMarcada(tratamiento.registroDosis, aviso.dia),
+      )) {
+        _hojaDosisMostrada = true;
+        mostrar = true;
+      }
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _mostrarHojaDosis(perro, aviso);
+      _perroVisible.value = perro;
+      if (mostrar && aviso != null) _mostrarHojaDosis(aviso);
     });
   }
 
-  void _mostrarHojaDosis(PerroModel perro, DosisAvisada aviso) {
-    TratamientoModel? tratamiento;
-    for (final item in perro.tratamientos) {
-      if (item.id == aviso.idTratamiento) {
-        tratamiento = item;
-        break;
-      }
-    }
-    if (tratamiento == null) return;
-    final marcada = tratamiento.registroDosis.contains(aviso.dia);
-    final medicacion = tratamiento.medicacion.trim().isEmpty ? 'La medicación' : tratamiento.medicacion.trim();
-    final fechaAviso = DateTime.tryParse(aviso.dia);
-    final ahora = DateTime.now();
-    final esHoy = fechaAviso != null &&
-        fechaAviso.year == ahora.year &&
-        fechaAviso.month == ahora.month &&
-        fechaAviso.day == ahora.day;
-    final tituloDosis = esHoy || fechaAviso == null
-        ? '$medicacion de hoy'
-        : '$medicacion del ${_fechaCorta(fechaAviso)}';
-    final hora = tratamiento.horaRecordatorio?.trim() ?? '';
-    final texto = marcada
-        ? 'Quedó marcada como dada${hora.isEmpty ? '.' : ' a las $hora.'}'
-        : 'Está pendiente.';
-
+  void _mostrarHojaDosis(DosisAvisada aviso) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tituloDosis, style: Theme.of(sheetContext).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(texto),
-                const SizedBox(height: 16),
-                if (marcada) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(sheetContext),
-                      child: const Text('Sí, se la di'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _dejarPendiente(tratamiento!, aviso);
-                      },
-                      child: const Text('No se la di, dejar pendiente'),
-                    ),
-                  ),
-                ] else
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        _marcarDadaDesdeAviso(tratamiento!, aviso);
-                      },
-                      child: const Text('Marcar como dada'),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        return ValueListenableBuilder<PerroModel?>(
+          valueListenable: _perroVisible,
+          builder: (context, perro, _) {
+            final tratamiento = _tratamientoDelAviso(perro, aviso);
+            if (tratamiento == null) return const SizedBox.shrink();
+            final marcada = dosisAvisadaMarcada(tratamiento.registroDosis, aviso.dia);
+            final medicacion = tratamiento.medicacion.trim().isEmpty
+                ? 'La medicación'
+                : tratamiento.medicacion.trim();
+            final fechaAviso = DateTime.tryParse(aviso.dia);
+            final ahora = DateTime.now();
+            final esHoy = fechaAviso != null &&
+                fechaAviso.year == ahora.year &&
+                fechaAviso.month == ahora.month &&
+                fechaAviso.day == ahora.day;
+            final tituloDosis = esHoy || fechaAviso == null
+                ? '$medicacion de hoy'
+                : '$medicacion del ${_fechaCorta(fechaAviso)}';
+            final hora = tratamiento.horaRecordatorio?.trim() ?? '';
+            final texto = marcada
+                ? 'Quedó marcada como dada${hora.isEmpty ? '.' : ' a las $hora.'}'
+                : 'Está pendiente.';
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tituloDosis, style: Theme.of(sheetContext).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(texto),
+                    const SizedBox(height: 16),
+                    if (marcada) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          child: const Text('Sí, se la di'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            final actual = _tratamientoDelAviso(_perroVisible.value, aviso);
+                            Navigator.pop(sheetContext);
+                            if (actual != null) _dejarPendiente(actual, aviso);
+                          },
+                          child: const Text('No se la di, dejar pendiente'),
+                        ),
+                      ),
+                    ] else
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: () {
+                            final actual = _tratamientoDelAviso(_perroVisible.value, aviso);
+                            Navigator.pop(sheetContext);
+                            if (actual != null) _marcarDadaDesdeAviso(actual, aviso);
+                          },
+                          child: const Text('Marcar como dada'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -309,6 +333,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   @override
   void dispose() {
+    _perroVisible.dispose();
     _controladorCarrusel.dispose();
     super.dispose();
   }
@@ -2582,17 +2607,18 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
   Widget build(BuildContext context) {
     final bool esInvitado = FirebaseAuth.instance.currentUser == null;
 
-    return StreamBuilder<PerroModel?>(
-      stream: _perroController.observarPerroPorId(widget.idDocumento),
+    return StreamBuilder<LecturaPerro>(
+      stream: _perroController.observarPerroConOrigen(widget.idDocumento),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data == null) {
+        final lectura = snapshot.data;
+        if (lectura == null || lectura.perro == null) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
         // --- SECCIÓN: Datos del perro y auto-archivado de tratamientos vencidos ---
-        final perro = _procesarAutoArchivado(snapshot.data!);
+        final perro = _procesarAutoArchivado(lectura.perro!);
         final galeria = perro.galeria;
-        _prepararHojaDosis(perro);
+        _programarAviso(perro, desdeCache: lectura.desdeCache);
 
         return Scaffold(
           // --- SECCIÓN: AppBar (título y acciones de galería/accesibilidad) ---

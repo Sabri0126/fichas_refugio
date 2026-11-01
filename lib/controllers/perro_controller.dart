@@ -10,6 +10,14 @@ import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../services/nombre_usuario.dart';
 
+/// Una emisión de [PerroController.observarPerroConOrigen].
+class LecturaPerro {
+  final PerroModel? perro;
+  final bool desdeCache;
+
+  const LecturaPerro({required this.perro, required this.desdeCache});
+}
+
 /// Controlador encargado de la lógica de negocio y de acceso a Firestore de
 /// los perros del refugio: lectura/escritura de fichas, validaciones de
 /// formulario, cálculo de edades y sincronización del árbol de familiares.
@@ -41,8 +49,19 @@ class PerroController {
   /// @return un `Stream` que emite el [PerroModel] actualizado, o `null` si
   /// el documento fue eliminado.
   Stream<PerroModel?> observarPerroPorId(String id) {
-    return _perrosRef.doc(id).snapshots().map(
-          (snapshot) => snapshot.exists ? PerroModel.fromMap(snapshot.data()!, snapshot.id) : null,
+    return observarPerroConOrigen(id).map((lectura) => lectura.perro);
+  }
+
+  /// Igual que [observarPerroPorId], e indica si la emisión sale de la caché.
+  ///
+  /// Incluye cambios de metadata para distinguir la copia local del servidor
+  /// aunque el documento no haya cambiado.
+  Stream<LecturaPerro> observarPerroConOrigen(String id) {
+    return _perrosRef.doc(id).snapshots(includeMetadataChanges: true).map(
+          (snapshot) => LecturaPerro(
+            perro: snapshot.exists ? PerroModel.fromMap(snapshot.data()!, snapshot.id) : null,
+            desdeCache: snapshot.metadata.isFromCache,
+          ),
         );
   }
 
