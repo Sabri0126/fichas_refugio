@@ -184,6 +184,27 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   var _cerrando = false;
   var _alcance = _AlcanceAviso.todos;
   var _avisoListo = true;
+  var _guardando = false;
+  var _puedeCerrar = false;
+  var _cerrandoRuta = false;
+  var _preguntandoSalida = false;
+  var _errorNombre = false;
+  var _errorDias = false;
+  final _claveNombre = GlobalKey();
+  final _claveDias = GlobalKey();
+  final _focoNombre = FocusNode();
+  final _focoDias = FocusNode();
+  late String _med0;
+  late String _ind0;
+  late String _notas0;
+  late String _vet0;
+  late String _diag0;
+  late String _dias0;
+  late String _tipo0;
+  late DateTime _fecha0;
+  late TimeOfDay _hora0;
+  DateTime? _susp0;
+  late _AlcanceAviso _alcance0;
 
   bool get _esDiario => widget.categoria == 'diario';
 
@@ -223,7 +244,36 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       _alcance = _AlcanceAviso.nadie;
     }
     _avisoListo = !_esDiario || actual == null || !actual.notificar;
+    _guardarReferencia();
     if (!_avisoListo) _leerSilencioDeEsteCelular();
+  }
+
+  void _guardarReferencia() {
+    _med0 = _medicacion.text;
+    _ind0 = _indicaciones.text;
+    _notas0 = _notas.text;
+    _vet0 = _veterinario.text;
+    _diag0 = _diagnostico.text;
+    _dias0 = _dias.text;
+    _tipo0 = _tipo;
+    _fecha0 = _fecha;
+    _hora0 = _hora;
+    _susp0 = _fechaSuspension;
+    _alcance0 = _alcance;
+  }
+
+  bool _mismoDia(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+  bool get _hayCambios {
+    if (_medicacion.text != _med0 || _indicaciones.text != _ind0 || _notas.text != _notas0) return true;
+    if (_veterinario.text != _vet0 || _diagnostico.text != _diag0 || _dias.text != _dias0) return true;
+    if (_tipo != _tipo0 || _hora != _hora0 || _alcance != _alcance0) return true;
+    if (!_mismoDia(_fecha, _fecha0)) return true;
+    final suspension = _fechaSuspension;
+    final inicial = _susp0;
+    if ((suspension == null) != (inicial == null)) return true;
+    if (suspension != null && inicial != null && !_mismoDia(suspension, inicial)) return true;
+    return false;
   }
 
   Future<void> _leerSilencioDeEsteCelular() async {
@@ -233,6 +283,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       if (!mounted) return;
       setState(() {
         if (ids.contains(id)) _alcance = _AlcanceAviso.esteCelular;
+        _alcance0 = _alcance;
         _avisoListo = true;
       });
     } catch (_) {
@@ -249,7 +300,77 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     _veterinario.dispose();
     _diagnostico.dispose();
     _dias.dispose();
+    _focoNombre.dispose();
+    _focoDias.dispose();
     super.dispose();
+  }
+
+  Future<void> _guardarAndroid() async {
+    if (_guardando || !_avisoListo) return;
+    final sinNombre = _medicacion.text.trim().isEmpty;
+    final sinDias = _esDiario &&
+        _tipo == TratamientoModel.tipoDias &&
+        (int.tryParse(_dias.text.trim()) ?? 0) < 1;
+    if (sinNombre || sinDias) {
+      setState(() {
+        _errorNombre = sinNombre;
+        _errorDias = sinDias;
+      });
+      final clave = sinNombre ? _claveNombre : _claveDias;
+      final foco = sinNombre ? _focoNombre : _focoDias;
+      final destino = clave.currentContext;
+      if (destino != null) {
+        await Scrollable.ensureVisible(
+          destino,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 250),
+        );
+      }
+      foco.requestFocus();
+      return;
+    }
+    setState(() => _guardando = true);
+    try {
+      await _guardar();
+    } finally {
+      if (mounted && !_puedeCerrar) setState(() => _guardando = false);
+    }
+  }
+
+  Future<void> _alIntentarCerrar(bool yaCerro, Object? resultado) async {
+    if (yaCerro || _cerrandoRuta || _preguntandoSalida) return;
+    if (resultado is TratamientoModel || !_hayCambios) {
+      await _cerrarDeVerdad(resultado);
+      return;
+    }
+    _preguntandoSalida = true;
+    final salir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Salir sin guardar?'),
+        content: const Text('Se pierde lo que cargaste.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Salir'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Seguir editando'),
+          ),
+        ],
+      ),
+    );
+    _preguntandoSalida = false;
+    if (salir == true) await _cerrarDeVerdad(null);
+  }
+
+  Future<void> _cerrarDeVerdad(Object? resultado) async {
+    _cerrandoRuta = true;
+    setState(() => _puedeCerrar = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    Navigator.pop(context, resultado);
   }
 
   Future<void> _guardar() async {
@@ -415,7 +536,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     return InkWell(
       onTap: _avisoListo ? () => setState(() => _alcance = valor) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: EdgeInsets.symmetric(vertical: esAndroid ? 10 : 6),
         child: Row(
           children: [
             Icon(
@@ -430,19 +551,69 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     );
   }
 
+  Future<void> _elegirFecha() async {
+    final seleccionada = await showDatePicker(
+      context: context,
+      initialDate: _fecha,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (seleccionada == null) return;
+    setState(() => _fecha = seleccionada);
+  }
+
+  Future<void> _elegirSuspension() async {
+    final hoy = DateTime.now();
+    final hoyFecha = DateTime(hoy.year, hoy.month, hoy.day);
+    final comienzo = DateTime(_fecha.year, _fecha.month, _fecha.day);
+    final actual = _fechaSuspension!;
+    final inicial = actual.isBefore(comienzo)
+        ? comienzo
+        : (actual.isAfter(hoyFecha) ? hoyFecha : actual);
+    final seleccionada = await showDatePicker(
+      context: context,
+      initialDate: inicial,
+      firstDate: comienzo,
+      lastDate: hoyFecha.isBefore(comienzo) ? comienzo : hoyFecha,
+    );
+    if (seleccionada == null) return;
+    setState(() => _fechaSuspension = seleccionada);
+  }
+
+  Future<void> _elegirHora() async {
+    final seleccionada = await showTimePicker(
+      context: context,
+      initialTime: _hora,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+    if (seleccionada == null) return;
+    setState(() => _hora = seleccionada);
+  }
+
+  String _tituloDialogo({required bool android}) {
+    final propio = widget.titulo;
+    if (propio != null) return propio;
+    if (widget.actual == null) return _tituloAlta(widget.categoria);
+    if (android) return _tituloEdicion(widget.categoria);
+    return 'Editar tratamiento';
+  }
+
   @override
   Widget build(BuildContext context) {
     final actual = widget.actual;
-    final fecha =
-        '${_fecha.day.toString().padLeft(2, '0')}/${_fecha.month.toString().padLeft(2, '0')}/${_fecha.year}';
+    final fecha = _fechaTexto(_fecha);
     final hora =
         '${_hora.hour.toString().padLeft(2, '0')}:${_hora.minute.toString().padLeft(2, '0')}';
     final rotuloNotas = _rotuloNotas;
+    if (esAndroid) return _pantallaAndroid(context, fecha: fecha, hora: hora);
 
     return AlertDialog(
-      title: Text(
-        widget.titulo ?? (actual == null ? _tituloAlta(widget.categoria) : 'Editar tratamiento'),
-      ),
+      title: Text(_tituloDialogo(android: false)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -535,56 +706,18 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
               contentPadding: EdgeInsets.zero,
               title: Text('${_rotuloFecha(widget.categoria)}: $fecha'),
               trailing: const Icon(Icons.calendar_today),
-              onTap: () async {
-                final seleccionada = await showDatePicker(
-                  context: context,
-                  initialDate: _fecha,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (seleccionada == null) return;
-                setState(() => _fecha = seleccionada);
-              },
+              onTap: _elegirFecha,
             ),
             if (_fechaSuspension != null)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('Suspendido el: ${_fechaTexto(_fechaSuspension!)}'),
                 trailing: const Icon(Icons.event_busy_outlined),
-                onTap: () async {
-                  final hoy = DateTime.now();
-                  final hoyFecha = DateTime(hoy.year, hoy.month, hoy.day);
-                  final comienzo = DateTime(_fecha.year, _fecha.month, _fecha.day);
-                  final actual = _fechaSuspension!;
-                  final inicial = actual.isBefore(comienzo)
-                      ? comienzo
-                      : (actual.isAfter(hoyFecha) ? hoyFecha : actual);
-                  final seleccionada = await showDatePicker(
-                    context: context,
-                    initialDate: inicial,
-                    firstDate: comienzo,
-                    lastDate: hoyFecha.isBefore(comienzo) ? comienzo : hoyFecha,
-                  );
-                  if (seleccionada == null) return;
-                  setState(() => _fechaSuspension = seleccionada);
-                },
+                onTap: _elegirSuspension,
               ),
             if (_esDiario)
               InkWell(
-                onTap: () async {
-                  final seleccionada = await showTimePicker(
-                    context: context,
-                    initialTime: _hora,
-                    builder: (context, child) {
-                      return MediaQuery(
-                        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-                        child: child!,
-                      );
-                    },
-                  );
-                  if (seleccionada == null) return;
-                  setState(() => _hora = seleccionada);
-                },
+                onTap: _elegirHora,
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Hora del recordatorio: $hora'),
@@ -620,7 +753,465 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       ],
     );
   }
+
+  String _tituloBarraAndroid() {
+    final propio = widget.titulo;
+    if (propio != null) return propio;
+    return widget.actual == null ? 'Nuevo registro' : 'Editar registro';
+  }
+
+  String _textoBotonAndroid() {
+    if (widget.actual != null) return 'Guardar cambios';
+    return switch (widget.categoria) {
+      'unico' => 'Agregar dosis',
+      'higiene' => 'Agregar higiene',
+      'evento' => 'Agregar evento',
+      'veterinaria' => 'Agregar visita',
+      'vacuna' => 'Agregar vacuna',
+      _ => 'Agregar tratamiento',
+    };
+  }
+
+  Widget _pantallaAndroid(BuildContext context, {required String fecha, required String hora}) {
+    final categoria = widget.categoria;
+    return Dialog.fullscreen(
+      child: PopScope<Object?>(
+        canPop: _puedeCerrar,
+        onPopInvokedWithResult: (yaCerro, resultado) {
+          _alIntentarCerrar(yaCerro, resultado);
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Cancelar',
+              onPressed: () => Navigator.maybePop(context),
+            ),
+            title: Text(_tituloBarraAndroid()),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            children: [
+              _encabezadoTipo(categoria),
+              const SizedBox(height: 24),
+              ..._seccionDatos(categoria),
+              if (_esDiario) ..._seccionDiaria(fecha, hora) else ..._seccionFecha(categoria, fecha),
+            ],
+          ),
+          bottomNavigationBar: _barraGuardar(),
+        ),
+      ),
+    );
+  }
+
+  Widget _barraGuardar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.paleta.superficie,
+        border: Border(top: BorderSide(color: context.paleta.borde)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: FilledButton.icon(
+            onPressed: _avisoListo ? _guardarAndroid : null,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              textStyle: Theme.of(context).textTheme.titleMedium,
+            ),
+            icon: _guardando
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  )
+                : const Icon(Icons.check),
+            label: Text(_textoBotonAndroid()),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _encabezadoTipo(String categoria) {
+    return Row(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: CategoryColors.tinte(categoria),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(CategoryColors.icono(categoria), color: CategoryColors.base(categoria)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            CategoryColors.etiqueta(categoria),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: CategoryColors.texto(categoria),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tituloSeccion(String texto) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: context.paleta.lienzo,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _pistaSeccion(String texto) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+      ),
+    );
+  }
+
+  Widget _campo(
+    TextEditingController controller,
+    String etiqueta, {
+    bool largo = false,
+    TextCapitalization capitalizacion = TextCapitalization.sentences,
+    String? ayuda,
+    String? error,
+    FocusNode? foco,
+    Key? clave,
+    ValueChanged<String>? alEscribir,
+  }) {
+    return TextField(
+      key: clave,
+      focusNode: foco,
+      controller: controller,
+      textCapitalization: capitalizacion,
+      minLines: largo ? 1 : null,
+      maxLines: largo ? 4 : 1,
+      keyboardType: largo ? TextInputType.multiline : null,
+      onChanged: alEscribir,
+      decoration: InputDecoration(
+        labelText: etiqueta,
+        hintText: ayuda,
+        errorText: error,
+      ),
+    );
+  }
+
+  Widget _campoNombre() {
+    final categoria = widget.categoria;
+    return _campo(
+      _medicacion,
+      _rotuloNombreObligatorio(categoria),
+      ayuda: _ejemploNombre(categoria),
+      error: _errorNombre ? 'Escribí el nombre para poder guardar' : null,
+      foco: _focoNombre,
+      clave: _claveNombre,
+      alEscribir: (texto) {
+        if (_errorNombre && texto.trim().isNotEmpty) setState(() => _errorNombre = false);
+      },
+    );
+  }
+
+  Widget _campoIndicaciones() {
+    final categoria = widget.categoria;
+    return _campo(
+      _indicaciones,
+      _rotuloIndicaciones(categoria),
+      largo: true,
+      ayuda: categoria == 'diario' ? 'Ej.: medio comprimido con la comida' : null,
+    );
+  }
+
+  List<Widget> _seccionDatos(String categoria) {
+    final indicaciones = _campoIndicaciones();
+    final notas = _rotuloNotas;
+    switch (categoria) {
+      case 'veterinaria':
+        return [
+          _tituloSeccion('Visita'),
+          _campo(
+            _veterinario,
+            'Nombre del veterinario o la veterinaria',
+            capitalizacion: TextCapitalization.words,
+          ),
+          const SizedBox(height: 16),
+          _campoNombre(),
+          const SizedBox(height: 16),
+          _campo(_diagnostico, 'Diagnóstico', largo: true),
+          const SizedBox(height: 24),
+          _tituloSeccion('Indicaciones'),
+          indicaciones,
+        ];
+      case 'unico':
+      case 'vacuna':
+        return [
+          _tituloSeccion(categoria == 'vacuna' ? 'Vacuna' : 'Aplicación'),
+          _campoNombre(),
+          const SizedBox(height: 16),
+          indicaciones,
+          if (notas != null) ...[
+            const SizedBox(height: 16),
+            _campo(_notas, notas, largo: true),
+          ],
+        ];
+      case 'higiene':
+        return [
+          _tituloSeccion('Cuidado'),
+          _campoNombre(),
+          const SizedBox(height: 16),
+          indicaciones,
+        ];
+      case 'evento':
+        return [
+          _tituloSeccion('Evento'),
+          _campoNombre(),
+          const SizedBox(height: 16),
+          indicaciones,
+        ];
+      default:
+        return [
+          _tituloSeccion('Medicación'),
+          _campoNombre(),
+          const SizedBox(height: 16),
+          indicaciones,
+        ];
+    }
+  }
+
+  List<Widget> _seccionFecha(String categoria, String fecha) {
+    final titulo = switch (categoria) {
+      'evento' => 'Fecha del evento',
+      'veterinaria' => 'Fecha de visita',
+      'vacuna' || 'unico' => 'Fecha de aplicación',
+      _ => 'Fecha',
+    };
+    return [
+      const SizedBox(height: 24),
+      _tituloSeccion(titulo),
+      _pistaSeccion('Tocá para cambiar.'),
+      _tileValor(
+        icono: Icons.calendar_today,
+        etiqueta: _rotuloFecha(categoria),
+        valor: fecha,
+        alTocar: _elegirFecha,
+      ),
+    ];
+  }
+
+  List<Widget> _seccionDiaria(String fecha, String hora) {
+    return [
+      const SizedBox(height: 24),
+      _tituloSeccion('¿Por cuánto tiempo?'),
+      _opcionDuracion(TratamientoModel.tipoDias, 'Días fijos'),
+      _opcionDuracion(TratamientoModel.tipoHastaAviso, 'Hasta nuevo aviso'),
+      _opcionDuracion(TratamientoModel.tipoDePorVida, 'De por vida'),
+      if (_tipo == TratamientoModel.tipoDias) ...[
+        const SizedBox(height: 4),
+        TextField(
+          key: _claveDias,
+          focusNode: _focoDias,
+          controller: _dias,
+          keyboardType: TextInputType.number,
+          onChanged: (texto) {
+            setState(() {
+              if (_errorDias && (int.tryParse(texto.trim()) ?? 0) >= 1) _errorDias = false;
+            });
+          },
+          decoration: InputDecoration(
+            labelText: 'Cantidad de días',
+            errorText: _errorDias ? 'Indicá cuántos días dura' : null,
+          ),
+        ),
+      ],
+      const SizedBox(height: 24),
+      _tituloSeccion('¿Cuándo empieza?'),
+      _pistaSeccion('Tocá para cambiar.'),
+      Row(
+        children: [
+          Expanded(
+            child: _tileValor(
+              icono: Icons.calendar_today,
+              etiqueta: 'Empieza',
+              valor: fecha,
+              alTocar: _elegirFecha,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _tileValor(
+              icono: Icons.access_time,
+              etiqueta: 'Hora del aviso',
+              valor: hora,
+              alTocar: _elegirHora,
+            ),
+          ),
+        ],
+      ),
+      if (_fechaSuspension != null) ...[
+        const SizedBox(height: 12),
+        _tileValor(
+          icono: Icons.event_busy_outlined,
+          etiqueta: 'Suspendido el',
+          valor: _fechaTexto(_fechaSuspension!),
+          alTocar: _elegirSuspension,
+        ),
+      ],
+      const SizedBox(height: 24),
+      _tituloSeccion('Avisos'),
+      _tarjetaOpcion(
+        elegido: _alcance == _AlcanceAviso.todos,
+        titulo: 'Avisar en todos los celulares',
+        alTocar: _avisoListo ? () => setState(() => _alcance = _AlcanceAviso.todos) : null,
+      ),
+      _tarjetaOpcion(
+        elegido: _alcance == _AlcanceAviso.esteCelular,
+        titulo: 'No avisar en este celular',
+        alTocar: _avisoListo ? () => setState(() => _alcance = _AlcanceAviso.esteCelular) : null,
+      ),
+      _tarjetaOpcion(
+        elegido: _alcance == _AlcanceAviso.nadie,
+        titulo: 'No avisar en ningún celular de administrador',
+        alTocar: _avisoListo ? () => setState(() => _alcance = _AlcanceAviso.nadie) : null,
+      ),
+      Text(
+        'Aunque no se avise, la dosis se marca como dada a la hora elegida.',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+      ),
+    ];
+  }
+
+  Widget _opcionDuracion(String valor, String titulo) {
+    final elegido = _tipo == valor;
+    return _tarjetaOpcion(
+      elegido: elegido,
+      titulo: titulo,
+      ayuda: elegido ? _ayudaDuracion(_tipo, _dias.text, _fecha) : null,
+      alTocar: () => setState(() {
+        _tipo = valor;
+        if (valor != TratamientoModel.tipoDias) _errorDias = false;
+      }),
+    );
+  }
+
+  Widget _tarjetaOpcion({
+    required bool elegido,
+    required String titulo,
+    String? ayuda,
+    required VoidCallback? alTocar,
+  }) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: context.paleta.superficie,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: elegido ? color : context.paleta.borde, width: elegido ? 2 : 1),
+        ),
+        child: InkWell(
+          onTap: alTocar,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      elegido ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: elegido ? color : context.paleta.textoSuave,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(titulo)),
+                  ],
+                ),
+                if (ayuda != null) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 34),
+                    child: Text(
+                      ayuda,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tileValor({
+    required IconData icono,
+    required String etiqueta,
+    required String valor,
+    required VoidCallback alTocar,
+  }) {
+    return Material(
+      color: context.paleta.superficie,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.paleta.borde),
+      ),
+      child: InkWell(
+        onTap: alTocar,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(icono, color: context.paleta.lienzo),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      etiqueta,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: context.paleta.textoSuave,
+                      ),
+                    ),
+                    Text(valor, style: Theme.of(context).textTheme.titleMedium),
+                  ],
+                ),
+              ),
+              Icon(Icons.edit_outlined, color: context.paleta.textoSuave),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+String _tituloEdicion(String categoria) => switch (categoria) {
+      'unico' => 'Editar dosis única',
+      'higiene' => 'Editar higiene',
+      'evento' => 'Editar evento médico',
+      'veterinaria' => 'Editar visita veterinaria',
+      'vacuna' => 'Editar vacuna',
+      _ => 'Editar tratamiento diario',
+    };
 
 String _tituloAlta(String categoria) => switch (categoria) {
       'unico' => 'Agregar dosis única',
@@ -629,6 +1220,23 @@ String _tituloAlta(String categoria) => switch (categoria) {
       'veterinaria' => 'Agregar visita veterinaria',
       'vacuna' => 'Agregar vacuna',
       _ => 'Agregar tratamiento diario',
+    };
+
+String _rotuloNombreObligatorio(String categoria) {
+  final base = _rotuloMedicacion(categoria);
+  final sufijo = switch (categoria) {
+    'higiene' || 'evento' || 'veterinaria' || 'vacuna' => 'obligatorio',
+    _ => 'obligatoria',
+  };
+  return '$base ($sufijo)';
+}
+
+String _ejemploNombre(String categoria) => switch (categoria) {
+      'higiene' => 'Ej.: Baño',
+      'evento' => 'Ej.: Convulsión',
+      'veterinaria' => 'Ej.: Control anual',
+      'vacuna' => 'Ej.: Antirrábica',
+      _ => 'Ej.: Fenobarbital 100 mg',
     };
 
 String _rotuloMedicacion(String categoria) => switch (categoria) {
