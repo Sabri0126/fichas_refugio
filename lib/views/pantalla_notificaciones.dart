@@ -6,6 +6,7 @@ import '../models/notificacion_registro_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
+import '../util/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 
 class PantallaNotificaciones extends StatefulWidget {
@@ -115,10 +116,15 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
     );
   }
 
+  EdgeInsets _paddingLista(BuildContext context) {
+    final abajo = esAndroid ? 24 + MediaQuery.of(context).padding.bottom + 24 : 24.0;
+    return EdgeInsets.fromLTRB(16, 12, 16, abajo);
+  }
+
   Widget _cuerpo(AsyncSnapshot<List<NotificacionRegistroModel>> snapshot, List<NotificacionRegistroModel> items) {
     if (snapshot.hasError) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: _paddingLista(context),
         children: [
           _estadoVacio(error: true),
           const SizedBox(height: 12),
@@ -131,7 +137,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
     }
     if (items.isEmpty) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: _paddingLista(context),
         children: [
           _estadoVacio(),
           const SizedBox(height: 12),
@@ -140,7 +146,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: _paddingLista(context),
       children: [
         for (var index = 0; index < items.length; index++) ...[
           _fila(items[index], index),
@@ -179,7 +185,32 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
           color: noLeida ? AppColors.terracota.withValues(alpha: 0.08) : null,
           child: InkWell(
             onTap: () => _marcarVista(item),
-            child: Padding(
+            child: esAndroid && noLeida
+                ? IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ColoredBox(
+                          color: Theme.of(context).colorScheme.primary,
+                          child: const SizedBox(width: 4),
+                        ),
+                        Expanded(child: _cuerpoFila(item, visual, noLeida)),
+                      ],
+                    ),
+                  )
+                : _cuerpoFila(item, visual, noLeida),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cuerpoFila(
+    NotificacionRegistroModel item,
+    ({IconData icono, Color color, Color fondo}) visual,
+    bool noLeida,
+  ) {
+    return Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,11 +259,7 @@ class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
                     ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
+            );
   }
 
   ({IconData icono, Color color, Color fondo}) _visual(NotificacionRegistroModel item) {

@@ -66,9 +66,12 @@ class _PantallaReportesState extends State<PantallaReportes> {
           }
           final hoy = DateTime.now();
           final reporte = ReportesController.calcular(snapshot.data!, hoy: hoy, mes: _mes);
+          final abajo = esAndroid
+              ? 32 + MediaQuery.of(context).padding.bottom + 24
+              : 32.0;
           return AnchoVentana(
             child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, abajo),
             children: [
               Text(
                 'Impacto histórico desde el 29 de abril de 2000',

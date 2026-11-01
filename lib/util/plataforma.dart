@@ -6,6 +6,9 @@ import '../theme/app_colors.dart';
 /// Misma condición que usaba el perfil de usuario en Windows.
 bool get esWindows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
+/// Teléfono o tablet Android. En Windows y en web queda en falso.
+bool get esAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
 /// Navy en claro. En Windows oscuro, el lienzo claro para que el ícono se lea.
 Color colorIconoSeccion(BuildContext context) {
   if (esWindows && context.temaOscuro) return context.paleta.lienzo;

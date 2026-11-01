@@ -241,7 +241,22 @@ class _PantallaPerrosState extends State<PantallaPerros> {
         .replaceFirst('Edad: ', '');
   }
 
+  String _edadCompacta(PerroModel perro) {
+    if (perro.edadIndeterminada) return 'Ind.';
+    if (perro.edad == 0) {
+      final meses = perro.meses;
+      return meses == 1 ? '1 m' : '$meses m';
+    }
+    final anios = PerroController.calcularEdadEstimada(perro);
+    return anios == 1 ? '1 a' : '$anios a';
+  }
+
   String _datoDistintivo(PerroModel perro) {
+    if (esAndroid) {
+      final simbolo = perro.sexo == 'hembra' ? '♀' : '♂';
+      if (_sinEdadUtil(perro)) return simbolo;
+      return '$simbolo · ${_edadCompacta(perro)}';
+    }
     final sexo = perro.sexo == 'hembra' ? 'Hembra' : 'Macho';
     if (_sinEdadUtil(perro)) return sexo;
     return '$sexo · ${_edadCorta(perro)}';

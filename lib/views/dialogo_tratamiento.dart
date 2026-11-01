@@ -6,6 +6,7 @@ import '../models/tratamiento_model.dart';
 import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
+import '../util/plataforma.dart';
 
 enum _AlcanceAviso { todos, esteCelular, nadie }
 
@@ -33,7 +34,7 @@ class GrillaRegistrosMedicos extends StatelessWidget {
         const espacio = 12.0;
         const anchoMinimo = 220.0;
         final disponible = constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
-        final columnas = disponible >= anchoMinimo * 2 + espacio ? 2 : 1;
+        final columnas = esAndroid || disponible >= anchoMinimo * 2 + espacio ? 2 : 1;
         final anchoCelda = columnas == 1 ? disponible : (disponible - espacio) / 2;
         return Wrap(
           spacing: espacio,

@@ -1023,30 +1023,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Flexible(
-                                  child: AnimatedDefaultTextStyle(
-                                    duration: const Duration(milliseconds: 200),
-                                    curve: Curves.easeOutCubic,
-                                    style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
-                                      color: tacharHoy ? context.paleta.textoSuave : context.paleta.texto,
-                                      decoration: tacharHoy ? TextDecoration.lineThrough : TextDecoration.none,
-                                      decorationColor: context.paleta.textoSuave,
-                                    ),
-                                    child: Text(
-                                      _capitalizar(t.medicacion),
-                                      textScaler: _escala,
-                                    ),
-                                  ),
-                                ),
-                                if (!fijo) ...[
-                                  const SizedBox(width: 6),
-                                  _chipDuracion(t),
-                                ],
-                              ],
-                            ),
+                            _nombreYDuracion(t, textTheme, tacharHoy, fijo),
                             const SizedBox(height: 2),
                             _resumenTarjeta(t, fijo),
                             if (fijo) _progresoDuracion(t),
@@ -1075,6 +1052,48 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _nombreTratamiento(TratamientoModel t, TextTheme textTheme, bool tacharHoy) {
+    return AnimatedDefaultTextStyle(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      style: (textTheme.titleMedium ?? const TextStyle()).copyWith(
+        color: tacharHoy ? context.paleta.textoSuave : context.paleta.texto,
+        decoration: tacharHoy ? TextDecoration.lineThrough : TextDecoration.none,
+        decorationColor: context.paleta.textoSuave,
+      ),
+      child: Text(
+        _capitalizar(t.medicacion),
+        textScaler: _escala,
+      ),
+    );
+  }
+
+  Widget _nombreYDuracion(TratamientoModel t, TextTheme textTheme, bool tacharHoy, bool fijo) {
+    final nombre = _nombreTratamiento(t, textTheme, tacharHoy);
+    if (esAndroid) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          nombre,
+          if (!fijo) ...[
+            const SizedBox(height: 6),
+            _chipDuracion(t),
+          ],
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Flexible(child: nombre),
+        if (!fijo) ...[
+          const SizedBox(width: 6),
+          _chipDuracion(t),
+        ],
+      ],
     );
   }
 
