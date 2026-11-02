@@ -208,6 +208,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
 
   bool get _esDiario => widget.categoria == 'diario';
 
+  String get _pistaToque => esAndroid ? 'Tocá para cambiar.' : 'Hacé clic para cambiar.';
+
   String? get _rotuloNotas => switch (widget.categoria) {
         'unico' => 'Razón de la aplicación / Notas',
         'vacuna' => 'Notas (opcional)',
@@ -305,30 +307,35 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     super.dispose();
   }
 
-  Future<void> _guardarAndroid() async {
-    if (_guardando || !_avisoListo) return;
+  Future<bool> _marcarErroresYEnfocar() async {
     final sinNombre = _medicacion.text.trim().isEmpty;
     final sinDias = _esDiario &&
         _tipo == TratamientoModel.tipoDias &&
         (int.tryParse(_dias.text.trim()) ?? 0) < 1;
-    if (sinNombre || sinDias) {
-      setState(() {
-        _errorNombre = sinNombre;
-        _errorDias = sinDias;
-      });
-      final clave = sinNombre ? _claveNombre : _claveDias;
-      final foco = sinNombre ? _focoNombre : _focoDias;
-      final destino = clave.currentContext;
-      if (destino != null) {
-        await Scrollable.ensureVisible(
-          destino,
-          alignment: 0.2,
-          duration: const Duration(milliseconds: 250),
-        );
-      }
-      foco.requestFocus();
-      return;
+    if (!sinNombre && !sinDias) return false;
+    setState(() {
+      _errorNombre = sinNombre;
+      _errorDias = sinDias;
+    });
+    final clave = sinNombre ? _claveNombre : _claveDias;
+    final foco = sinNombre ? _focoNombre : _focoDias;
+    final destino = clave.currentContext;
+    if (destino != null) {
+      await Scrollable.ensureVisible(
+        destino,
+        alignment: 0.2,
+        duration: const Duration(milliseconds: 250),
+      );
     }
+    if (!mounted) return true;
+    foco.requestFocus();
+    return true;
+  }
+
+  Future<void> _intentarGuardar() async {
+    if (_guardando || _cerrando || _cerrandoRuta || !_avisoListo) return;
+    if (await _marcarErroresYEnfocar()) return;
+    if (!mounted || _cerrando || _cerrandoRuta) return;
     setState(() => _guardando = true);
     try {
       await _guardar();
@@ -338,7 +345,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   }
 
   Future<void> _alIntentarCerrar(bool yaCerro, Object? resultado) async {
-    if (yaCerro || _cerrandoRuta || _preguntandoSalida) return;
+    if (yaCerro || _cerrandoRuta || _preguntandoSalida || _guardando) return;
     if (resultado is TratamientoModel || !_hayCambios) {
       await _cerrarDeVerdad(resultado);
       return;
@@ -366,6 +373,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   }
 
   Future<void> _cerrarDeVerdad(Object? resultado) async {
+    if (_cerrandoRuta) return;
     _cerrandoRuta = true;
     setState(() => _puedeCerrar = true);
     await WidgetsBinding.instance.endOfFrame;
@@ -376,7 +384,12 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
   Future<void> _guardar() async {
     if (_cerrando || !_avisoListo) return;
     final medicacion = _medicacion.text.trim();
-    if (medicacion.isEmpty) return;
+    final dias = _esDiario && _tipo == TratamientoModel.tipoDias
+        ? (int.tryParse(_dias.text.trim()) ?? 0)
+        : 0;
+    if (medicacion.isEmpty || (_esDiario && _tipo == TratamientoModel.tipoDias && dias < 1)) {
+      return;
+    }
     _cerrando = true;
     final hora =
         '${_hora.hour.toString().padLeft(2, '0')}:${_hora.minute.toString().padLeft(2, '0')}';
@@ -386,16 +399,6 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     final diagnostico = esVisita ? _diagnostico.text.trim() : (widget.actual?.diagnostico ?? '');
     final actual = widget.actual;
     final avisa = _alcance != _AlcanceAviso.nadie;
-    final dias = _esDiario && _tipo == TratamientoModel.tipoDias
-        ? (int.tryParse(_dias.text.trim()) ?? 0)
-        : 0;
-    if (_esDiario && _tipo == TratamientoModel.tipoDias && dias < 1) {
-      _cerrando = false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Indicá cuántos días dura')),
-      );
-      return;
-    }
     var modelo = actual == null
         ? widget.controller.crearTratamiento(
             categoria: widget.categoria,
@@ -484,7 +487,8 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
         return;
       }
     }
-    if (!mounted) return;
+    if (!mounted || _cerrandoRuta) return;
+    _cerrandoRuta = true;
     Navigator.pop(context, modelo);
   }
 
@@ -595,169 +599,130 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     setState(() => _hora = seleccionada);
   }
 
-  String _tituloDialogo({required bool android}) {
+  String _tituloDialogo() {
     final propio = widget.titulo;
     if (propio != null) return propio;
     if (widget.actual == null) return _tituloAlta(widget.categoria);
-    if (android) return _tituloEdicion(widget.categoria);
-    return 'Editar tratamiento';
+    return _tituloEdicion(widget.categoria);
   }
 
   @override
   Widget build(BuildContext context) {
-    final actual = widget.actual;
     final fecha = _fechaTexto(_fecha);
     final hora =
         '${_hora.hour.toString().padLeft(2, '0')}:${_hora.minute.toString().padLeft(2, '0')}';
-    final rotuloNotas = _rotuloNotas;
     if (esAndroid) return _pantallaAndroid(context, fecha: fecha, hora: hora);
 
-    return AlertDialog(
-      title: Text(_tituloDialogo(android: false)),
-      content: SingleChildScrollView(
-        child: Column(
+    return PopScope<Object?>(
+      canPop: _puedeCerrar,
+      onPopInvokedWithResult: (yaCerro, resultado) {
+        _alIntentarCerrar(yaCerro, resultado);
+      },
+      child: AlertDialog(
+        scrollable: true,
+        title: Text(_tituloDialogo()),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.categoria == 'veterinaria') ...[
-              TextField(
-                controller: _veterinario,
-                scrollPadding: EdgeInsets.zero,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del veterinario o la veterinaria',
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            TextField(
-              controller: _medicacion,
-              scrollPadding: EdgeInsets.zero,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(labelText: _rotuloMedicacion(widget.categoria)),
-            ),
-            const SizedBox(height: 16),
-            if (widget.categoria == 'veterinaria') ...[
-              TextField(
-                controller: _diagnostico,
-                scrollPadding: EdgeInsets.zero,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Diagnóstico'),
-              ),
-              const SizedBox(height: 16),
-            ],
-            TextField(
-              controller: _indicaciones,
-              scrollPadding: EdgeInsets.zero,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(labelText: _rotuloIndicaciones(widget.categoria)),
-            ),
-            if (rotuloNotas != null) ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: _notas,
-                scrollPadding: EdgeInsets.zero,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(labelText: rotuloNotas),
-              ),
-            ],
+            ..._seccionDatos(widget.categoria),
             if (_esDiario) ...[
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Duración', style: Theme.of(context).textTheme.titleSmall),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: TratamientoModel.tipoDias, label: Text('Días fijos')),
-                    ButtonSegment(value: TratamientoModel.tipoHastaAviso, label: Text('Hasta nuevo aviso')),
-                    ButtonSegment(value: TratamientoModel.tipoDePorVida, label: Text('De por vida')),
-                  ],
-                  selected: {_tipo},
-                  onSelectionChanged: (elegido) => setState(() => _tipo = elegido.first),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _ayudaDuracion(_tipo, _dias.text, _fecha),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              if (_tipo == TratamientoModel.tipoDias) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _dias,
-                  scrollPadding: EdgeInsets.zero,
-                  keyboardType: TextInputType.number,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Cantidad de días',
-                  ),
-                ),
-              ],
-            ],
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${_rotuloFecha(widget.categoria)}: $fecha'),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _elegirFecha,
-            ),
-            if (_fechaSuspension != null)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('Suspendido el: ${_fechaTexto(_fechaSuspension!)}'),
-                trailing: const Icon(Icons.event_busy_outlined),
-                onTap: _elegirSuspension,
-              ),
-            if (_esDiario)
-              InkWell(
-                onTap: _elegirHora,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Hora del recordatorio: $hora'),
-                  trailing: const Icon(Icons.access_time),
-                ),
-              ),
-            if (_esDiario) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'La dosis se marca igual a la hora elegida. Esto solo corta el aviso.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              const SizedBox(height: 4),
-              _opcionAviso(_AlcanceAviso.todos, 'Avisar en todos los celulares'),
-              _opcionAviso(_AlcanceAviso.esteCelular, 'No avisar en este celular'),
-              _opcionAviso(_AlcanceAviso.nadie, 'No avisar en ningún celular de administrador'),
+              ..._duracionWindows(),
+              ..._cuandoYAvisosWindows(fecha, hora),
+            ] else ...[
+              ..._seccionFecha(widget.categoria, fecha),
             ],
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: _guardando ? null : () => Navigator.maybePop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: _avisoListo ? _intentarGuardar : null,
+            child: _guardando ? _indicadorGuardado() : Text(_textoBotonAndroid()),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
+    );
+  }
+
+  Widget _indicadorGuardado() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
         ),
-        FilledButton(
-          onPressed: _avisoListo ? _guardar : null,
-          child: Text(actual == null ? 'Agregar' : 'Guardar'),
-        ),
+        const SizedBox(width: 8),
+        Text(_textoBotonAndroid()),
       ],
     );
   }
 
-  String _tituloBarraAndroid() {
-    final propio = widget.titulo;
-    if (propio != null) return propio;
-    return widget.actual == null ? 'Nuevo registro' : 'Editar registro';
+  List<Widget> _duracionWindows() {
+    return [
+      const SizedBox(height: 24),
+      _tituloSeccion('Duración'),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: TratamientoModel.tipoDias, label: Text('Días fijos')),
+            ButtonSegment(value: TratamientoModel.tipoHastaAviso, label: Text('Hasta nuevo aviso')),
+            ButtonSegment(value: TratamientoModel.tipoDePorVida, label: Text('De por vida')),
+          ],
+          selected: {_tipo},
+          onSelectionChanged: (elegido) => setState(() {
+            _tipo = elegido.first;
+            if (_tipo != TratamientoModel.tipoDias) _errorDias = false;
+          }),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        _ayudaDuracion(_tipo, _dias.text, _fecha),
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      if (_tipo == TratamientoModel.tipoDias) ...[
+        const SizedBox(height: 12),
+        _campoDias(),
+      ],
+    ];
+  }
+
+  List<Widget> _cuandoYAvisosWindows(String fecha, String hora) {
+    return [
+      const SizedBox(height: 24),
+      _tituloSeccion('¿Cuándo empieza?'),
+      _pistaSeccion(_pistaToque),
+      _filaFechaHora(fecha: fecha, hora: hora),
+      if (_fechaSuspension != null) ...[
+        const SizedBox(height: 12),
+        _tileValor(
+          icono: Icons.event_busy_outlined,
+          etiqueta: 'Suspendido el',
+          valor: _fechaTexto(_fechaSuspension!),
+          alTocar: _elegirSuspension,
+        ),
+      ],
+      const SizedBox(height: 8),
+      Text(
+        'La dosis se marca igual a la hora elegida. Esto solo corta el aviso.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 4),
+      _opcionAviso(_AlcanceAviso.todos, 'Avisar en todos los celulares'),
+      _opcionAviso(_AlcanceAviso.esteCelular, 'No avisar en este celular'),
+      _opcionAviso(_AlcanceAviso.nadie, 'No avisar en ningún celular de administrador'),
+    ];
   }
 
   String _textoBotonAndroid() {
@@ -785,9 +750,9 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
             leading: IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Cancelar',
-              onPressed: () => Navigator.maybePop(context),
+              onPressed: _guardando ? null : () => Navigator.maybePop(context),
             ),
-            title: Text(_tituloBarraAndroid()),
+            title: Text(_tituloDialogo()),
           ),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -815,7 +780,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: FilledButton.icon(
-            onPressed: _avisoListo ? _guardarAndroid : null,
+            onPressed: _avisoListo ? _intentarGuardar : null,
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               textStyle: Theme.of(context).textTheme.titleMedium,
@@ -928,6 +893,24 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     );
   }
 
+  Widget _campoDias() {
+    return TextField(
+      key: _claveDias,
+      focusNode: _focoDias,
+      controller: _dias,
+      keyboardType: TextInputType.number,
+      onChanged: (texto) {
+        setState(() {
+          if (_errorDias && (int.tryParse(texto.trim()) ?? 0) >= 1) _errorDias = false;
+        });
+      },
+      decoration: InputDecoration(
+        labelText: 'Cantidad de días',
+        errorText: _errorDias ? 'Indicá cuántos días dura' : null,
+      ),
+    );
+  }
+
   Widget _campoIndicaciones() {
     final categoria = widget.categoria;
     return _campo(
@@ -1004,7 +987,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     return [
       const SizedBox(height: 24),
       _tituloSeccion(titulo),
-      _pistaSeccion('Tocá para cambiar.'),
+      _pistaSeccion(_pistaToque),
       _tileValor(
         icono: Icons.calendar_today,
         etiqueta: _rotuloFecha(categoria),
@@ -1023,46 +1006,12 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       _opcionDuracion(TratamientoModel.tipoDePorVida, 'De por vida'),
       if (_tipo == TratamientoModel.tipoDias) ...[
         const SizedBox(height: 4),
-        TextField(
-          key: _claveDias,
-          focusNode: _focoDias,
-          controller: _dias,
-          keyboardType: TextInputType.number,
-          onChanged: (texto) {
-            setState(() {
-              if (_errorDias && (int.tryParse(texto.trim()) ?? 0) >= 1) _errorDias = false;
-            });
-          },
-          decoration: InputDecoration(
-            labelText: 'Cantidad de días',
-            errorText: _errorDias ? 'Indicá cuántos días dura' : null,
-          ),
-        ),
+        _campoDias(),
       ],
       const SizedBox(height: 24),
       _tituloSeccion('¿Cuándo empieza?'),
-      _pistaSeccion('Tocá para cambiar.'),
-      Row(
-        children: [
-          Expanded(
-            child: _tileValor(
-              icono: Icons.calendar_today,
-              etiqueta: 'Empieza',
-              valor: fecha,
-              alTocar: _elegirFecha,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _tileValor(
-              icono: Icons.access_time,
-              etiqueta: 'Hora del aviso',
-              valor: hora,
-              alTocar: _elegirHora,
-            ),
-          ),
-        ],
-      ),
+      _pistaSeccion(_pistaToque),
+      _filaFechaHora(fecha: fecha, hora: hora),
       if (_fechaSuspension != null) ...[
         const SizedBox(height: 12),
         _tileValor(
@@ -1160,6 +1109,46 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     );
   }
 
+  Widget _filaFechaHora({required String fecha, required String hora}) {
+    final fechaBox = _tileValor(
+      icono: Icons.calendar_today,
+      etiqueta: 'Empieza',
+      valor: fecha,
+      alTocar: _elegirFecha,
+    );
+    final horaBox = _tileValor(
+      icono: Icons.access_time,
+      etiqueta: 'Hora del aviso',
+      valor: hora,
+      alTocar: _elegirHora,
+    );
+    final ladoALado = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: fechaBox),
+        const SizedBox(width: 12),
+        Expanded(child: horaBox),
+      ],
+    );
+    // El AlertDialog de Windows pide el ancho intrínseco. LayoutBuilder no puede darlo.
+    if (!esAndroid) return ladoALado;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final escala = MediaQuery.textScalerOf(context).scale(1);
+        if (constraints.maxWidth < 280 * escala) {
+          return Column(
+            children: [
+              fechaBox,
+              const SizedBox(height: 12),
+              horaBox,
+            ],
+          );
+        }
+        return ladoALado;
+      },
+    );
+  }
+
   Widget _tileValor({
     required IconData icono,
     required String etiqueta,
@@ -1187,11 +1176,18 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
                   children: [
                     Text(
                       etiqueta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: context.paleta.textoSuave,
                       ),
                     ),
-                    Text(valor, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      valor,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ],
                 ),
               ),

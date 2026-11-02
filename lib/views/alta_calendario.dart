@@ -23,19 +23,8 @@ Future<void> abrirAltaRegistroCalendario(
   if (perro == null || !context.mounted) return;
   final categoria = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Agregar registro médico'),
-      content: SingleChildScrollView(
-        child: GrillaRegistrosMedicos(
-          alElegir: (elegida) => Navigator.pop(ctx, elegida),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancelar'),
-        ),
-      ],
+    builder: (ctx) => _DialogoCategoria(
+      alElegir: (elegida) => Navigator.pop(ctx, elegida),
     ),
   );
   if (categoria == null || !context.mounted) return;
@@ -107,6 +96,49 @@ Future<void> abrirAltaSeguimientoCalendario(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No se pudo guardar el seguimiento')),
+    );
+  }
+}
+
+/// La grilla mide el ancho con LayoutBuilder. AlertDialog pide el ancho
+/// intrínseco y eso tira la app, así que este diálogo no lo usa.
+class _DialogoCategoria extends StatelessWidget {
+  final ValueChanged<String> alElegir;
+
+  const _DialogoCategoria({required this.alElegir});
+
+  @override
+  Widget build(BuildContext context) {
+    final pantalla = MediaQuery.sizeOf(context);
+    var ancho = pantalla.width - 80;
+    if (ancho > 560) ancho = 560;
+    if (ancho < 280) ancho = 280;
+    var alto = pantalla.height - 80;
+    if (alto < 240) alto = 240;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: ancho, maxHeight: alto),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Agregar registro médico', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              GrillaRegistrosMedicos(alElegir: alElegir),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
