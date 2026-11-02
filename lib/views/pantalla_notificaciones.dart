@@ -1,29 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
 import '../models/dosis_avisada.dart';
 import '../models/notificacion_registro_model.dart';
+import '../providers/auth_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../util/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 
-class PantallaNotificaciones extends StatefulWidget {
+class PantallaNotificaciones extends ConsumerStatefulWidget {
   const PantallaNotificaciones({super.key});
 
   @override
-  State<PantallaNotificaciones> createState() => _PantallaNotificacionesState();
+  ConsumerState<PantallaNotificaciones> createState() => _PantallaNotificacionesState();
 }
 
-class _PantallaNotificacionesState extends State<PantallaNotificaciones> {
+class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones> {
   final HistorialNotificacionesController _historial = HistorialNotificacionesController();
-  late final Stream<List<NotificacionRegistroModel>> _stream = _historial.observarHistorial();
+  late final Stream<List<NotificacionRegistroModel>> _stream;
   Set<String> _noLeidasAlAbrir = {};
   final Set<String> _vistas = {};
   final Set<String> _ocultasAhora = {};
   bool _puntosListos = false;
   bool _marque = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final esInvitado = ref.read(sessionProvider).esInvitado;
+    _stream = _historial.observarHistorial(esInvitado: esInvitado);
+  }
 
   String _formatearFecha(DateTime fecha) {
     final ahora = DateTime.now();

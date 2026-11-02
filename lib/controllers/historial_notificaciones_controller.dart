@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/notificacion_registro_model.dart';
@@ -20,15 +19,15 @@ class HistorialNotificacionesController {
 
   List<NotificacionRegistroModel> _ultima = const [];
 
-  Stream<List<NotificacionRegistroModel>> observarHistorial() {
-    if (FirebaseAuth.instance.currentUser == null) {
+  Stream<List<NotificacionRegistroModel>> observarHistorial({required bool esInvitado}) {
+    if (esInvitado) {
       return Stream.value(const []);
     }
     return _observar();
   }
 
-  Stream<int> observarNoLeidas() {
-    return observarHistorial().map((lista) => lista.where((entrada) => !entrada.leida).length);
+  Stream<int> observarNoLeidas({required bool esInvitado}) {
+    return observarHistorial(esInvitado: esInvitado).map((lista) => lista.where((entrada) => !entrada.leida).length);
   }
 
   Future<void> marcarTodasLeidas([List<NotificacionRegistroModel>? lista]) async {

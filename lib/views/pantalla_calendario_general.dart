@@ -1,5 +1,5 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -12,6 +12,7 @@ import '../controllers/tratamiento_controller.dart';
 import '../models/dosis_avisada.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
+import '../providers/auth_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../util/plataforma.dart';
@@ -23,15 +24,15 @@ import 'ficha_detalle_perro.dart';
 
 enum _VistaCalendario { mes, lista }
 
-class PantallaCalendarioGeneral extends StatefulWidget {
+class PantallaCalendarioGeneral extends ConsumerStatefulWidget {
   const PantallaCalendarioGeneral({super.key});
 
   @override
-  State<PantallaCalendarioGeneral> createState() =>
+  ConsumerState<PantallaCalendarioGeneral> createState() =>
       _PantallaCalendarioGeneralState();
 }
 
-class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
+class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGeneral> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
@@ -568,7 +569,7 @@ class _PantallaCalendarioGeneralState extends State<PantallaCalendarioGeneral> {
   }
 
   Widget _botonesAlta(List<PerroModel> activos) {
-    if (FirebaseAuth.instance.currentUser == null) return const SizedBox.shrink();
+    if (ref.watch(sessionProvider).esInvitado) return const SizedBox.shrink();
     final hayPerros = activos.isNotEmpty;
     return Material(
       color: context.paleta.superficie,

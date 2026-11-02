@@ -2,17 +2,19 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/calendario_general_controller.dart';
 import '../controllers/historial_notificaciones_controller.dart';
 import '../controllers/perro_controller.dart';
 import '../models/perro_model.dart';
+import '../providers/auth_providers.dart';
+import '../providers/theme_mode_provider.dart';
 import '../services/mensajeria_service.dart';
 import '../services/nombre_usuario.dart';
 import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
-import '../theme/tema_app.dart';
 import '../util/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
 import 'pantalla_calendario_general.dart';
@@ -22,14 +24,14 @@ import 'pantalla_perros.dart';
 import 'pantalla_reportes.dart';
 import 'pantalla_veterinarias.dart';
 
-class PantallaMenu extends StatefulWidget {
+class PantallaMenu extends ConsumerStatefulWidget {
   const PantallaMenu({super.key});
 
   @override
-  State<PantallaMenu> createState() => _PantallaMenuState();
+  ConsumerState<PantallaMenu> createState() => _PantallaMenuState();
 }
 
-class _PantallaMenuState extends State<PantallaMenu> {
+class _PantallaMenuState extends ConsumerState<PantallaMenu> {
   final HistorialNotificacionesController _historial =
       HistorialNotificacionesController();
   final PerroController _perros = PerroController();
@@ -40,7 +42,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
   @override
   void initState() {
     super.initState();
-    final esInvitado = FirebaseAuth.instance.currentUser == null;
+    final esInvitado = ref.read(sessionProvider).esInvitado;
     if (!esInvitado) {
       unawaited(
         MensajeriaService.instance.registrarDispositivo().catchError(
@@ -48,7 +50,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
         ),
       );
       unawaited(NotificacionesService.instance.migrarAlarmasLocales());
-      _badge = _historial.observarNoLeidas().listen((cantidad) {
+      _badge = _historial.observarNoLeidas(esInvitado: esInvitado).listen((cantidad) {
         if (!mounted) return;
         setState(() => _noLeidas = cantidad);
       });
@@ -63,7 +65,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
   }
 
   Future<void> _prepararNombre() async {
-    final usuario = FirebaseAuth.instance.currentUser;
+    final usuario = ref.read(sessionProvider).usuario;
     if (usuario == null || !mounted) return;
     await NombreUsuario.cargar(usuario.uid);
     if (!mounted) return;
@@ -72,7 +74,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
   }
 
   Future<void> _pedirNombre() async {
-    final usuario = FirebaseAuth.instance.currentUser;
+    final usuario = ref.read(sessionProvider).usuario;
     if (usuario == null || !mounted || _pidiendoNombre) return;
     _pidiendoNombre = true;
     try {
@@ -125,7 +127,9 @@ class _PantallaMenuState extends State<PantallaMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+    final sesion = ref.watch(sessionProvider);
+    final bool esInvitado = sesion.esInvitado;
+    final modo = ref.watch(themeModeProvider);
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -425,7 +429,7 @@ class _PantallaMenuState extends State<PantallaMenu> {
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                         child: Text(
-                          _etiquetaNombre(FirebaseAuth.instance.currentUser),
+                          _etiquetaNombre(sesion.usuario),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -438,10 +442,10 @@ class _PantallaMenuState extends State<PantallaMenu> {
                   right: esInvitado ? 8 : 60,
                   child: PopupMenuButton<ThemeMode>(
                     tooltip: 'Apariencia',
-                    initialValue: TemaApp.modo.value,
-                    onSelected: TemaApp.fijar,
+                    initialValue: modo,
+                    onSelected: (nuevo) => ref.read(themeModeProvider.notifier).fijar(nuevo),
                     icon: Icon(
-                      TemaApp.modo.value == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                      modo == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
                     ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.black.withValues(alpha: 0.4),

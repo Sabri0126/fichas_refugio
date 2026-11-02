@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,6 +27,7 @@ import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
+import '../providers/auth_providers.dart';
 import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
 import '../theme/encabezado_seccion.dart';
@@ -111,17 +112,17 @@ class VisorFoto extends StatelessWidget {
   }
 }
 
-class FichaDetallePerro extends StatefulWidget {
+class FichaDetallePerro extends ConsumerStatefulWidget {
   final String idDocumento;
   final DosisAvisada? dosisAvisada;
 
   const FichaDetallePerro({super.key, required this.idDocumento, this.dosisAvisada});
 
   @override
-  State<FichaDetallePerro> createState() => _FichaDetallePerroState();
+  ConsumerState<FichaDetallePerro> createState() => _FichaDetallePerroState();
 }
 
-class _FichaDetallePerroState extends State<FichaDetallePerro> {
+class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
@@ -2624,7 +2625,7 @@ class _FichaDetallePerroState extends State<FichaDetallePerro> {
 
   @override
   Widget build(BuildContext context) {
-    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+    final bool esInvitado = ref.watch(sessionProvider).esInvitado;
 
     return StreamBuilder<LecturaPerro>(
       stream: _perroController.observarPerroConOrigen(widget.idDocumento),

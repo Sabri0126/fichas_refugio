@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/perro_controller.dart';
@@ -9,6 +9,7 @@ import '../controllers/tratamiento_controller.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
+import '../providers/auth_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../util/plataforma.dart';
@@ -73,16 +74,16 @@ bool tieneTratamientoActivo(List<TratamientoModel> tratamientos, {DateTime? hoy}
   return false;
 }
 
-class PantallaPerros extends StatefulWidget {
+class PantallaPerros extends ConsumerStatefulWidget {
   final SeccionPerros seccion;
 
   const PantallaPerros({super.key, this.seccion = SeccionPerros.activos});
 
   @override
-  State<PantallaPerros> createState() => _PantallaPerrosState();
+  ConsumerState<PantallaPerros> createState() => _PantallaPerrosState();
 }
 
-class _PantallaPerrosState extends State<PantallaPerros> {
+class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
   final PerroController _perroController = PerroController();
   final TextEditingController _busquedaController = TextEditingController();
   String _textoBusqueda = '';
@@ -821,7 +822,7 @@ class _PantallaPerrosState extends State<PantallaPerros> {
 
   @override
   Widget build(BuildContext context) {
-    final bool esInvitado = FirebaseAuth.instance.currentUser == null;
+    final bool esInvitado = ref.watch(sessionProvider).esInvitado;
 
     return Scaffold(
       // --- SECCIÓN: AppBar (título y selector de vista) ---

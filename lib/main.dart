@@ -1,18 +1,21 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'theme/app_theme.dart';
-import 'theme/tema_app.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'firebase_options.dart';
+import 'providers/auth_providers.dart';
+import 'providers/theme_mode_provider.dart';
 import 'services/mensajeria_service.dart';
 import 'services/notificaciones_service.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart';
-import 'views/pantalla_login.dart';
+import 'theme/app_theme.dart';
 import 'views/pantalla_bloqueo.dart';
+import 'views/pantalla_login.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -30,16 +33,19 @@ void main() async {
     yield LicenseEntryWithLineBreaks(<String>['google_fonts'], licencia);
   });
   await NotificacionesService.instance.inicializar(navigatorKey: navigatorKey);
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await TemaApp.cargar();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final prefs = await SharedPreferences.getInstance();
   await _capturarNotificacionDeInicio();
   final idPush = await MensajeriaService.instance.prepararToques();
   if (idPush != null && idPush.isNotEmpty) {
     EstadoNotificacion.payloadPendiente = idPush;
   }
-  runApp(const MyApp());
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const MyApp(),
+    ),
+  );
 }
 
 Future<void> _capturarNotificacionDeInicio() async {
@@ -47,18 +53,18 @@ Future<void> _capturarNotificacionDeInicio() async {
       await FlutterLocalNotificationsPlugin().getNotificationAppLaunchDetails();
 
   if (launchDetails?.didNotificationLaunchApp ?? false) {
-    EstadoNotificacion.payloadPendiente = launchDetails!.notificationResponse?.payload;
+    EstadoNotificacion.payloadPendiente =
+        launchDetails!.notificationResponse?.payload;
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: TemaApp.modo,
-      builder: (context, modo, _) => MaterialApp(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final modo = ref.watch(themeModeProvider);
+    return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Fichas Refugio',
       localizationsDelegates: const [
@@ -71,21 +77,24 @@ class MyApp extends StatelessWidget {
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(oscuro: true),
       themeMode: modo,
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.hasData) {
-            return const PantallaBloqueo();
-          }
-          return const PantallaLogin();
-        },
-      ),
-    ),
+      home: const _PuertaAuth(),
     );
+  }
+}
+
+/// Misma puerta que el StreamBuilder anterior: cargando, usuario o login.
+class _PuertaAuth extends ConsumerWidget {
+  const _PuertaAuth();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authStateProvider);
+    if (auth.isLoading && !auth.hasValue) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (auth.value != null) {
+      return const PantallaBloqueo();
+    }
+    return const PantallaLogin();
   }
 }
