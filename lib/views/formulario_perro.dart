@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
@@ -46,6 +47,8 @@ class FormularioPerro extends StatefulWidget {
 }
 
 class _FormularioPerroState extends State<FormularioPerro> {
+  static const _esperaFirestore = Duration(seconds: 20);
+
   final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
@@ -538,7 +541,9 @@ class _FormularioPerroState extends State<FormularioPerro> {
         final idDocumento = widget.idDocumento;
         if (idDocumento != null && idDocumento.isNotEmpty) {
           try {
-            final remoto = await _perroController.obtenerPerroPorId(idDocumento);
+            final remoto = await _perroController
+                .obtenerPerroPorId(idDocumento)
+                .timeout(_esperaFirestore);
             if (remoto != null) {
               tratamientosAGuardar = TratamientoController.reconciliarPausas(
                 _tratamientos,
@@ -574,6 +579,8 @@ class _FormularioPerroState extends State<FormularioPerro> {
               seguimientosAGuardar = seguimientosFusionados;
               pesosAGuardar = pesosFusionados;
             }
+          } on TimeoutException {
+            rethrow;
           } catch (_) {}
         }
 
@@ -642,7 +649,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
           pesos: pesosAGuardar,
         );
 
-        await _perroController.guardarPerro(perro);
+        await _perroController.guardarPerro(perro).timeout(_esperaFirestore);
 
         if (mounted) {
           if (altasConservadas > 0) {

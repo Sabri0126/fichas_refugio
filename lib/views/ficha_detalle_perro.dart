@@ -28,6 +28,8 @@ import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/perros_providers.dart';
 import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
 import '../theme/encabezado_seccion.dart';
@@ -123,7 +125,7 @@ class FichaDetallePerro extends ConsumerStatefulWidget {
 }
 
 class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
-  final PerroController _perroController = PerroController();
+  PerroController get _perroController => ref.read(perroControllerProvider);
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
   final SeguimientoController _seguimientoController = SeguimientoController();
@@ -2626,17 +2628,13 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   @override
   Widget build(BuildContext context) {
     final bool esInvitado = ref.watch(sessionProvider).esInvitado;
+    final lectura = ref.watch(perroProvider(widget.idDocumento)).asData?.value;
+    if (lectura == null || lectura.perro == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-    return StreamBuilder<LecturaPerro>(
-      stream: _perroController.observarPerroConOrigen(widget.idDocumento),
-      builder: (context, snapshot) {
-        final lectura = snapshot.data;
-        if (lectura == null || lectura.perro == null) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        // --- SECCIÓN: Datos del perro y auto-archivado de tratamientos vencidos ---
-        final perro = _procesarAutoArchivado(lectura.perro!);
+    // --- SECCIÓN: Datos del perro y auto-archivado de tratamientos vencidos ---
+    final perro = _procesarAutoArchivado(lectura.perro!);
         final galeria = perro.galeria;
         _programarAviso(perro, desdeCache: lectura.desdeCache);
 
@@ -2824,8 +2822,6 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
             ),
           ),
         );
-      }
-    );
   }
 }
 

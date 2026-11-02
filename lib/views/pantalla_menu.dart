@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/calendario_general_controller.dart';
-import '../controllers/historial_notificaciones_controller.dart';
-import '../controllers/perro_controller.dart';
-import '../models/perro_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/notificaciones_providers.dart';
+import '../providers/perros_providers.dart';
 import '../providers/theme_mode_provider.dart';
 import '../services/mensajeria_service.dart';
 import '../services/nombre_usuario.dart';
@@ -32,36 +31,23 @@ class PantallaMenu extends ConsumerStatefulWidget {
 }
 
 class _PantallaMenuState extends ConsumerState<PantallaMenu> {
-  final HistorialNotificacionesController _historial =
-      HistorialNotificacionesController();
-  final PerroController _perros = PerroController();
-  StreamSubscription<int>? _badge;
-  int _noLeidas = 0;
   bool _pidiendoNombre = false;
+  bool _efectosStaff = false;
 
   @override
   void initState() {
     super.initState();
-    final esInvitado = ref.read(sessionProvider).esInvitado;
-    if (!esInvitado) {
-      unawaited(
-        MensajeriaService.instance.registrarDispositivo().catchError(
-          (Object _) {},
-        ),
-      );
-      unawaited(NotificacionesService.instance.migrarAlarmasLocales());
-      _badge = _historial.observarNoLeidas(esInvitado: esInvitado).listen((cantidad) {
-        if (!mounted) return;
-        setState(() => _noLeidas = cantidad);
-      });
-      unawaited(_prepararNombre());
-    }
-  }
-
-  @override
-  void dispose() {
-    _badge?.cancel();
-    super.dispose();
+    ref.listenManual<bool>(
+      sessionProvider.select((sesion) => sesion.esInvitado),
+      (anterior, esInvitado) {
+        if (esInvitado || _efectosStaff) return;
+        _efectosStaff = true;
+        unawaited(MensajeriaService.instance.registrarDispositivo().catchError((Object _) {}));
+        unawaited(NotificacionesService.instance.migrarAlarmasLocales());
+        unawaited(_prepararNombre());
+      },
+      fireImmediately: true,
+    );
   }
 
   Future<void> _prepararNombre() async {
@@ -130,6 +116,9 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
     final sesion = ref.watch(sessionProvider);
     final bool esInvitado = sesion.esInvitado;
     final modo = ref.watch(themeModeProvider);
+    final datos = ref.watch(perrosProvider).value;
+    final desdeCache = ref.watch(perrosDesdeCacheProvider);
+    final noLeidas = ref.watch(notificacionesNoLeidasProvider);
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -190,11 +179,9 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                       ),
                                 ),
                                 const SizedBox(height: 12),
-                                StreamBuilder<List<PerroModel>>(
-                                  stream: _perros.observarPerros(),
-                                  builder: (context, snapshot) {
-                                    final datos = snapshot.data;
-                                    final activos = datos?.where((perro) => perro.estado == 'activo').toList() ?? const <PerroModel>[];
+                                Builder(
+                                  builder: (context) {
+                                    final activos = datos?.where((perro) => perro.estado == 'activo').toList() ?? [];
                                     final enCasa = activos.where((perro) => perro.enCasa).length;
                                     final enRefugio = activos.length - enCasa;
                                     final difuntos = datos?.where((perro) => perro.estado == 'inactivo').length;
@@ -352,24 +339,20 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                   top: 52,
                   left: 16,
                   right: 16,
-                  child: StreamBuilder<bool>(
-                    stream: _perros.observarDesdeCache(),
-                    builder: (context, snapshot) {
-                      if (snapshot.data != true) return const SizedBox.shrink();
-                      return Material(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(12),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Text(
-                            'Sin conexión. Estás viendo datos guardados en el dispositivo.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white, fontSize: 13),
+                  child: desdeCache
+                      ? Material(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(12),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Text(
+                              'Sin conexión. Estás viendo datos guardados en el dispositivo.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white, fontSize: 13),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
                 Positioned(
                   top: esWindows ? 64 : 12,
@@ -464,8 +447,8 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                     top: 12,
                     right: 8,
                     child: Badge(
-                      isLabelVisible: _noLeidas > 0,
-                      label: Text(_noLeidas > 9 ? '9+' : '$_noLeidas'),
+                      isLabelVisible: noLeidas > 0,
+                      label: Text(noLeidas > 9 ? '9+' : '$noLeidas'),
                       child: IconButton(
                         tooltip: 'Notificaciones',
                         onPressed: _abrirNotificaciones,

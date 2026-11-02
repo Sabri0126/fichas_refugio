@@ -19,7 +19,9 @@ final authStateProvider = StreamProvider<User?>((ref) {
 final sessionProvider = Provider<Sesion>((ref) {
   final asyncUsuario = ref.watch(authStateProvider);
   final User? usuario;
-  if (asyncUsuario.hasValue) {
+  if (asyncUsuario.hasError) {
+    usuario = null;
+  } else if (asyncUsuario.hasValue) {
     usuario = asyncUsuario.value;
   } else if (asyncUsuario.isLoading) {
     usuario = ref.read(firebaseAuthProvider).currentUser;

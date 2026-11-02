@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/historial_notificaciones_controller.dart';
 import '../models/dosis_avisada.dart';
 import '../models/notificacion_registro_model.dart';
-import '../providers/auth_providers.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/notificaciones_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
@@ -19,20 +20,12 @@ class PantallaNotificaciones extends ConsumerStatefulWidget {
 }
 
 class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones> {
-  final HistorialNotificacionesController _historial = HistorialNotificacionesController();
-  late final Stream<List<NotificacionRegistroModel>> _stream;
+  HistorialNotificacionesController get _historial => ref.read(historialNotificacionesControllerProvider);
   Set<String> _noLeidasAlAbrir = {};
   final Set<String> _vistas = {};
   final Set<String> _ocultasAhora = {};
   bool _puntosListos = false;
   bool _marque = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final esInvitado = ref.read(sessionProvider).esInvitado;
-    _stream = _historial.observarHistorial(esInvitado: esInvitado);
-  }
 
   String _formatearFecha(DateTime fecha) {
     final ahora = DateTime.now();
@@ -101,27 +94,23 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<NotificacionRegistroModel>>(
-      stream: _stream,
-      builder: (context, snapshot) {
-        final items = (snapshot.data ?? const <NotificacionRegistroModel>[])
-            .where((entrada) => !_ocultasAhora.contains(entrada.id))
-            .toList();
-        if (snapshot.hasData && !snapshot.hasError) _marcarAlMostrar(items);
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Notificaciones'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.delete_sweep_outlined),
-                tooltip: 'Borrar todo',
-                onPressed: items.isEmpty ? null : _confirmarBorrado,
-              ),
-            ],
+    final async = ref.watch(notificacionesProvider);
+    final items = (async.asData?.value ?? const <NotificacionRegistroModel>[])
+        .where((entrada) => !_ocultasAhora.contains(entrada.id))
+        .toList();
+    if (async.hasValue && !async.hasError) _marcarAlMostrar(items);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notificaciones'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined),
+            tooltip: 'Borrar todo',
+            onPressed: items.isEmpty ? null : _confirmarBorrado,
           ),
-          body: _cuerpo(snapshot, items),
-        );
-      },
+        ],
+      ),
+      body: _cuerpo(async, items),
     );
   }
 
@@ -130,8 +119,8 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
     return EdgeInsets.fromLTRB(16, 12, 16, abajo);
   }
 
-  Widget _cuerpo(AsyncSnapshot<List<NotificacionRegistroModel>> snapshot, List<NotificacionRegistroModel> items) {
-    if (snapshot.hasError) {
+  Widget _cuerpo(AsyncValue<List<NotificacionRegistroModel>> async, List<NotificacionRegistroModel> items) {
+    if (async.hasError) {
       return ListView(
         padding: _paddingLista(context),
         children: [
@@ -141,7 +130,7 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
         ],
       );
     }
-    if (!snapshot.hasData) {
+    if (!async.hasValue) {
       return const Center(child: CircularProgressIndicator());
     }
     if (items.isEmpty) {

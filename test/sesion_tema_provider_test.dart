@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:fichas_refugio/providers/auth_providers.dart';
 import 'package:fichas_refugio/providers/theme_mode_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +71,49 @@ void main() {
       expect(container.read(sessionProvider).usuario, isNull);
       expect(container.read(sessionProvider).esInvitado, isTrue);
       expect(container.read(sessionProvider).puedeEditar, isFalse);
+    });
+
+    test('un error de auth, con o sin usuario previo, deja la sesión como visitante', () async {
+      final auth = MockFirebaseAuth(
+        signedIn: true,
+        mockUser: MockUser(uid: 'usuario-3', email: 'c@refugio.test'),
+      );
+      final sinValor = ProviderContainer(
+        overrides: [
+          firebaseAuthProvider.overrideWithValue(auth),
+          authStateProvider.overrideWith((ref) => Stream<User?>.error(StateError('auth'))),
+        ],
+      );
+      addTearDown(sinValor.dispose);
+      sinValor.listen(sessionProvider, (_, _) {});
+      await pumpEventQueue();
+
+      expect(sinValor.read(authStateProvider).hasError, isTrue);
+      expect(sinValor.read(sessionProvider).usuario, isNull);
+      expect(sinValor.read(sessionProvider).esInvitado, isTrue);
+
+      final cambios = StreamController<User?>();
+      addTearDown(cambios.close);
+      final conValor = ProviderContainer(
+        overrides: [
+          firebaseAuthProvider.overrideWithValue(auth),
+          authStateProvider.overrideWith((ref) => cambios.stream),
+        ],
+      );
+      addTearDown(conValor.dispose);
+      conValor.listen(sessionProvider, (_, _) {});
+      cambios.add(auth.currentUser);
+      await pumpEventQueue();
+      expect(conValor.read(sessionProvider).puedeEditar, isTrue);
+
+      cambios.addError(StateError('auth'));
+      await pumpEventQueue();
+
+      expect(conValor.read(authStateProvider).hasError, isTrue);
+      expect(conValor.read(authStateProvider).hasValue, isTrue);
+      expect(conValor.read(sessionProvider).usuario, isNull);
+      expect(conValor.read(sessionProvider).esInvitado, isTrue);
+      expect(conValor.read(sessionProvider).puedeEditar, isFalse);
     });
   });
 

@@ -9,6 +9,11 @@ import '../services/mensajeria_service.dart';
 
 /// Historial de avisos del servidor. Lo leído y lo borrado queda en este teléfono.
 class HistorialNotificacionesController {
+  HistorialNotificacionesController({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _db;
+
   static const _claveLeidas = 'notif_leidas_hasta';
   static const _claveBorrado = 'notif_borrado_hasta';
   static const _claveEliminadas = 'notif_eliminadas';
@@ -122,7 +127,7 @@ class HistorialNotificacionesController {
   }
 
   Query<Map<String, dynamic>> _consulta(DateTime corte) {
-    return FirebaseFirestore.instance
+    return _db
         .collection('notificaciones')
         .where('creada', isGreaterThan: Timestamp.fromDate(corte))
         .orderBy('creada', descending: true)
@@ -130,7 +135,7 @@ class HistorialNotificacionesController {
   }
 
   Query<Map<String, dynamic>> _consultaSinFecha() {
-    return FirebaseFirestore.instance
+    return _db
         .collection('notificaciones')
         .where('creada', isNull: true)
         .limit(100);

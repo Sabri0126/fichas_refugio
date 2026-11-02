@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../controllers/perro_controller.dart';
 import '../controllers/reportes_controller.dart';
-import '../models/perro_model.dart';
+import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../util/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
@@ -24,15 +24,14 @@ const _nombresMes = [
   'Diciembre',
 ];
 
-class PantallaReportes extends StatefulWidget {
+class PantallaReportes extends ConsumerStatefulWidget {
   const PantallaReportes({super.key});
 
   @override
-  State<PantallaReportes> createState() => _PantallaReportesState();
+  ConsumerState<PantallaReportes> createState() => _PantallaReportesState();
 }
 
-class _PantallaReportesState extends State<PantallaReportes> {
-  final PerroController _perros = PerroController();
+class _PantallaReportesState extends ConsumerState<PantallaReportes> {
   late DateTime _mes;
 
   @override
@@ -44,6 +43,7 @@ class _PantallaReportesState extends State<PantallaReportes> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncPerros = ref.watch(perrosProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -55,17 +55,15 @@ class _PantallaReportesState extends State<PantallaReportes> {
           ),
         ),
       ),
-      body: StreamBuilder<List<PerroModel>>(
-        stream: _perros.observarPerros(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
+      body: () {
+          if (asyncPerros.hasError) {
             return const Center(child: Text('No se pudieron cargar los reportes.'));
           }
-          if (!snapshot.hasData) {
+          if (!asyncPerros.hasValue) {
             return const Center(child: CircularProgressIndicator());
           }
           final hoy = DateTime.now();
-          final reporte = ReportesController.calcular(snapshot.data!, hoy: hoy, mes: _mes);
+          final reporte = ReportesController.calcular(asyncPerros.value!, hoy: hoy, mes: _mes);
           final abajo = esAndroid
               ? 32 + MediaQuery.of(context).padding.bottom + 24
               : 32.0;
@@ -150,8 +148,7 @@ class _PantallaReportesState extends State<PantallaReportes> {
             ],
             ),
           );
-        },
-      ),
+        }(),
     );
   }
 

@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/veterinaria_controller.dart';
 import '../models/contacto_veterinario_model.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/veterinarias_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../util/plataforma.dart';
 
-class PantallaVeterinarias extends StatefulWidget {
+class PantallaVeterinarias extends ConsumerStatefulWidget {
   const PantallaVeterinarias({super.key});
 
   @override
-  State<PantallaVeterinarias> createState() => _PantallaVeterinariasState();
+  ConsumerState<PantallaVeterinarias> createState() => _PantallaVeterinariasState();
 }
 
-class _PantallaVeterinariasState extends State<PantallaVeterinarias> {
-  final VeterinariaController _controller = VeterinariaController();
+class _PantallaVeterinariasState extends ConsumerState<PantallaVeterinarias> {
+  VeterinariaController get _controller => ref.read(veterinariaControllerProvider);
 
   void _aviso(String texto) {
     if (!mounted) return;
@@ -111,6 +114,7 @@ class _PantallaVeterinariasState extends State<PantallaVeterinarias> {
 
   @override
   Widget build(BuildContext context) {
+    final asyncContactos = ref.watch(veterinariasProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -127,18 +131,16 @@ class _PantallaVeterinariasState extends State<PantallaVeterinarias> {
         onPressed: () => _guardar(null),
         child: const Icon(Icons.add),
       ),
-      body: StreamBuilder<List<ContactoVeterinarioModel>>(
-        stream: _controller.observar(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
+      body: () {
+          if (asyncContactos.hasError) {
             return const Center(
               child: Text('No se pudieron cargar los contactos.'),
             );
           }
-          if (!snapshot.hasData) {
+          if (!asyncContactos.hasValue) {
             return const Center(child: CircularProgressIndicator());
           }
-          final contactos = snapshot.data!;
+          final contactos = asyncContactos.value!;
           if (contactos.isEmpty) {
             return Center(
               child: Padding(
@@ -170,8 +172,7 @@ class _PantallaVeterinariasState extends State<PantallaVeterinarias> {
               },
             ),
           );
-        },
-      ),
+        }(),
     );
   }
 }

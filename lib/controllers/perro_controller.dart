@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -23,8 +25,12 @@ class LecturaPerro {
 /// formulario, cálculo de edades y sincronización del árbol de familiares.
 /// No contiene código de UI.
 class PerroController {
-  final CollectionReference<Map<String, dynamic>> _perrosRef =
-      FirebaseFirestore.instance.collection('perros');
+  PerroController({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance,
+        _perrosRef = (firestore ?? FirebaseFirestore.instance).collection('perros');
+
+  final FirebaseFirestore _db;
+  final CollectionReference<Map<String, dynamic>> _perrosRef;
 
   /// Escucha en tiempo real todos los perros de la colección `perros`.
   ///
@@ -34,6 +40,53 @@ class PerroController {
     return _perrosRef.snapshots().map(
           (snapshot) => snapshot.docs.map((doc) => PerroModel.fromMap(doc.data(), doc.id)).toList(),
         );
+  }
+
+  /// Una sola escucha de la colección, sin cambios de metadata: en Windows
+  /// esos eventos dejaban la lista quieta y trababan el guardado.
+  /// La primera emisión suele salir de la copia local aunque haya WiFi.
+  /// [snapshotsInSync] avisa cuando el servidor ya respondió y apaga el aviso.
+  Stream<({List<PerroModel> perros, bool desdeCache})> observarListaConOrigen() {
+    List<PerroModel>? previa;
+    var enCache = false;
+    var alDia = false;
+    final salida = StreamController<({List<PerroModel> perros, bool desdeCache})>();
+
+    void emitir() {
+      final lista = previa;
+      if (lista == null || salida.isClosed) return;
+      salida.add((perros: lista, desdeCache: enCache && !alDia));
+    }
+
+    final documentos = _perrosRef.snapshots().listen(
+      (snapshot) {
+        final copiaLocal = snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
+        enCache = copiaLocal;
+        if (!copiaLocal) alDia = true;
+        if (previa == null || snapshot.docChanges.isNotEmpty) {
+          previa = [for (final doc in snapshot.docs) PerroModel.fromMap(doc.data(), doc.id)];
+        }
+        emitir();
+      },
+      onError: salida.addError,
+    );
+
+    StreamSubscription<void>? sincronia;
+    try {
+      sincronia = _db.snapshotsInSync().listen(
+        (_) {
+          alDia = true;
+          emitir();
+        },
+        onError: (_) {},
+      );
+    } catch (_) {}
+
+    salida.onCancel = () {
+      documentos.cancel();
+      sincronia?.cancel();
+    };
+    return salida.stream;
   }
 
   /// `true` cuando Firestore está sirviendo la copia local, sin red.
@@ -248,7 +301,7 @@ class PerroController {
   /// Suma una medición al array `pesos` si ese id todavía no está.
   Future<void> agregarPeso(String idPerro, PesoModel peso) async {
     final ref = _perrosRef.doc(idPerro);
-    await FirebaseFirestore.instance.runTransaction((tx) async {
+    await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       final data = snap.data();
       if (data == null) return;
@@ -297,7 +350,7 @@ class PerroController {
     Map<String, dynamic> mapa,
   ) async {
     final ref = _perrosRef.doc(idPerro);
-    await FirebaseFirestore.instance.runTransaction((tx) async {
+    await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       final data = snap.data();
       if (data == null) return;
@@ -319,7 +372,7 @@ class PerroController {
   /// Pone `activo` en false en el seguimiento indicado, sin tocar el resto del array.
   Future<void> cerrarSeguimiento(String idPerro, String idSeguimiento) async {
     final ref = _perrosRef.doc(idPerro);
-    await FirebaseFirestore.instance.runTransaction((tx) async {
+    await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       final data = snap.data();
       if (data == null) return;
@@ -349,7 +402,7 @@ class PerroController {
     EgresoModel? nuevo,
   ) async {
     final ref = _perrosRef.doc(idPerro);
-    await FirebaseFirestore.instance.runTransaction((tx) async {
+    await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       final data = snap.data();
       if (data == null) throw const HistorialDesactualizadoException();
@@ -441,7 +494,7 @@ class PerroController {
       datosPerro['galeria_estudios'] = estudiosPrevios is List ? estudiosPrevios : <Map<String, dynamic>>[];
     }
 
-    final batch = FirebaseFirestore.instance.batch();
+    final batch = _db.batch();
     batch.set(docRef, datosPerro, SetOptions(merge: true));
 
     for (final familiar in perro.parientes) {
@@ -586,7 +639,7 @@ class PerroController {
         queda.add(item);
       }
       if (!cambio) continue;
-      lote ??= FirebaseFirestore.instance.batch();
+      lote ??= _db.batch();
       lote!.update(doc.reference, {'parientes': queda});
       operaciones++;
       if (operaciones >= 400) await enviar();
@@ -610,7 +663,7 @@ class PerroController {
   }
 
   Future<void> _borrarAvisos(String id) async {
-    final avisos = FirebaseFirestore.instance.collection('notificaciones');
+    final avisos = _db.collection('notificaciones');
     final snapshot = await avisos.where('id_perro', isEqualTo: id).get();
     WriteBatch? lote;
     var operaciones = 0;
@@ -624,7 +677,7 @@ class PerroController {
     }
 
     for (final doc in snapshot.docs) {
-      lote ??= FirebaseFirestore.instance.batch();
+      lote ??= _db.batch();
       lote!.delete(doc.reference);
       operaciones++;
       if (operaciones >= 400) await enviar();

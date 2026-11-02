@@ -2,23 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/perro_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
-import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
 import '../util/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 
-enum ModoVista { grande, compacta, lista }
-
-enum OrdenListado { reciente, antiguo, nombre, edad }
+export '../providers/perros_providers.dart' show ModoVista, OrdenListado, SeccionPerros, tieneTratamientoActivo;
 
 /// Vista que sigue a [actual] al tocar el botón de la barra.
 ModoVista vistaSiguiente(ModoVista actual) {
@@ -60,20 +58,6 @@ int compararEdadListado(PerroModel a, PerroModel b) {
   return a.meses.compareTo(b.meses);
 }
 
-enum SeccionPerros { activos, difuntos, egresados }
-
-/// Hay un diario en curso: activo, sin pausa y todavía no finalizado.
-bool tieneTratamientoActivo(List<TratamientoModel> tratamientos, {DateTime? hoy}) {
-  final momento = hoy ?? DateTime.now();
-  final dia = DateTime(momento.year, momento.month, momento.day);
-  final activos = TratamientoController().obtenerActivosDiarios(tratamientos);
-  for (final tratamiento in activos) {
-    final fase = TratamientoController.calcularEstadoDuracion(tratamiento, hoy: dia).fase;
-    if (fase != FaseTratamiento.finalizado) return true;
-  }
-  return false;
-}
-
 class PantallaPerros extends ConsumerStatefulWidget {
   final SeccionPerros seccion;
 
@@ -84,23 +68,14 @@ class PantallaPerros extends ConsumerStatefulWidget {
 }
 
 class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
-  final PerroController _perroController = PerroController();
   final TextEditingController _busquedaController = TextEditingController();
-  String _textoBusqueda = '';
-  String _filtroUbicacion = 'Todos';
-  String _filtroEgreso = 'Todos';
-  String _filtroSexo = 'Todos';
-  String _filtroCastrado = 'Todos';
-  bool _soloConTratamiento = false;
-  bool _soloTratamientoActivo = false;
-  OrdenListado _orden = OrdenListado.reciente;
-  ModoVista _modoVista = ModoVista.grande;
-  late final Stream<List<PerroModel>> _streamPerros = _perroController.observarPerros();
 
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_cargarModoVista());
+  PerroController get _perroController => ref.read(perroControllerProvider);
+
+  FiltrosPerros get _filtros => ref.read(filtrosPerrosProvider(widget.seccion));
+
+  void _filtrosNuevos(FiltrosPerros filtros) {
+    ref.read(filtrosPerrosProvider(widget.seccion).notifier).reemplazar(filtros);
   }
 
   @override
@@ -109,37 +84,12 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
     super.dispose();
   }
 
-  Future<void> _cargarModoVista() async {
-    final prefs = await SharedPreferences.getInstance();
-    final valor = prefs.getString('vista_listado_perros');
-    final ModoVista modo = switch (valor) {
-      'compacta' => ModoVista.compacta,
-      'lista' => ModoVista.lista,
-      _ => ModoVista.grande,
-    };
-    if (!mounted || modo == _modoVista) return;
-    setState(() => _modoVista = modo);
-  }
-
-  Future<void> _guardarModoVista(ModoVista modo) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('vista_listado_perros', modo.name);
-  }
-
   void _cambiarModoVista(ModoVista modo) {
-    setState(() => _modoVista = modo);
-    unawaited(_guardarModoVista(modo));
+    unawaited(ref.read(filtrosPerrosProvider(widget.seccion).notifier).fijarModoVista(modo));
   }
 
   void _quitarFiltros() {
-    setState(() {
-      _filtroUbicacion = 'Todos';
-      _filtroEgreso = 'Todos';
-      _filtroSexo = 'Todos';
-      _filtroCastrado = 'Todos';
-      _soloConTratamiento = false;
-      _soloTratamientoActivo = false;
-    });
+    ref.read(filtrosPerrosProvider(widget.seccion).notifier).quitarFiltros();
   }
 
   void _abrirFicha(String idDocumento) {
@@ -200,13 +150,6 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
   String? _lineaEgreso(PerroModel perro) {
     if (perro.fechaEgreso == null) return null;
     return 'Egreso: ${_perroController.formatearFecha(perro.fechaEgreso)}';
-  }
-
-  int _compararFechaDesc(DateTime? a, DateTime? b) {
-    if (a == null && b == null) return 0;
-    if (a == null) return 1;
-    if (b == null) return -1;
-    return b.compareTo(a);
   }
 
   bool _tieneDosisPendiente(PerroModel perro) {
@@ -736,19 +679,19 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
     );
   }
 
-  bool get _hayFiltrosExtra => _etiquetasFiltro().isNotEmpty;
+  bool get _hayFiltrosExtra => _etiquetasFiltro(_filtros).isNotEmpty;
 
-  List<String> _etiquetasFiltro() {
+  List<String> _etiquetasFiltro(FiltrosPerros filtros) {
     final etiquetas = <String>[];
     if (widget.seccion == SeccionPerros.egresados) {
-      if (_filtroEgreso != 'Todos') etiquetas.add(_filtroEgreso);
-    } else if (_filtroUbicacion != 'Todos') {
-      etiquetas.add(_filtroUbicacion);
+      if (filtros.egreso != 'Todos') etiquetas.add(filtros.egreso);
+    } else if (filtros.ubicacion != 'Todos') {
+      etiquetas.add(filtros.ubicacion);
     }
-    if (_filtroSexo != 'Todos') etiquetas.add(_filtroSexo);
-    if (_filtroCastrado != 'Todos') etiquetas.add(_filtroCastrado);
-    if (_soloConTratamiento) etiquetas.add('Con dosis pendiente hoy');
-    if (_soloTratamientoActivo) etiquetas.add('Con tratamiento activo');
+    if (filtros.sexo != 'Todos') etiquetas.add(filtros.sexo);
+    if (filtros.castrado != 'Todos') etiquetas.add(filtros.castrado);
+    if (filtros.soloConTratamiento) etiquetas.add('Con dosis pendiente hoy');
+    if (filtros.soloTratamientoActivo) etiquetas.add('Con tratamiento activo');
     return etiquetas;
   }
 
@@ -758,57 +701,60 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModal) {
+            final filtros = _filtros;
             return SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: PanelOrdenFiltros(
                   egresados: widget.seccion == SeccionPerros.egresados,
                   mostrarPendientes: widget.seccion == SeccionPerros.activos,
-                  ubicacion: _filtroUbicacion,
-                  motivo: _filtroEgreso,
-                  ordenEtiqueta: switch (_orden) {
+                  ubicacion: filtros.ubicacion,
+                  motivo: filtros.egreso,
+                  ordenEtiqueta: switch (filtros.orden) {
                     OrdenListado.reciente => 'Recientes',
                     OrdenListado.antiguo => 'Antiguos',
                     OrdenListado.nombre => 'Nombre',
                     OrdenListado.edad => 'Edad',
                   },
-                  sexo: _filtroSexo,
-                  castrado: _filtroCastrado,
-                  soloPendientes: _soloConTratamiento,
-                  soloActivos: _soloTratamientoActivo,
+                  sexo: filtros.sexo,
+                  castrado: filtros.castrado,
+                  soloPendientes: filtros.soloConTratamiento,
+                  soloActivos: filtros.soloTratamientoActivo,
                   onUbicacion: (valor) {
-                    setState(() => _filtroUbicacion = valor);
+                    _filtrosNuevos(filtros.copyWith(ubicacion: valor));
                     setModal(() {});
                   },
                   onMotivo: (valor) {
-                    setState(() => _filtroEgreso = valor);
+                    _filtrosNuevos(filtros.copyWith(egreso: valor));
                     setModal(() {});
                   },
                   onOrden: (valor) {
-                    setState(() {
-                      _orden = switch (valor) {
-                        'Antiguos' => OrdenListado.antiguo,
-                        'Nombre' => OrdenListado.nombre,
-                        'Edad' => OrdenListado.edad,
-                        _ => OrdenListado.reciente,
-                      };
-                    });
+                    _filtrosNuevos(
+                      filtros.copyWith(
+                        orden: switch (valor) {
+                          'Antiguos' => OrdenListado.antiguo,
+                          'Nombre' => OrdenListado.nombre,
+                          'Edad' => OrdenListado.edad,
+                          _ => OrdenListado.reciente,
+                        },
+                      ),
+                    );
                     setModal(() {});
                   },
                   onSexo: (valor) {
-                    setState(() => _filtroSexo = valor);
+                    _filtrosNuevos(filtros.copyWith(sexo: valor));
                     setModal(() {});
                   },
                   onCastrado: (valor) {
-                    setState(() => _filtroCastrado = valor);
+                    _filtrosNuevos(filtros.copyWith(castrado: valor));
                     setModal(() {});
                   },
                   onPendientes: (valor) {
-                    setState(() => _soloConTratamiento = valor);
+                    _filtrosNuevos(filtros.copyWith(soloConTratamiento: valor));
                     setModal(() {});
                   },
                   onActivos: (valor) {
-                    setState(() => _soloTratamientoActivo = valor);
+                    _filtrosNuevos(filtros.copyWith(soloTratamientoActivo: valor));
                     setModal(() {});
                   },
                 ),
@@ -823,6 +769,9 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
   @override
   Widget build(BuildContext context) {
     final bool esInvitado = ref.watch(sessionProvider).esInvitado;
+    final filtros = ref.watch(filtrosPerrosProvider(widget.seccion));
+    final asyncTodos = ref.watch(perrosProvider);
+    final asyncFiltrados = ref.watch(perrosFiltradosProvider(widget.seccion));
 
     return Scaffold(
       // --- SECCIÓN: AppBar (título y selector de vista) ---
@@ -844,13 +793,13 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
             tooltip: 'Orden y filtros',
             onPressed: _abrirFiltros,
             icon: Badge(
-              isLabelVisible: _hayFiltrosExtra || _orden != OrdenListado.reciente,
+              isLabelVisible: _hayFiltrosExtra || filtros.orden != OrdenListado.reciente,
               smallSize: 8,
               child: const Icon(Icons.tune_rounded),
             ),
           ),
           BotonVista(
-            modo: _modoVista,
+            modo: filtros.modoVista,
             onChanged: _cambiarModoVista,
           ),
         ],
@@ -862,18 +811,18 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _busquedaController,
-              onChanged: (value) => setState(() => _textoBusqueda = value),
+              onChanged: (value) => _filtrosNuevos(_filtros.copyWith(texto: value)),
               decoration: InputDecoration(
                 hintText: 'Buscar por nombre...',
                 prefixIcon: const Icon(Icons.search),
                 fillColor: context.paleta.superficie,
-                suffixIcon: _textoBusqueda.isNotEmpty
+                suffixIcon: filtros.texto.isNotEmpty
                     ? IconButton(
                         tooltip: 'Borrar búsqueda',
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _busquedaController.clear();
-                          setState(() => _textoBusqueda = '');
+                          _filtrosNuevos(_filtros.copyWith(texto: ''));
                         },
                       )
                     : null,
@@ -883,137 +832,8 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
           ),
           // --- SECCIÓN: Listado de perros (filtrado, orden y grilla) ---
           Expanded(
-            child: StreamBuilder<List<PerroModel>>(
-        stream: _streamPerros,
-        builder: (context, AsyncSnapshot<List<PerroModel>> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _esqueleto();
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _estadoVacio(
-              _textoVacioSeccion(),
-              accion: !esInvitado && widget.seccion == SeccionPerros.activos
-                  ? FilledButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const FormularioPerro()),
-                      ),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Agregar primer perrito'),
-                    )
-                  : null,
-            );
-          }
-
-          final perrosPorEstado = snapshot.data!.where((perro) {
-            switch (widget.seccion) {
-              case SeccionPerros.difuntos:
-                return perro.estado == 'inactivo';
-              case SeccionPerros.egresados:
-                return perro.estado == 'egresado';
-              case SeccionPerros.activos:
-                return perro.estado == 'activo';
-            }
-          }).toList();
-
-          final perros = perrosPorEstado.where((perro) {
-            if (widget.seccion == SeccionPerros.egresados) {
-              if (_filtroEgreso == 'Adoptados') return perro.motivoEgreso == 'adopcion';
-              if (_filtroEgreso == 'Reencontrados') return perro.motivoEgreso == 'familia';
-              return true;
-            }
-            if (_filtroUbicacion == 'En casa') {
-              return perro.enCasa;
-            }
-            if (_filtroUbicacion == 'Refugio') {
-              return !perro.enCasa;
-            }
-            return true;
-          }).where((perro) {
-            if (_filtroSexo == 'Macho' && perro.sexo != 'macho') return false;
-            if (_filtroSexo == 'Hembra' && perro.sexo != 'hembra') return false;
-            if (_filtroCastrado == 'Castrados' && !perro.castrado) return false;
-            if (_filtroCastrado == 'Sin castrar' && perro.castrado) return false;
-            if (_soloConTratamiento && !_tieneDosisPendiente(perro)) return false;
-            if (_soloTratamientoActivo && !tieneTratamientoActivo(perro.tratamientos)) return false;
-            if (_textoBusqueda.isEmpty) return true;
-            return perro.nombre.toLowerCase().contains(_textoBusqueda.toLowerCase());
-          }).toList();
-
-          perros.sort((a, b) {
-            switch (_orden) {
-              case OrdenListado.nombre:
-                return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
-              case OrdenListado.edad:
-                return compararEdadListado(a, b);
-              case OrdenListado.antiguo:
-                return _compararFechaDesc(b.fechaIngreso, a.fechaIngreso);
-              case OrdenListado.reciente:
-                if (widget.seccion == SeccionPerros.egresados) {
-                  final porEgreso = _compararFechaDesc(a.fechaEgreso, b.fechaEgreso);
-                  if (porEgreso != 0) return porEgreso;
-                }
-                return _compararFechaDesc(a.fechaIngreso, b.fechaIngreso);
-            }
-          });
-
-          final resumen = resumenFiltros(_etiquetasFiltro(), perros.length);
-          final vacio = perros.isEmpty
-              ? _estadoVacio(
-                  _textoBusqueda.isNotEmpty ? 'No se encontraron resultados.' : _textoVacioSeccion(),
-                  icono: _textoBusqueda.isNotEmpty ? Icons.search_off : Icons.pets,
-                )
-              : null;
-          if (vacio != null && resumen == null) return vacio;
-
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final crossAxisCount = constraints.maxWidth >= 900
-                  ? 3
-                  : constraints.maxWidth >= 600
-                      ? 2
-                      : 1;
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (resumen != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 4,
-                        children: [
-                          Text(
-                            resumen,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
-                          ),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: _quitarFiltros,
-                            child: const Text('Quitar filtros'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: vacio ??
-                        switch (_modoVista) {
-                          ModoVista.grande => _grillaGrande(perros, crossAxisCount),
-                          ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth),
-                          ModoVista.lista => _vistaLista(perros),
-                        },
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-        ),
+            child: _cuerpoListado(esInvitado, filtros, asyncTodos, asyncFiltrados),
+          ),
         ],
       ),
       // --- SECCIÓN: Botón flotante para dar de alta un nuevo perro ---
@@ -1026,6 +846,86 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
               tooltip: 'Nuevo ingreso',
               child: const Icon(Icons.add),
             ),
+    );
+  }
+
+  Widget _cuerpoListado(
+    bool esInvitado,
+    FiltrosPerros filtros,
+    AsyncValue<List<PerroModel>> asyncTodos,
+    AsyncValue<List<PerroModel>> asyncFiltrados,
+  ) {
+    if (asyncTodos.isLoading && !asyncTodos.hasValue) return _esqueleto();
+    if (!asyncTodos.hasValue || asyncTodos.value!.isEmpty) {
+      return _estadoVacio(
+        _textoVacioSeccion(),
+        accion: !esInvitado && widget.seccion == SeccionPerros.activos
+            ? FilledButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const FormularioPerro()),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar primer perrito'),
+              )
+            : null,
+      );
+    }
+
+    final perros = asyncFiltrados.value ?? const <PerroModel>[];
+    final resumen = resumenFiltros(_etiquetasFiltro(filtros), perros.length);
+    final vacio = perros.isEmpty
+        ? _estadoVacio(
+            filtros.texto.isNotEmpty ? 'No se encontraron resultados.' : _textoVacioSeccion(),
+            icono: filtros.texto.isNotEmpty ? Icons.search_off : Icons.pets,
+          )
+        : null;
+    if (vacio != null && resumen == null) return vacio;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 600
+                ? 2
+                : 1;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (resumen != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: [
+                    Text(
+                      resumen,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: context.paleta.lienzo),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _quitarFiltros,
+                      child: const Text('Quitar filtros'),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: vacio ??
+                  switch (filtros.modoVista) {
+                    ModoVista.grande => _grillaGrande(perros, crossAxisCount),
+                    ModoVista.compacta => _grillaCompacta(perros, constraints.maxWidth),
+                    ModoVista.lista => _vistaLista(perros),
+                  },
+            ),
+          ],
+        );
+      },
     );
   }
 }

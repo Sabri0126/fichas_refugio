@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/calendario_general_controller.dart';
-import '../controllers/perro_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
@@ -13,6 +12,8 @@ import '../models/dosis_avisada.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../util/plataforma.dart';
@@ -33,12 +34,9 @@ class PantallaCalendarioGeneral extends ConsumerStatefulWidget {
 }
 
 class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGeneral> {
-  final PerroController _perroController = PerroController();
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
   final SeguimientoController _seguimientoController = SeguimientoController();
-  late final Stream<List<PerroModel>> _streamPerros = _perroController
-      .observarPerros();
   late final Future<void> _localeListo;
   late final DateTime _hoy;
   late final DateTime _primerDia;
@@ -127,6 +125,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
 
   @override
   Widget build(BuildContext context) {
+    final asyncPerros = ref.watch(perrosProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Calendario general'),
@@ -139,19 +138,17 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
         ],
       ),
       body: SafeArea(
-        child: StreamBuilder<List<PerroModel>>(
-          stream: _streamPerros,
-          builder: (context, snapshot) {
-            if (snapshot.hasError && !snapshot.hasData) {
+        child: () {
+            if (asyncPerros.hasError && !asyncPerros.hasValue) {
               return _estadoMensaje(
                 'No se pudo cargar el calendario.',
                 icono: Icons.cloud_off_outlined,
               );
             }
-            if (!snapshot.hasData) {
+            if (!asyncPerros.hasValue) {
               return const Center(child: CircularProgressIndicator());
             }
-            final perros = snapshot.data!;
+            final perros = asyncPerros.value!;
             if (perros.isEmpty) {
               return _estadoMensaje('No hay perritos registrados aún.');
             }
@@ -283,8 +280,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                 );
               },
             );
-          },
-        ),
+          }(),
       ),
     );
   }
@@ -592,7 +588,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                   idPreseleccionado: _idPerroFiltro,
                   fecha: _diaSeleccionado,
                   tratamientos: _tratamientoController,
-                  perros: _perroController,
+                  perros: ref.read(perroControllerProvider),
                 ),
               ),
             ),
@@ -608,7 +604,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                   idPreseleccionado: _idPerroFiltro,
                   fecha: _diaSeleccionado,
                   recordatorios: _recordatorioController,
-                  perros: _perroController,
+                  perros: ref.read(perroControllerProvider),
                 ),
               ),
             ),
@@ -624,7 +620,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                   idPreseleccionado: _idPerroFiltro,
                   fecha: _diaSeleccionado,
                   seguimientos: _seguimientoController,
-                  perros: _perroController,
+                  perros: ref.read(perroControllerProvider),
                 ),
               ),
             ),
