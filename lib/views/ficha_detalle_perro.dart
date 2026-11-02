@@ -29,6 +29,7 @@ import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/firestore_providers.dart';
+import '../providers/guardado_provider.dart';
 import '../providers/perros_providers.dart';
 import '../services/exportar_ficha.dart';
 import '../theme/app_colors.dart';
@@ -126,10 +127,11 @@ class FichaDetallePerro extends ConsumerStatefulWidget {
 
 class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   PerroController get _perroController => ref.read(perroControllerProvider);
-  final TratamientoController _tratamientoController = TratamientoController();
-  final RecordatorioController _recordatorioController = RecordatorioController();
-  final SeguimientoController _seguimientoController = SeguimientoController();
-  final PesoController _pesoController = PesoController();
+  TratamientoController get _tratamientoController => ref.read(tratamientoControllerProvider);
+  RecordatorioController get _recordatorioController => ref.read(recordatorioControllerProvider);
+  SeguimientoController get _seguimientoController => ref.read(seguimientoControllerProvider);
+  PesoController get _pesoController => ref.read(pesoControllerProvider);
+  final MarcaArchivado _marcaArchivado = MarcaArchivado();
   final Set<String> _cerrandoSeguimiento = {};
   bool _guardandoPeso = false;
   final PageController _controladorCarrusel = PageController();
@@ -1205,9 +1207,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
       nombrePerro: nombrePerro,
     );
     if (confirmacion == null || !mounted) return;
-    try {
-      await _tratamientoController.persistirTratamiento(widget.idDocumento, confirmacion.tratamiento);
-    } catch (_) {
+    final guardado = await _ejecutarGuardado(
+      () => _tratamientoController.persistirTratamiento(widget.idDocumento, confirmacion.tratamiento),
+    );
+    if (!guardado) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo suspender el tratamiento')),
@@ -1234,10 +1237,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   Future<void> _cambiarDosisDesdeFicha(TratamientoModel tratamiento) async {
     final actualizado = await mostrarHojaCambioDosis(context, tratamiento: tratamiento);
     if (actualizado == null || !mounted) return;
-    try {
-      await _tratamientoController.persistirTratamiento(widget.idDocumento, actualizado);
-    } catch (_) {
-      if (!mounted) return;
+    final guardado = await _ejecutarGuardado(
+      () => _tratamientoController.persistirTratamiento(widget.idDocumento, actualizado),
+    );
+    if (!guardado && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo guardar el cambio de dosis')),
       );
@@ -1254,14 +1257,14 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
       preguntarCambioDosis: false,
     );
     if (creado == null || !mounted) return;
-    try {
-      await _tratamientoController.agregarTratamiento(
+    final guardado = await _ejecutarGuardado(
+      () => _tratamientoController.agregarTratamiento(
         widget.idDocumento,
         creado,
         anterior: TratamientoController.cerrarPeriodoLegacy(tratamiento),
-      );
-    } catch (_) {
-      if (!mounted) return;
+      ),
+    );
+    if (!guardado && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo reanudar el tratamiento')),
       );
@@ -1415,7 +1418,13 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final actualizados = _tratamientoController.autoArchivarVencidos(perro.tratamientos);
     if (!_tratamientoController.huboCambiosDeArchivado(perro.tratamientos, actualizados)) return perro;
 
-    _tratamientoController.guardarTratamientos(widget.idDocumento, actualizados).catchError((_) {});
+    final firma = TratamientoController.firmaArchivados(actualizados);
+    if (_marcaArchivado.reservar(firma)) {
+      final idDocumento = widget.idDocumento;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tratamientoController.guardarTratamientos(idDocumento, actualizados).catchError((_) {});
+      });
+    }
 
     return perro.copyWith(tratamientos: actualizados);
   }
@@ -1619,16 +1628,15 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final peso = await mostrarDialogoPeso(context, controller: _pesoController);
     if (peso == null || !mounted) return;
     setState(() => _guardandoPeso = true);
-    try {
-      await _perroController.agregarPeso(widget.idDocumento, peso);
-    } catch (_) {
-      if (!mounted) return;
+    final guardado = await _ejecutarGuardado(
+      () => _perroController.agregarPeso(widget.idDocumento, peso),
+    );
+    if (!guardado && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo guardar el peso')),
       );
-    } finally {
-      if (mounted) setState(() => _guardandoPeso = false);
     }
+    if (mounted) setState(() => _guardandoPeso = false);
   }
 
   Widget? _seguimientosEnCurso(PerroModel perro) {
@@ -1714,16 +1722,15 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
     if (confirmar != true || !mounted) return;
     setState(() => _cerrandoSeguimiento.add(seguimiento.id));
-    try {
-      await _perroController.cerrarSeguimiento(widget.idDocumento, seguimiento.id);
-    } catch (_) {
-      if (!mounted) return;
+    final guardado = await _ejecutarGuardado(
+      () => _perroController.cerrarSeguimiento(widget.idDocumento, seguimiento.id),
+    );
+    if (!guardado && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo cerrar el seguimiento')),
       );
-    } finally {
-      if (mounted) setState(() => _cerrandoSeguimiento.remove(seguimiento.id));
     }
+    if (mounted) setState(() => _cerrandoSeguimiento.remove(seguimiento.id));
   }
 
   Widget? _proximosRecordatorios(PerroModel perro) {
@@ -2625,8 +2632,13 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
   }
 
+  Future<bool> _ejecutarGuardado(Future<void> Function() accion) {
+    return ref.read(guardadoProvider('ficha').notifier).ejecutar(accion);
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.watch(guardadoProvider('ficha'));
     final bool esInvitado = ref.watch(sessionProvider).esInvitado;
     final lectura = ref.watch(perroProvider(widget.idDocumento)).asData?.value;
     if (lectura == null || lectura.perro == null) {

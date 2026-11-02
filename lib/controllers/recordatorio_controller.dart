@@ -6,8 +6,16 @@ const _dias = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
 
 /// Lógica de recordatorios agendados. No escribe en Firebase.
 class RecordatorioController {
+  RecordatorioController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
+
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+
   /// Id de documento de Firestore, sin persistir nada.
-  String generarId() => FirebaseFirestore.instance.collection('perros').doc().id;
+  String generarId() => _db.collection('perros').doc().id;
 
   RecordatorioModel crear({
     required String tipo,

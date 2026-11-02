@@ -4,8 +4,16 @@ import '../models/seguimiento_model.dart';
 
 /// Lógica de seguimientos. No escribe en Firebase.
 class SeguimientoController {
+  SeguimientoController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
+
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+
   /// Id de documento de Firestore, sin persistir nada.
-  String generarId() => FirebaseFirestore.instance.collection('perros').doc().id;
+  String generarId() => _db.collection('perros').doc().id;
 
   SeguimientoModel crear({
     required String motivo,

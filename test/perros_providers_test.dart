@@ -34,6 +34,22 @@ void main() {
     expect(identical(actualizada, container.read(perrosProvider).value), isTrue);
   });
 
+  test('editar un campo se refleja en la lista', () async {
+    final firestore = FakeFirebaseFirestore();
+    final container = await _contenedor(firestore);
+    container.listen(perrosProvider, (_, _) {});
+
+    await firestore.collection('perros').doc('luna').set(_perro('Luna', sexo: 'hembra'));
+    await _emitio(container);
+    expect(container.read(perrosProvider).value!.single.sexo, 'hembra');
+
+    await firestore.collection('perros').doc('luna').update({'sexo': 'macho'});
+    await _emitioSexo(container, 'macho');
+
+    expect(container.read(perrosProvider).value!.single.sexo, 'macho');
+    expect(container.read(perrosProvider).value!.single.nombre, 'Luna');
+  });
+
   test('borrar el documento deja el perro en null', () async {
     final firestore = FakeFirebaseFirestore();
     final container = await _contenedor(firestore);
@@ -157,6 +173,15 @@ Future<void> _emitio(ProviderContainer container, {int cantidad = 1}) async {
     await pumpEventQueue();
   }
   fail('La lista de perros no emitió $cantidad');
+}
+
+Future<void> _emitioSexo(ProviderContainer container, String sexo) async {
+  for (var i = 0; i < 20; i++) {
+    final lista = container.read(perrosProvider).value;
+    if (lista != null && lista.any((perro) => perro.sexo == sexo)) return;
+    await pumpEventQueue();
+  }
+  fail('La lista no reflejó el sexo $sexo');
 }
 
 Future<void> _emitioDosis(ProviderContainer container, String iso) async {

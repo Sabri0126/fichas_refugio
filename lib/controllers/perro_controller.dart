@@ -63,9 +63,7 @@ class PerroController {
         final copiaLocal = snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
         enCache = copiaLocal;
         if (!copiaLocal) alDia = true;
-        if (previa == null || snapshot.docChanges.isNotEmpty) {
-          previa = [for (final doc in snapshot.docs) PerroModel.fromMap(doc.data(), doc.id)];
-        }
+        previa = [for (final doc in snapshot.docs) PerroModel.fromMap(doc.data(), doc.id)];
         emitir();
       },
       onError: salida.addError,
@@ -334,13 +332,21 @@ class PerroController {
 
   /// Marca de la sesión actual. Vacía si no hay usuario logueado.
   Map<String, dynamic> _marcaEdicionActual() {
-    final usuario = FirebaseAuth.instance.currentUser;
+    final usuario = _usuarioActual();
     if (usuario == null) return const {};
     return marcaEdicion(
       nombreVisible: NombreUsuario.visible(usuario),
       email: usuario.email,
       ahora: DateTime.now(),
     );
+  }
+
+  User? _usuarioActual() {
+    try {
+      return FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _agregarEnLista(

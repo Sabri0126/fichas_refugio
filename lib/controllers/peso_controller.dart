@@ -12,7 +12,15 @@ class VariacionPeso {
 
 /// Lógica de pesos. No escribe en Firebase, salvo el id que pide a Firestore.
 class PesoController {
-  String generarId() => FirebaseFirestore.instance.collection('perros').doc().id;
+  PesoController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
+
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+
+  String generarId() => _db.collection('perros').doc().id;
 
   PesoModel crear({
     required double kg,

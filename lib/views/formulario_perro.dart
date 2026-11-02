@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,6 +23,8 @@ import '../models/peso_model.dart';
 import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
+import '../providers/firestore_providers.dart';
+import '../providers/guardado_provider.dart';
 import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../util/plataforma.dart';
@@ -36,20 +39,20 @@ import 'dialogo_seguimiento.dart';
 import 'dialogo_tratamiento.dart';
 import 'hojas_tratamiento.dart';
 
-class FormularioPerro extends StatefulWidget {
+class FormularioPerro extends ConsumerStatefulWidget {
   final String? idDocumento;
   final PerroModel? perroActual;
 
   const FormularioPerro({super.key, this.idDocumento, this.perroActual});
 
   @override
-  State<FormularioPerro> createState() => _FormularioPerroState();
+  ConsumerState<FormularioPerro> createState() => _FormularioPerroState();
 }
 
-class _FormularioPerroState extends State<FormularioPerro> {
+class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   static const _esperaFirestore = Duration(seconds: 20);
 
-  final PerroController _perroController = PerroController();
+  PerroController get _perroController => ref.read(perroControllerProvider);
   final TratamientoController _tratamientoController = TratamientoController();
   final RecordatorioController _recordatorioController = RecordatorioController();
   final SeguimientoController _seguimientoController = SeguimientoController();
@@ -504,11 +507,10 @@ class _FormularioPerroState extends State<FormularioPerro> {
   }
 
   Future<void> _guardarDatos() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _estaGuardando = true);
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        String? urlImagen = widget.perroActual?.fotoPerfil;
+    try {
+      String? urlImagen = widget.perroActual?.fotoPerfil;
 
         if (_imagenSeleccionada != null) {
           final nombreArchivo = '${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -649,32 +651,33 @@ class _FormularioPerroState extends State<FormularioPerro> {
           pesos: pesosAGuardar,
         );
 
-        await _perroController.guardarPerro(perro).timeout(_esperaFirestore);
-
-        if (mounted) {
-          if (altasConservadas > 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Se conservaron $altasConservadas cambios que hizo otra persona mientras editabas.',
-                ),
-              ),
+        final guardado = await ref.read(guardadoProvider('formulario').notifier).ejecutar(
+              () => _perroController.guardarPerro(perro),
             );
-          }
-          Navigator.pop(context);
+        if (!mounted) return;
+        if (!guardado) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al procesar la información')),
+          );
+          return;
         }
+        if (altasConservadas > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Se conservaron $altasConservadas cambios que hizo otra persona mientras editabas.',
+              ),
+            ),
+          );
+        }
+        Navigator.pop(context);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Error al procesar la información')),
           );
         }
-      } finally {
-        if (mounted) {
-          setState(() => _estaGuardando = false);
-        }
       }
-    }
   }
 
   Future<bool?> _ofrecerBorrarDosisFuera(int cantidad) {
@@ -1883,6 +1886,7 @@ class _FormularioPerroState extends State<FormularioPerro> {
   @override
   Widget build(BuildContext context) {
     final esEdicion = widget.idDocumento != null;
+    final guardando = ref.watch(guardadoProvider('formulario')).isLoading || _estaGuardando;
 
     return PopScope(
       canPop: false,
@@ -2561,12 +2565,12 @@ class _FormularioPerroState extends State<FormularioPerro> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: FilledButton(
-                onPressed: _estaGuardando ? null : _guardarDatos,
+                onPressed: guardando ? null : _guardarDatos,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                   textStyle: Theme.of(context).textTheme.titleMedium,
                 ),
-                child: _estaGuardando
+                child: guardando
                     ? SizedBox(
                         width: 24,
                         height: 24,

@@ -18,8 +18,15 @@ class MarcaDiaDosis {
 /// de un perro: creación, edición, archivado, registro de dosis y el cálculo
 /// de auto-archivado por vencimiento de fechas. No contiene código de UI.
 class TratamientoController {
-  CollectionReference<Map<String, dynamic>> get _perrosRef =>
-      FirebaseFirestore.instance.collection('perros');
+  TratamientoController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
+
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+
+  CollectionReference<Map<String, dynamic>> get _perrosRef => _db.collection('perros');
 
   /// Genera un identificador único para un nuevo tratamiento.
   ///
@@ -616,7 +623,7 @@ class TratamientoController {
     final docRef = _perrosRef.doc(perroId);
     var escrito = false;
 
-    await FirebaseFirestore.instance.runTransaction((tx) async {
+    await _db.runTransaction((tx) async {
       final snapshot = await tx.get(docRef);
       final data = snapshot.data();
       if (data == null) return;
@@ -988,6 +995,14 @@ class TratamientoController {
     return false;
   }
 
+  /// Ids archivados, en orden. Sirve para no repetir la misma escritura.
+  static String firmaArchivados(List<TratamientoModel> tratamientos) {
+    return [
+      for (final tratamiento in tratamientos)
+        if (!tratamiento.activo) tratamiento.id,
+    ].join('|');
+  }
+
   /// Persiste la lista completa de tratamientos de un perro en Firestore,
   /// sobrescribiendo el campo `tratamientos` del documento.
   ///
@@ -1034,7 +1049,7 @@ class TratamientoController {
     bool Function(List<TratamientoModel> tratamientos) aplicar,
   ) {
     final docRef = _perrosRef.doc(idPerro);
-    return FirebaseFirestore.instance.runTransaction((tx) async {
+    return _db.runTransaction((tx) async {
       final snapshot = await tx.get(docRef);
       final data = snapshot.data();
       if (data == null) return;
@@ -1180,6 +1195,18 @@ class TratamientoController {
   }
 
   bool _mismoDia(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// Recuerda la última firma de archivado que ya se mandó a escribir.
+class MarcaArchivado {
+  String? pendiente;
+
+  /// `true` solo la primera vez que aparece [firma].
+  bool reservar(String firma) {
+    if (pendiente == firma) return false;
+    pendiente = firma;
+    return true;
+  }
 }
 
 /// Una fila del historial médico en lista.
