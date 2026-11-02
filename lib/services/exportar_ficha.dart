@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import '../models/estudio_model.dart';
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
 import '../models/peso_model.dart';
@@ -24,8 +25,20 @@ abstract final class ExportarFicha {
   static const _relleno = PdfColor.fromInt(0xFFFAF8F3);
   static const _borde = PdfColor.fromInt(0xFFE2D5B5);
 
-  static Future<void> compartir(PerroModel perro, {required String edad}) async {
-    final archivo = await _archivo(perro, edad: edad);
+  static Future<void> compartir(
+    PerroModel perro, {
+    required String edad,
+    bool incluirEstudios = true,
+    List<EstudioModel> estudiosNuevos = const [],
+    Future<Uint8List?> Function(String ruta)? bajarRuta,
+  }) async {
+    final archivo = await _archivo(
+      perro,
+      edad: edad,
+      incluirEstudios: incluirEstudios,
+      estudiosNuevos: estudiosNuevos,
+      bajarRuta: bajarRuta,
+    );
     await Share.shareXFiles(
       [XFile(archivo.path, mimeType: 'application/pdf')],
       subject: 'Ficha de ${perro.nombre}',
@@ -62,16 +75,26 @@ abstract final class ExportarFicha {
     required PerroModel perro,
     required String edad,
     Future<pw.MemoryImage?> Function(String url)? descargar,
+    bool incluirEstudios = true,
+    List<EstudioModel> estudiosNuevos = const [],
+    Future<Uint8List?> Function(String ruta)? bajarRuta,
   }) async {
     final doc = pw.Document();
     final nombre = perro.nombre.trim().isEmpty ? 'Sin nombre' : perro.nombre.trim();
     final bajar = descargar ?? _foto;
     final perfilFuture = _bajar(perro.fotoPerfil, bajar);
     final galeriaFuture = Future.wait(perro.galeria.map((foto) => _bajarConPie(foto, bajar)));
-    final estudiosFuture = Future.wait(perro.galeriaEstudios.map((foto) => _bajarConPie(foto, bajar)));
+    final estudiosLegacy = incluirEstudios ? perro.galeriaEstudios : const <Map<String, dynamic>>[];
+    final estudiosFuture = Future.wait(estudiosLegacy.map((foto) => _bajarConPie(foto, bajar)));
+    final nuevosFuture = incluirEstudios
+        ? Future.wait(estudiosNuevos.map((estudio) => _bajarRuta(estudio, bajarRuta)))
+        : Future.value(const <_FotoPdf?>[]);
     final foto = await perfilFuture;
     final galeria = (await galeriaFuture).whereType<_FotoPdf>().toList();
-    final estudios = (await estudiosFuture).whereType<_FotoPdf>().toList();
+    final estudios = [
+      ...(await estudiosFuture).whereType<_FotoPdf>(),
+      ...(await nuevosFuture).whereType<_FotoPdf>(),
+    ];
     final tema = await _tema();
 
     doc.addPage(
@@ -530,9 +553,21 @@ abstract final class ExportarFicha {
     return '${_fecha(fecha)}  $hora:$minuto';
   }
 
-  static Future<File> _archivo(PerroModel perro, {required String edad}) async {
+  static Future<File> _archivo(
+    PerroModel perro, {
+    required String edad,
+    bool incluirEstudios = true,
+    List<EstudioModel> estudiosNuevos = const [],
+    Future<Uint8List?> Function(String ruta)? bajarRuta,
+  }) async {
     final nombre = perro.nombre.trim().isEmpty ? 'Sin nombre' : perro.nombre.trim();
-    final bytes = await generar(perro: perro, edad: edad);
+    final bytes = await generar(
+      perro: perro,
+      edad: edad,
+      incluirEstudios: incluirEstudios,
+      estudiosNuevos: estudiosNuevos,
+      bajarRuta: bajarRuta,
+    );
     final dir = await getTemporaryDirectory();
     final seguro = nombre.replaceAll(RegExp(r'[^\w\-]+'), '_');
     final archivo = File('${dir.path}/ficha_$seguro.pdf');
@@ -557,6 +592,17 @@ abstract final class ExportarFicha {
   ) {
     if (url == null || url.isEmpty) return Future.value(null);
     return descargar(url);
+  }
+
+  static Future<_FotoPdf?> _bajarRuta(
+    EstudioModel estudio,
+    Future<Uint8List?> Function(String ruta)? bajarRuta,
+  ) async {
+    if (bajarRuta == null) return null;
+    final bytes = await bajarRuta(estudio.ruta);
+    if (bytes == null || bytes.isEmpty) return null;
+    final pie = estudio.texto.trim();
+    return _FotoPdf(pw.MemoryImage(bytes), pie == 'Sin descripción' ? '' : pie);
   }
 
   static Future<_FotoPdf?> _bajarConPie(

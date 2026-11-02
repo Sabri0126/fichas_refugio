@@ -11,6 +11,11 @@ service cloud.firestore {
     match /perros/{id} {
       allow read: if true;          // visitor mode
       allow write: if isStaff();
+
+      // Estudios médicos: solo el personal. El visitante no los ve.
+      match /estudios/{estudioId} {
+        allow read, write: if isStaff();
+      }
     }
     match /dispositivos/{token} {
       allow read: if false;

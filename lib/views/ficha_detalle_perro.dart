@@ -14,11 +14,13 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
+import '../controllers/estudio_controller.dart';
 import '../controllers/perro_controller.dart';
 import '../controllers/peso_controller.dart';
 import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
+import '../models/estudio_model.dart';
 import '../models/dosis_avisada.dart';
 import '../models/egreso_model.dart';
 import '../models/estado_duracion.dart';
@@ -28,6 +30,7 @@ import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/estudios_providers.dart';
 import '../providers/firestore_providers.dart';
 import '../providers/guardado_provider.dart';
 import '../providers/perros_providers.dart';
@@ -115,6 +118,27 @@ class VisorFoto extends StatelessWidget {
   }
 }
 
+class _VisorEstudio extends ConsumerWidget {
+  final String ruta;
+  final String? descripcion;
+  final Uint8List? inicial;
+
+  const _VisorEstudio({required this.ruta, this.descripcion, this.inicial});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(estudioBytesProvider(ruta));
+    final bytes = async.asData?.value ?? inicial;
+    if (async.hasError || (async.hasValue && bytes == null)) {
+      return const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white));
+    }
+    if (bytes == null) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    return VisorFoto(url: '', descripcion: descripcion, imagen: MemoryImage(bytes));
+  }
+}
+
 class FichaDetallePerro extends ConsumerStatefulWidget {
   final String idDocumento;
   final DosisAvisada? dosisAvisada;
@@ -127,6 +151,7 @@ class FichaDetallePerro extends ConsumerStatefulWidget {
 
 class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   PerroController get _perroController => ref.read(perroControllerProvider);
+  EstudioController get _estudioController => ref.read(estudioControllerProvider);
   TratamientoController get _tratamientoController => ref.read(tratamientoControllerProvider);
   RecordatorioController get _recordatorioController => ref.read(recordatorioControllerProvider);
   SeguimientoController get _seguimientoController => ref.read(seguimientoControllerProvider);
@@ -151,7 +176,17 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
 
   Future<void> _compartirFicha(PerroModel perro) async {
     try {
-      await ExportarFicha.compartir(perro, edad: _formatearEdadTexto(perro));
+      final esInvitado = ref.read(sessionProvider).esInvitado;
+      final nuevos = esInvitado
+          ? const <EstudioModel>[]
+          : ref.read(estudiosProvider(widget.idDocumento)).asData?.value ?? const <EstudioModel>[];
+      await ExportarFicha.compartir(
+        perro,
+        edad: _formatearEdadTexto(perro),
+        incluirEstudios: !esInvitado,
+        estudiosNuevos: nuevos,
+        bajarRuta: _estudioController.descargar,
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -346,7 +381,14 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
   void _moverIzquierda() => _controladorCarrusel.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
   void _moverDerecha() => _controladorCarrusel.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
 
-  void _abrirFotoPantallaCompleta(String url, {String? descripcion}) {
+  void _abrirFotoPantallaCompleta(
+    String url, {
+    String? descripcion,
+    ImageProvider? imagen,
+    Uint8List? bytesIniciales,
+    String? rutaEstudio,
+    Future<void> Function(Uint8List archivo)? guardarRecorte,
+  }) {
     bool procesando = false;
 
     Navigator.push(
@@ -377,11 +419,20 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
                     : IconButton(
                         tooltip: 'Recortar foto',
                         icon: const Icon(Icons.crop, color: Colors.white),
-                        onPressed: () => _recortarFotoExistente(url, context, setStateLocal, (valor) => procesando = valor),
+                        onPressed: () => _recortarFotoExistente(
+                          url,
+                          context,
+                          setStateLocal,
+                          (valor) => procesando = valor,
+                          bytesIniciales: bytesIniciales,
+                          guardarRecorte: guardarRecorte,
+                        ),
                       ),
               ],
             ),
-            body: VisorFoto(url: url, descripcion: descripcion),
+            body: rutaEstudio == null
+                ? VisorFoto(url: url, descripcion: descripcion, imagen: imagen)
+                : _VisorEstudio(ruta: rutaEstudio, descripcion: descripcion, inicial: bytesIniciales),
           ),
         ),
       ),
@@ -392,15 +443,21 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     String url,
     BuildContext context,
     StateSetter setStateLocal,
-    void Function(bool) actualizarProcesando,
-  ) async {
+    void Function(bool) actualizarProcesando, {
+    Uint8List? bytesIniciales,
+    Future<void> Function(Uint8List archivo)? guardarRecorte,
+  }) async {
     setStateLocal(() => actualizarProcesando(true));
     final colorScheme = Theme.of(context).colorScheme;
     try {
-      final respuesta = await http.get(Uri.parse(url));
       final directorioTemporal = await getTemporaryDirectory();
       final archivoTemp = File('${directorioTemporal.path}/temp_recorte_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await archivoTemp.writeAsBytes(respuesta.bodyBytes);
+      if (bytesIniciales != null) {
+        await archivoTemp.writeAsBytes(bytesIniciales);
+      } else {
+        final respuesta = await http.get(Uri.parse(url));
+        await archivoTemp.writeAsBytes(respuesta.bodyBytes);
+      }
 
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: archivoTemp.path,
@@ -426,12 +483,16 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
         return;
       }
 
-      final nombreArchivo = 'recorte_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final refStorage = FirebaseStorage.instance.ref().child('galeria_perros').child(nombreArchivo);
-      await refStorage.putFile(File(croppedFile.path));
-      final nuevaUrl = await refStorage.getDownloadURL();
-
-      await _perroController.actualizarUrlDeFoto(widget.idDocumento, url, nuevaUrl);
+      final recorte = await File(croppedFile.path).readAsBytes();
+      if (guardarRecorte != null) {
+        await guardarRecorte(recorte);
+      } else {
+        final nombreArchivo = 'recorte_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final refStorage = FirebaseStorage.instance.ref().child('galeria_perros').child(nombreArchivo);
+        await refStorage.putFile(File(croppedFile.path));
+        final nuevaUrl = await refStorage.getDownloadURL();
+        await _perroController.actualizarUrlDeFoto(widget.idDocumento, url, nuevaUrl);
+      }
 
       if (context.mounted) Navigator.pop(context);
     } catch (_) {
@@ -522,7 +583,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     }
   }
 
-  Future<void> _editarFotoAGaleria(Map<String, dynamic> foto, int index, {bool estudios = false}) async {
+  Future<void> _editarFotoAGaleria(Map<String, dynamic> foto, int index) async {
     final textoController = TextEditingController(text: foto['texto']?.toString() ?? '');
 
     final textoDescriptivo = await showDialog<String>(
@@ -531,9 +592,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
         title: const Text('Editar descripción'),
         content: TextField(
           controller: textoController,
-          decoration: InputDecoration(
-            hintText: estudios ? 'Radiografía, herida, resultado...' : 'Descripción de la foto',
-          ),
+          decoration: const InputDecoration(hintText: 'Descripción de la foto'),
           maxLines: 3,
         ),
         actions: [
@@ -549,11 +608,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
 
     setState(() => _subiendoFoto = true);
     try {
-      if (estudios) {
-        await _perroController.editarFotoDeEstudios(widget.idDocumento, index, textoDescriptivo);
-      } else {
-        await _perroController.editarFotoDeGaleria(widget.idDocumento, index, textoDescriptivo);
-      }
+      await _perroController.editarFotoDeGaleria(widget.idDocumento, index, textoDescriptivo);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar la foto')));
@@ -565,14 +620,12 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     }
   }
 
-  Future<void> _eliminarFotoAGaleria(Map<String, dynamic> foto, int index, {bool estudios = false}) async {
+  Future<void> _eliminarFotoAGaleria(Map<String, dynamic> foto, int index) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(estudios ? 'Eliminar estudio' : 'Eliminar foto'),
-        content: Text(
-          estudios ? '¿Querés eliminar este estudio?' : '¿Querés eliminar esta foto de la galería?',
-        ),
+        title: const Text('Eliminar foto'),
+        content: const Text('¿Querés eliminar esta foto de la galería?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
@@ -587,9 +640,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final texto = (foto['texto'] ?? foto['descripcion'] ?? '').toString();
     setState(() => _subiendoFoto = true);
     try {
-      final urlFoto = estudios
-          ? await _perroController.eliminarFotoDeEstudios(widget.idDocumento, index)
-          : await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
+      final urlFoto = await _perroController.eliminarFotoDeGaleria(widget.idDocumento, index);
 
       if (!mounted || urlFoto == null) return;
       var deshecha = false;
@@ -598,16 +649,13 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
             SnackBar(
               persist: false,
               duration: const Duration(seconds: 5),
-              content: Text(estudios ? 'Estudio eliminado' : 'Foto eliminada'),
+              content: const Text('Foto eliminada'),
               action: SnackBarAction(
                 label: 'Deshacer',
                 textColor: AppColors.arena,
                 onPressed: () {
                   deshecha = true;
-                  final restaurar = estudios
-                      ? _perroController.agregarFotoAEstudios(widget.idDocumento, urlFoto, texto)
-                      : _perroController.agregarFotoAGaleria(widget.idDocumento, urlFoto, texto);
-                  restaurar.catchError((_) {});
+                  _perroController.agregarFotoAGaleria(widget.idDocumento, urlFoto, texto).catchError((_) {});
                 },
               ),
             ),
@@ -629,17 +677,133 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
       }
     }
   }
-
-  Future<void> _moverFoto({required String desde, required int indice}) async {
-    setState(() => _subiendoFoto = true);
-    try {
-      await _perroController.moverFoto(widget.idDocumento, desde: desde, indice: indice);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo mover la foto')));
+  Future<void> _editarEstudio(EntradaEstudio entrada) async {
+    final textoController = TextEditingController(text: entrada.texto);
+    final textoDescriptivo = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar descripción'),
+        content: TextField(
+          controller: textoController,
+          decoration: const InputDecoration(hintText: 'Radiografía, herida, resultado...'),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, textoController.text), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    if (textoDescriptivo == null || !mounted) return;
+    final guardado = await _ejecutarGuardado(claveGuardadoEstudio, () async {
+      if (entrada.esLegacy) {
+        await _estudioController.migrarLegacy(
+          perroId: widget.idDocumento,
+          indice: entrada.indiceLegacy!,
+          texto: textoDescriptivo,
+        );
+      } else {
+        await _estudioController.editarTexto(widget.idDocumento, entrada.estudio!.id, textoDescriptivo);
       }
-    } finally {
-      if (mounted) setState(() => _subiendoFoto = false);
+    });
+    if (guardado == ResultadoGuardado.error && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo actualizar la foto')),
+      );
+    }
+  }
+
+  Future<void> _eliminarEstudio(EntradaEstudio entrada) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar estudio'),
+        content: const Text('¿Querés eliminar este estudio?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    final guardado = await _ejecutarGuardado(claveGuardadoEstudio, () async {
+      if (entrada.esLegacy) {
+        await _estudioController.quitarLegacy(widget.idDocumento, entrada.indiceLegacy!);
+      } else {
+        await _estudioController.quitarDocumento(widget.idDocumento, entrada.estudio!.id);
+      }
+    });
+    if (guardado == ResultadoGuardado.error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo eliminar la foto')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    var deshecha = false;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 5),
+            content: const Text('Estudio eliminado'),
+            action: SnackBarAction(
+              label: 'Deshacer',
+              textColor: AppColors.arena,
+              onPressed: () {
+                deshecha = true;
+                final restaurar = entrada.esLegacy
+                    ? _estudioController.restaurarLegacy(
+                        widget.idDocumento,
+                        entrada.urlLegacy ?? '',
+                        entrada.texto,
+                      )
+                    : _estudioController.restaurarDocumento(widget.idDocumento, entrada.estudio!);
+                restaurar.catchError((_) {});
+              },
+            ),
+          ),
+        )
+        .closed
+        .then((_) async {
+          if (deshecha) return;
+          if (entrada.esLegacy) {
+            final url = entrada.urlLegacy;
+            if (url == null || url.isEmpty) return;
+            try {
+              await FirebaseStorage.instance.refFromURL(url).delete();
+            } catch (_) {}
+          } else {
+            await _estudioController.borrarArchivo(entrada.estudio!.ruta);
+          }
+        });
+  }
+
+  Future<void> _moverEstudio(EntradaEstudio entrada) async {
+    final guardado = await _ejecutarGuardado(
+      claveGuardadoEstudio,
+      () => _estudioController.moverHaciaGaleria(perroId: widget.idDocumento, entrada: entrada),
+    );
+    if (guardado == ResultadoGuardado.error && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo mover la foto')),
+      );
+    }
+  }
+
+  Future<void> _moverGaleriaAEstudios(int indice, String? fotoPerfil) async {
+    final guardado = await _ejecutarGuardado(
+      claveGuardadoEstudio,
+      () => _estudioController.moverDesdeGaleria(
+        perroId: widget.idDocumento,
+        indice: indice,
+        fotoPerfil: fotoPerfil,
+      ),
+    );
+    if (guardado == ResultadoGuardado.error && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo mover la foto')),
+      );
     }
   }
 
@@ -711,15 +875,20 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
 
         setState(() => _subiendoFoto = true);
         try {
-          final nombreArchivo = 'galeria_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final refStorage = FirebaseStorage.instance.ref().child('galeria_perros').child(nombreArchivo);
-
-          await refStorage.putFile(archivoParaSubir);
-          final urlDescarga = await refStorage.getDownloadURL();
-
           if (estudios) {
-            await _perroController.agregarFotoAEstudios(widget.idDocumento, urlDescarga, textoDescriptivo);
+            final bytes = await archivoParaSubir.readAsBytes();
+            final guardado = await _ejecutarGuardado(
+              claveGuardadoEstudio,
+              () => _estudioController.agregar(widget.idDocumento, bytes, textoDescriptivo),
+            );
+            if (guardado == ResultadoGuardado.error) {
+              throw StateError('estudio');
+            }
           } else {
+            final nombreArchivo = 'galeria_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            final refStorage = FirebaseStorage.instance.ref().child('galeria_perros').child(nombreArchivo);
+            await refStorage.putFile(archivoParaSubir);
+            final urlDescarga = await refStorage.getDownloadURL();
             await _perroController.agregarFotoAGaleria(widget.idDocumento, urlDescarga, textoDescriptivo);
           }
         } catch (e) {
@@ -1208,9 +1377,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
     if (confirmacion == null || !mounted) return;
     final guardado = await _ejecutarGuardado(
+      claveGuardadoSuspender,
       () => _tratamientoController.persistirTratamiento(widget.idDocumento, confirmacion.tratamiento),
     );
-    if (!guardado) {
+    if (guardado == ResultadoGuardado.error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo suspender el tratamiento')),
@@ -1238,9 +1408,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final actualizado = await mostrarHojaCambioDosis(context, tratamiento: tratamiento);
     if (actualizado == null || !mounted) return;
     final guardado = await _ejecutarGuardado(
+      claveGuardadoDosis,
       () => _tratamientoController.persistirTratamiento(widget.idDocumento, actualizado),
     );
-    if (!guardado && mounted) {
+    if (guardado == ResultadoGuardado.error && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo guardar el cambio de dosis')),
       );
@@ -1258,13 +1429,14 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
     if (creado == null || !mounted) return;
     final guardado = await _ejecutarGuardado(
+      claveGuardadoReanudar,
       () => _tratamientoController.agregarTratamiento(
         widget.idDocumento,
         creado,
         anterior: TratamientoController.cerrarPeriodoLegacy(tratamiento),
       ),
     );
-    if (!guardado && mounted) {
+    if (guardado == ResultadoGuardado.error && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo reanudar el tratamiento')),
       );
@@ -1421,8 +1593,14 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final firma = TratamientoController.firmaArchivados(actualizados);
     if (_marcaArchivado.reservar(firma)) {
       final idDocumento = widget.idDocumento;
+      final controller = _tratamientoController;
+      final marca = _marcaArchivado;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _tratamientoController.guardarTratamientos(idDocumento, actualizados).catchError((_) {});
+        persistirArchivadoSiMontado(
+          montado: () => mounted,
+          escribir: () => controller.guardarTratamientos(idDocumento, actualizados),
+          liberar: () => marca.pendiente = null,
+        );
       });
     }
 
@@ -1629,9 +1807,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     if (peso == null || !mounted) return;
     setState(() => _guardandoPeso = true);
     final guardado = await _ejecutarGuardado(
+      claveGuardadoPeso,
       () => _perroController.agregarPeso(widget.idDocumento, peso),
     );
-    if (!guardado && mounted) {
+    if (guardado == ResultadoGuardado.error && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo guardar el peso')),
       );
@@ -1723,9 +1902,10 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     if (confirmar != true || !mounted) return;
     setState(() => _cerrandoSeguimiento.add(seguimiento.id));
     final guardado = await _ejecutarGuardado(
+      claveGuardadoSeguimiento,
       () => _perroController.cerrarSeguimiento(widget.idDocumento, seguimiento.id),
     );
-    if (!guardado && mounted) {
+    if (guardado == ResultadoGuardado.error && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo cerrar el seguimiento')),
       );
@@ -2038,7 +2218,12 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     final suspendidos = _buildSuspendidos(perro, esInvitado);
     final seguimiento = esInvitado ? null : _seguimientosEnCurso(perro);
     final recordatorios = esInvitado ? null : _proximosRecordatorios(perro);
-    final estudios = _buildEstudios(perro, esInvitado);
+    final asyncEstudios = ref.watch(estudiosProvider(widget.idDocumento));
+    final cargandoEstudios = !esInvitado && asyncEstudios.isLoading && !asyncEstudios.hasValue;
+    final entradasEstudios = esInvitado
+        ? const <EntradaEstudio>[]
+        : unirEstudios(asyncEstudios.asData?.value ?? const [], perro.galeriaEstudios);
+    final estudios = _buildEstudios(entradasEstudios, esInvitado, cargandoEstudios);
     final bloquesMedicos = <Widget>[
       ?fichaMedica,
       ?peso,
@@ -2158,7 +2343,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
             bloquesMedicos[i],
           ],
         ],
-        if (!esInvitado && perro.galeriaEstudios.isEmpty)
+        if (!esInvitado && entradasEstudios.isEmpty && !cargandoEstudios)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: _filaAgregarEstudio(),
@@ -2176,28 +2361,30 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
   }
 
-  Widget? _buildEstudios(PerroModel perro, bool esInvitado) {
-    final fotos = perro.galeriaEstudios;
-    if (fotos.isEmpty) return null;
+  Widget? _buildEstudios(List<EntradaEstudio> entradas, bool esInvitado, bool cargando) {
+    final visible = seccionEstudiosVisible(esInvitado: esInvitado, cantidad: entradas.length) ||
+        (!esInvitado && cargando && entradas.isEmpty);
+    if (!visible) return null;
     return _tarjetaSeccion(
       titulo: 'Estudios y registros',
       icono: Icons.grid_view_rounded,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var index = 0; index < fotos.length; index++)
-              _miniaturaEstudio(fotos[index], index, esInvitado),
-          ],
-        ),
-        if (!esInvitado) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _botonAgregarEstudio(),
+        if (cargando && entradas.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [for (final entrada in entradas) _miniaturaEstudio(entrada)],
           ),
-        ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _botonAgregarEstudio(),
+        ),
       ],
     );
   }
@@ -2284,9 +2471,9 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
   }
 
-  Widget _miniaturaEstudio(Map<String, dynamic> foto, int index, bool esInvitado) {
-    final url = foto['url']?.toString() ?? '';
-    final texto = foto['texto']?.toString() ?? '';
+  Widget _miniaturaEstudio(EntradaEstudio entrada) {
+    final texto = entrada.texto;
+    final child = entrada.esLegacy ? _fotoLegacy(entrada.urlLegacy ?? '') : _fotoEstudio(entrada.estudio!.ruta);
     return SizedBox(
       width: 88,
       height: 88,
@@ -2298,22 +2485,8 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
               clipBehavior: Clip.antiAlias,
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
-                onTap: url.isEmpty
-                    ? null
-                    : () => _abrirFotoPantallaCompleta(
-                          url,
-                          descripcion: descripcionFotoVisible(
-                            foto['texto']?.toString(),
-                            foto['descripcion']?.toString(),
-                          ),
-                        ),
-                child: url.isEmpty
-                    ? Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave)
-                    : Image.network(
-                        url,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave),
-                      ),
+                onTap: () => _abrirEstudio(entrada),
+                child: child,
               ),
             ),
           ),
@@ -2340,46 +2513,91 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
                 ),
               ),
             ),
-          if (!esInvitado)
-            Positioned(
-              top: 2,
-              right: 2,
-              child: PopupMenuButton<String>(
-                tooltip: 'Opciones del estudio',
-                padding: EdgeInsets.zero,
-                iconSize: 18,
-                icon: const Icon(Icons.more_horiz, color: Colors.white),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withValues(alpha: 0.45),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(48, 48),
-                  fixedSize: const Size(48, 48),
-                ),
-                onSelected: (accion) {
-                  switch (accion) {
-                    case 'mover':
-                      _moverFoto(desde: 'galeria_estudios', indice: index);
-                    case 'editar':
-                      _editarFotoAGaleria(foto, index, estudios: true);
-                    case 'borrar':
-                      _eliminarFotoAGaleria(foto, index, estudios: true);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'mover', child: Text('Mover a fotos')),
-                  PopupMenuItem(
-                    value: 'editar',
-                    child: Text(texto.isEmpty ? 'Agregar descripción' : 'Editar descripción'),
-                  ),
-                  const PopupMenuItem(value: 'borrar', child: Text('Eliminar')),
-                ],
+          Positioned(
+            top: 2,
+            right: 2,
+            child: PopupMenuButton<String>(
+              tooltip: 'Opciones del estudio',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: const Icon(Icons.more_horiz, color: Colors.white),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.45),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                fixedSize: const Size(48, 48),
               ),
+              onSelected: (accion) {
+                switch (accion) {
+                  case 'mover':
+                    _moverEstudio(entrada);
+                  case 'editar':
+                    _editarEstudio(entrada);
+                  case 'borrar':
+                    _eliminarEstudio(entrada);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'mover', child: Text('Mover a fotos')),
+                PopupMenuItem(
+                  value: 'editar',
+                  child: Text(texto.isEmpty ? 'Agregar descripción' : 'Editar descripción'),
+                ),
+                const PopupMenuItem(value: 'borrar', child: Text('Eliminar')),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 
+  Widget _fotoLegacy(String url) {
+    if (url.isEmpty) return Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave);
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave),
+    );
+  }
+
+  Widget _fotoEstudio(String ruta) {
+    final async = ref.watch(estudioBytesProvider(ruta));
+    if (async.hasError || (async.hasValue && async.value == null)) {
+      return Icon(Icons.broken_image_outlined, color: context.paleta.textoSuave);
+    }
+    final bytes = async.asData?.value;
+    if (bytes == null) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2.4));
+    }
+    return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true);
+  }
+
+  void _abrirEstudio(EntradaEstudio entrada) {
+    if (entrada.esLegacy) {
+      _abrirFotoPantallaCompleta(
+        entrada.urlLegacy ?? '',
+        descripcion: descripcionFotoVisible(entrada.texto, null),
+      );
+      return;
+    }
+    final ruta = entrada.estudio!.ruta;
+    final bytes = ref.read(estudioBytesProvider(ruta)).asData?.value;
+    _abrirFotoPantallaCompleta(
+      '',
+      descripcion: descripcionFotoVisible(entrada.texto, null),
+      imagen: bytes == null ? null : MemoryImage(bytes),
+      bytesIniciales: bytes,
+      rutaEstudio: ruta,
+      guardarRecorte: (archivo) async {
+        final resultado = await _ejecutarGuardado(
+          claveGuardadoEstudio,
+          () => _estudioController.recortar(widget.idDocumento, entrada.estudio!, archivo),
+        );
+        if (resultado == ResultadoGuardado.error) throw StateError('estudio');
+      },
+    );
+  }
   Widget _rotuloFotos() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -2540,7 +2758,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
                           case 'editar':
                             _editarFotoAGaleria(foto, index);
                           case 'mover':
-                            _moverFoto(desde: 'galeria', indice: index);
+                            _moverGaleriaAEstudios(index, perro.fotoPerfil);
                           case 'eliminar':
                             _eliminarFotoAGaleria(foto, index);
                         }
@@ -2632,13 +2850,15 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> {
     );
   }
 
-  Future<bool> _ejecutarGuardado(Future<void> Function() accion) {
-    return ref.read(guardadoProvider('ficha').notifier).ejecutar(accion);
+  Future<ResultadoGuardado> _ejecutarGuardado(String clave, Future<void> Function() accion) {
+    return ref.read(guardadoProvider(clave).notifier).ejecutar(accion);
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(guardadoProvider('ficha'));
+    for (final clave in clavesGuardadoFicha) {
+      ref.watch(guardadoProvider(clave));
+    }
     final bool esInvitado = ref.watch(sessionProvider).esInvitado;
     final lectura = ref.watch(perroProvider(widget.idDocumento)).asData?.value;
     if (lectura == null || lectura.perro == null) {

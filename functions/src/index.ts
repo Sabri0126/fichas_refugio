@@ -1,7 +1,9 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { type Firestore, getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { DateTime } from 'luxon';
 
 import {
@@ -19,10 +21,29 @@ import {
 import { esMananaDeAniversario, mensajeAniversario } from './aniversario.js';
 import { type CategoriaClima, evaluarClima, momentoClima, normalizarConfig, rachaGuardada } from './clima.js';
 import { crearNotificacion, enviarAlarma } from './envio.js';
+import { metadataParaQuitarToken } from './token_estudios.js';
 
 if (getApps().length === 0) initializeApp();
 
 const REGION = 'southamerica-east1';
+const BUCKET = 'fichas-refugio.firebasestorage.app';
+
+/** Quita el token de descarga de un estudio y conserva el contentType. */
+export const quitarTokenEstudios = onObjectFinalized(
+  { bucket: BUCKET, region: 'us-east1' },
+  async (event) => {
+    const actualizacion = metadataParaQuitarToken({
+      name: event.data.name,
+      contentType: event.data.contentType,
+      metadata: event.data.metadata,
+    });
+    if (!actualizacion || !event.data.name) return;
+    await getStorage().bucket(event.data.bucket).file(event.data.name).setMetadata({
+      ...(actualizacion.contentType ? { contentType: actualizacion.contentType } : {}),
+      metadata: actualizacion.metadata,
+    });
+  },
+);
 
 export const enviarNotificaciones = onSchedule(
   {

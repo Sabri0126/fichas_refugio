@@ -48,3 +48,4 @@ lib/firebase_options.dart
 # Cloud Functions
 functions/node_modules/
 functions/lib/
+functions/scripts/logs/

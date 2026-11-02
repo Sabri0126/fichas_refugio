@@ -11,6 +11,7 @@ import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../services/nombre_usuario.dart';
+import 'estudio_controller.dart';
 
 /// Una emisión de [PerroController.observarPerroConOrigen].
 class LecturaPerro {
@@ -487,10 +488,7 @@ class PerroController {
     if (perro.historialEgresos.isEmpty) datosPerro['historial_egresos'] = FieldValue.delete();
     datosPerro.addAll(_marcaEdicionActual());
 
-    // La galería y los estudios se gestionan desde sus propios métodos
-    // (agregarFotoAGaleria, agregarFotoAEstudios, etc.), no desde este
-    // formulario, así que se inyecta el estado previo del documento para no
-    // pisarlos con el valor por defecto ([]) que trae `perro`.
+    // La galería y los estudios viejos se preservan: este formulario no los pisa.
     if (perro.id.isNotEmpty) {
       final snapshotActual = await docRef.get();
       final datosActuales = snapshotActual.data();
@@ -606,6 +604,9 @@ class PerroController {
       } catch (_) {}
       try {
         await _borrarFotos(perro);
+      } catch (_) {}
+      try {
+        await EstudioController(firestore: _db).eliminarDelPerro(id);
       } catch (_) {}
       try {
         await _borrarAvisos(id);
@@ -739,11 +740,6 @@ class PerroController {
     return _agregarFoto(id, 'galeria', url, texto);
   }
 
-  /// Agrega una foto a `galeria_estudios` sin copiar el archivo.
-  Future<void> agregarFotoAEstudios(String id, String url, String texto) {
-    return _agregarFoto(id, 'galeria_estudios', url, texto);
-  }
-
   Future<void> _agregarFoto(String id, String campo, String url, String texto) {
     return _perrosRef.doc(id).update({
       campo: FieldValue.arrayUnion([
@@ -760,11 +756,6 @@ class PerroController {
   /// @return un `Future` que se completa cuando se guardó el cambio.
   Future<void> editarFotoDeGaleria(String id, int indice, String nuevoTexto) {
     return editarTextoDeFoto(id, 'galeria', indice, nuevoTexto);
-  }
-
-  /// Edita el texto de una foto de estudios según su posición.
-  Future<void> editarFotoDeEstudios(String id, int indice, String nuevoTexto) {
-    return editarTextoDeFoto(id, 'galeria_estudios', indice, nuevoTexto);
   }
 
   Future<void> editarTextoDeFoto(String id, String campo, int indice, String nuevoTexto) async {
@@ -792,11 +783,6 @@ class PerroController {
     return eliminarFoto(id, 'galeria', indice);
   }
 
-  /// Quita una foto de estudios y devuelve su URL para borrar el archivo.
-  Future<String?> eliminarFotoDeEstudios(String id, int indice) {
-    return eliminarFoto(id, 'galeria_estudios', indice);
-  }
-
   Future<String?> eliminarFoto(String id, String campo, int indice) async {
     final snapshot = await _perrosRef.doc(id).get();
     final data = snapshot.data();
@@ -812,24 +798,6 @@ class PerroController {
 
     final urlFoto = (fotoAEliminar is Map ? fotoAEliminar['url'] : null)?.toString();
     return (urlFoto != null && urlFoto.isNotEmpty) ? urlFoto : null;
-  }
-
-  /// Pasa una foto de [desde] a la otra lista en una sola escritura.
-  /// [desde] es `galeria` o `galeria_estudios`. No toca Storage.
-  Future<void> moverFoto(String id, {required String desde, required int indice}) async {
-    final destino = desde == 'galeria' ? 'galeria_estudios' : 'galeria';
-    final snapshot = await _perrosRef.doc(id).get();
-    final data = snapshot.data();
-    if (data == null) return;
-
-    final origen = List<dynamic>.from(data[desde] ?? []);
-    if (indice < 0 || indice >= origen.length) return;
-
-    final foto = origen.removeAt(indice);
-    final llegada = List<dynamic>.from(data[destino] ?? []);
-    llegada.add(foto);
-
-    await _perrosRef.doc(id).update({desde: origen, destino: llegada});
   }
 
   /// Guarda el nuevo orden de las fotos tras un reordenamiento manual,

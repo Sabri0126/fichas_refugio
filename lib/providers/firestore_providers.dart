@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
@@ -12,6 +13,10 @@ import '../controllers/veterinaria_controller.dart';
 /// Firestore de la app. Los tests lo reemplazan por [FakeFirebaseFirestore].
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   return FirebaseFirestore.instance;
+});
+
+final storageProvider = Provider<FirebaseStorage>((ref) {
+  return FirebaseStorage.instance;
 });
 
 final perroControllerProvider = Provider<PerroController>((ref) {

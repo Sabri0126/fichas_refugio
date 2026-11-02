@@ -1209,6 +1209,18 @@ class MarcaArchivado {
   }
 }
 
+/// Escribe el archivado si la ficha sigue abierta. Si falla, [liberar] permite reintentar.
+Future<void> persistirArchivadoSiMontado({
+  required bool Function() montado,
+  required Future<void> Function() escribir,
+  required void Function() liberar,
+}) {
+  if (!montado()) return Future.value();
+  return escribir().catchError((Object _) {
+    if (montado()) liberar();
+  });
+}
+
 /// Una fila del historial médico en lista.
 class EntradaHistorial {
   final String categoria;

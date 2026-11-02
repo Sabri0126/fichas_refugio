@@ -111,16 +111,18 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     container.listen(guardadoProvider('ficha'), (_, _) {});
+    container.listen(guardadoProvider(claveGuardadoPeso), (_, _) {});
+    container.listen(guardadoProvider(claveGuardadoSeguimiento), (_, _) {});
     final notifier = container.read(guardadoProvider('ficha').notifier);
 
     var corridas = 0;
-    expect(await notifier.ejecutar(() async => corridas++), isTrue);
+    expect(await notifier.ejecutar(() async => corridas++), ResultadoGuardado.listo);
     expect(corridas, 1);
     expect(container.read(guardadoProvider('ficha')).hasError, isFalse);
 
     expect(
       await notifier.ejecutar(() async => throw StateError('fallo')),
-      isFalse,
+      ResultadoGuardado.error,
     );
     expect(container.read(guardadoProvider('ficha')).hasError, isTrue);
 
@@ -128,7 +130,7 @@ void main() {
       () => Completer<void>().future,
       timeout: const Duration(milliseconds: 20),
     );
-    expect(vencido, isFalse);
+    expect(vencido, ResultadoGuardado.error);
     expect(container.read(guardadoProvider('ficha')).hasError, isTrue);
 
     final puerta = Completer<void>();
@@ -137,10 +139,52 @@ void main() {
       await puerta.future;
     });
     final segundo = await notifier.ejecutar(() async => corridas++);
-    expect(segundo, isFalse);
+    expect(segundo, ResultadoGuardado.ocupado);
     puerta.complete();
-    expect(await primero, isTrue);
+    expect(await primero, ResultadoGuardado.listo);
     expect(corridas, 2);
+
+    final peso = container.read(guardadoProvider(claveGuardadoPeso).notifier);
+    final seguimiento = container.read(guardadoProvider(claveGuardadoSeguimiento).notifier);
+    final esperaPeso = Completer<void>();
+    final guardandoPeso = peso.ejecutar(() => esperaPeso.future);
+    expect(
+      await seguimiento.ejecutar(() async {}),
+      ResultadoGuardado.listo,
+    );
+    esperaPeso.complete();
+    expect(await guardandoPeso, ResultadoGuardado.listo);
+  });
+
+  test('si el provider se descarta durante el await no asigna state', () async {
+    final container = ProviderContainer();
+    container.listen(guardadoProvider('ficha'), (_, _) {});
+    final notifier = container.read(guardadoProvider('ficha').notifier);
+    final puerta = Completer<void>();
+    final futuro = notifier.ejecutar(() => puerta.future);
+    await pumpEventQueue();
+    container.dispose();
+    puerta.complete();
+    expect(await futuro, ResultadoGuardado.listo);
+  });
+
+  test('el archivado no escribe si la ficha ya se cerró y libera la marca si falla', () async {
+    var escrituras = 0;
+    final marca = MarcaArchivado()..pendiente = 't1';
+    await persistirArchivadoSiMontado(
+      montado: () => false,
+      escribir: () async => escrituras++,
+      liberar: () => marca.pendiente = null,
+    );
+    expect(escrituras, 0);
+    expect(marca.pendiente, 't1');
+
+    await persistirArchivadoSiMontado(
+      montado: () => true,
+      escribir: () async => throw StateError('fallo'),
+      liberar: () => marca.pendiente = null,
+    );
+    expect(marca.pendiente, isNull);
   });
 
   testWidgets('varios rebuilds archivan una sola vez', (tester) async {
@@ -204,8 +248,14 @@ class _SondaArchivadoState extends ConsumerState<_SondaArchivado> {
       final controller = ref.read(tratamientoControllerProvider);
       final copia = _tratamientos;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        escrituras++;
-        controller.guardarTratamientos('perro', copia).catchError((_) {});
+        persistirArchivadoSiMontado(
+          montado: () => mounted,
+          escribir: () {
+            escrituras++;
+            return controller.guardarTratamientos('perro', copia);
+          },
+          liberar: () => _marca.pendiente = null,
+        );
       });
     }
     return TextButton(onPressed: () => setState(() {}), child: const Text('rebuild'));

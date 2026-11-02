@@ -24,8 +24,9 @@ service firebase.storage {
       allow create, update: if isStaff() && validUpload();
       allow delete: if isStaff();
     }
-    // Future: medical studies (needs app change; nothing uploads here yet)
-    match /estudios_medicos/{file} {
+    // Estudios medicos (fase 4): solo el personal. La app sube a estudios_medicos/{perroId}/{archivo}.
+    // Archivos de un solo segmento o rutas mas profundas caen en la regla final que niega todo.
+    match /estudios_medicos/{perroId}/{archivo} {
       allow read: if isStaff();
       allow create, update: if isStaff() && validUpload();
       allow delete: if isStaff();

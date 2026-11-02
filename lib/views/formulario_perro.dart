@@ -508,6 +508,8 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
 
   Future<void> _guardarDatos() async {
     if (!_formKey.currentState!.validate()) return;
+    final notifier = ref.read(guardadoProvider(claveGuardadoFormulario).notifier);
+    if (!notifier.reservar()) return;
 
     try {
       String? urlImagen = widget.perroActual?.fotoPerfil;
@@ -651,16 +653,8 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
           pesos: pesosAGuardar,
         );
 
-        final guardado = await ref.read(guardadoProvider('formulario').notifier).ejecutar(
-              () => _perroController.guardarPerro(perro),
-            );
+        await _perroController.guardarPerro(perro).timeout(_esperaFirestore);
         if (!mounted) return;
-        if (!guardado) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error al procesar la información')),
-          );
-          return;
-        }
         if (altasConservadas > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -677,6 +671,8 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
             const SnackBar(content: Text('Error al procesar la información')),
           );
         }
+      } finally {
+        notifier.soltar();
       }
   }
 
@@ -1886,7 +1882,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   @override
   Widget build(BuildContext context) {
     final esEdicion = widget.idDocumento != null;
-    final guardando = ref.watch(guardadoProvider('formulario')).isLoading || _estaGuardando;
+    final guardando = ref.watch(guardadoProvider(claveGuardadoFormulario)).isLoading || _estaGuardando;
 
     return PopScope(
       canPop: false,
