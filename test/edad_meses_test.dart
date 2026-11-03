@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:fichas_refugio/controllers/perro_controller.dart';
 import 'package:fichas_refugio/models/perro_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,16 +91,89 @@ void main() {
 
   test('corregir la edad a años deja de contar por meses', () {
     expect(
-      PerroController.cuentaMesesAlGuardar(edadNueva: 0, yaContaba: false, edadAnterior: null),
+      PerroController.cuentaMesesAlGuardar(
+        edadNueva: 0,
+        yaContaba: false,
+        edadAnterior: null,
+        edadIndeterminada: false,
+      ),
       isTrue,
     );
     expect(
-      PerroController.cuentaMesesAlGuardar(edadNueva: 1, yaContaba: true, edadAnterior: 1),
+      PerroController.cuentaMesesAlGuardar(
+        edadNueva: 1,
+        yaContaba: true,
+        edadAnterior: 1,
+        edadIndeterminada: false,
+      ),
       isTrue,
     );
     expect(
-      PerroController.cuentaMesesAlGuardar(edadNueva: 3, yaContaba: true, edadAnterior: 0),
+      PerroController.cuentaMesesAlGuardar(
+        edadNueva: 3,
+        yaContaba: true,
+        edadAnterior: 0,
+        edadIndeterminada: false,
+      ),
       isFalse,
     );
+  });
+
+  test('la edad indeterminada no cuenta por meses', () {
+    expect(
+      PerroController.cuentaMesesAlGuardar(
+        edadNueva: 0,
+        yaContaba: true,
+        edadAnterior: 0,
+        edadIndeterminada: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('editar un adulto no pierde los años sumados', () {
+    final original = perro(edad: 2, edadAnioBase: 2025);
+    final enCampo = PerroController.edadEnFormulario(original);
+    final guardado = perro(edad: enCampo, edadAnioBase: DateTime.now().year);
+
+    expect(enCampo, 2 + (DateTime.now().year - 2025));
+    expect(
+      PerroController.calcularEdadEstimada(guardado),
+      PerroController.calcularEdadEstimada(original),
+    );
+
+    final cachorro = perro(edad: 0, meses: 4, cuentaMeses: true, edadAnioBase: 2025);
+    expect(PerroController.edadEnFormulario(cachorro), 0);
+  });
+
+  test('guardar sin tocar la edad no pisa el mes que sumó la función', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final firestore = FakeFirebaseFirestore();
+    final marca = DateTime(2026, 11, 1);
+    await firestore.collection('perros').doc('cachorro').set({
+      'nombre': 'Canelo',
+      'edad': 0,
+      'meses': 5,
+      'cuenta_meses': true,
+      'ultima_actualizacion_edad': Timestamp.fromDate(marca),
+    });
+
+    await PerroController(firestore: firestore).guardarPerro(
+      PerroModel(
+        id: 'cachorro',
+        nombre: 'Canelo',
+        edad: 0,
+        meses: 4,
+        cuentaMeses: true,
+        ultimaActualizacionEdad: DateTime(2026, 10, 1),
+      ),
+      edadOriginal: 0,
+      mesesOriginales: 4,
+    );
+
+    final data = (await firestore.collection('perros').doc('cachorro').get()).data()!;
+    expect(data['meses'], 5);
+    expect(data['edad'], 0);
+    expect((data['ultima_actualizacion_edad'] as Timestamp).toDate(), marca);
   });
 }

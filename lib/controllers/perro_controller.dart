@@ -182,6 +182,11 @@ class PerroController {
     return perro.edad + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
   }
 
+  /// Edad que se carga en el formulario. Quien no cuenta por meses ve la edad
+  /// estimada, así al guardar con base en el año actual no pierde años.
+  static int edadEnFormulario(PerroModel perro) =>
+      cuentaPorMeses(perro) ? perro.edad : calcularEdadEstimada(perro);
+
   /// Ingresó con menos de un año, o el documento todavía no tiene la marca
   /// pero la edad guardada es 0.
   static bool cuentaPorMeses(PerroModel perro) =>
@@ -219,11 +224,14 @@ class PerroController {
 
   /// True si la ficha que se guarda sigue contando la edad por meses.
   /// Lo es con edad 0, o si ya contaba y la edad en años no se corrigió.
+  /// Con edad indeterminada no cuenta.
   static bool cuentaMesesAlGuardar({
     required int edadNueva,
     required bool? yaContaba,
     required int? edadAnterior,
+    required bool edadIndeterminada,
   }) {
+    if (edadIndeterminada) return false;
     if (edadNueva == 0) return true;
     return yaContaba == true && edadAnterior == edadNueva;
   }
@@ -534,14 +542,21 @@ class PerroController {
     return 'Hermano/a';
   }
 
-  /// Guarda (crea o actualiza) la ficha de un perro, sincroniza la relación
-  /// inversa con sus familiares vinculados y dispara el recálculo de edades
-  /// de los cachorros, todo en una única transacción por lotes (`WriteBatch`).
+  /// Guarda (crea o actualiza) la ficha de un perro y sincroniza la relación
+  /// inversa con sus familiares vinculados, en un único lote.
+  ///
+  /// Si [edadOriginal] y [mesesOriginales] son los que tenía la ficha al abrir
+  /// el formulario, y quien cuenta por meses no los cambió, se conservan la
+  /// edad, los meses y la última actualización que ya escribió la función.
   ///
   /// @param perro los datos del perro a guardar. Si `perro.id` está vacío, se
   /// genera un nuevo documento; en caso contrario se actualiza el existente.
   /// @return el id del documento guardado (nuevo o existente).
-  Future<String> guardarPerro(PerroModel perro) async {
+  Future<String> guardarPerro(
+    PerroModel perro, {
+    int? edadOriginal,
+    int? mesesOriginales,
+  }) async {
     final docRef = perro.id.isEmpty ? _perrosRef.doc() : _perrosRef.doc(perro.id);
     final idPerroActual = docRef.id;
 
@@ -560,6 +575,20 @@ class PerroController {
       final estudiosPrevios = datosActuales?['galeria_estudios'];
       datosPerro['galeria'] = galeriaPrevia is List ? galeriaPrevia : <Map<String, dynamic>>[];
       datosPerro['galeria_estudios'] = estudiosPrevios is List ? estudiosPrevios : <Map<String, dynamic>>[];
+      if (datosActuales != null &&
+          _conservarEdadDelDocumento(
+            perro: perro,
+            edadOriginal: edadOriginal,
+            mesesOriginales: mesesOriginales,
+          )) {
+        if (datosActuales.containsKey('edad')) datosPerro['edad'] = datosActuales['edad'];
+        if (datosActuales.containsKey('meses')) datosPerro['meses'] = datosActuales['meses'];
+        if (datosActuales.containsKey('ultima_actualizacion_edad')) {
+          datosPerro['ultima_actualizacion_edad'] = datosActuales['ultima_actualizacion_edad'];
+        } else {
+          datosPerro.remove('ultima_actualizacion_edad');
+        }
+      }
     }
 
     final batch = _db.batch();
@@ -589,6 +618,19 @@ class PerroController {
     await batch.commit();
 
     return idPerroActual;
+  }
+
+  /// El staff no tocó la edad y la función pudo haber sumado un mes mientras
+  /// el formulario estaba abierto.
+  static bool _conservarEdadDelDocumento({
+    required PerroModel perro,
+    required int? edadOriginal,
+    required int? mesesOriginales,
+  }) {
+    if (edadOriginal == null || mesesOriginales == null) return false;
+    if (perro.edadIndeterminada) return false;
+    if (!(perro.cuentaMeses || perro.edad == 0)) return false;
+    return perro.edad == edadOriginal && perro.meses == mesesOriginales;
   }
 
   /// Elimina la ficha y lo que queda afuera del documento: el vínculo en los

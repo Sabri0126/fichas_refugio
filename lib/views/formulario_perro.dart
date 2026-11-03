@@ -105,7 +105,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
     if (widget.perroActual != null) {
       final perro = widget.perroActual!;
       _nombreController.text = perro.nombre;
-      _edadController.text = perro.edad.toString();
+      _edadController.text = PerroController.edadEnFormulario(perro).toString();
       _mesesController.text = perro.meses.toString();
       _edadIndeterminada = perro.edadIndeterminada;
       _historiaController.text = perro.historia;
@@ -617,6 +617,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
             edadNueva: edad,
             yaContaba: widget.perroActual?.cuentaMeses,
             edadAnterior: widget.perroActual?.edad,
+            edadIndeterminada: _edadIndeterminada,
           ),
           edadIndeterminada: _edadIndeterminada,
           edadAnioBase: _estado == 'activo' ? DateTime.now().year : null,
@@ -651,7 +652,11 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
           pesos: pesosAGuardar,
         );
 
-        await _perroController.guardarPerro(perro).timeout(_esperaFirestore);
+        await _perroController.guardarPerro(
+          perro,
+          edadOriginal: widget.perroActual?.edad,
+          mesesOriginales: widget.perroActual?.meses,
+        ).timeout(_esperaFirestore);
         if (!mounted) return;
         if (altasConservadas > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
