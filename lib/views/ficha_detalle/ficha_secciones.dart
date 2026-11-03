@@ -2202,13 +2202,13 @@ mixin _FichaSecciones on _FichaEstado {
         ],
         Builder(
           builder: (context) {
+            final hayHistoria = perro.historia.trim().isNotEmpty ||
+                perro.parientes.isNotEmpty ||
+                perro.historialEgresos.isNotEmpty;
             final secciones = <SeccionIndice>[
               if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo'))
                 SeccionIndice(etiqueta: 'Salud', clave: _claveSalud),
-              if (!esInvitado) SeccionIndice(etiqueta: 'Estudios', clave: _claveEstudios),
-              if (!esWindows) SeccionIndice(etiqueta: 'Galería', clave: _claveGaleria),
-              if (perro.historia.trim().isNotEmpty)
-                SeccionIndice(etiqueta: 'Historia', clave: _claveHistoria),
+              if (hayHistoria) SeccionIndice(etiqueta: 'Historia', clave: _claveHistoria),
             ];
             return IndiceSecciones(secciones: secciones);
           },
@@ -2220,54 +2220,62 @@ mixin _FichaSecciones on _FichaEstado {
         const SizedBox(height: 16),
         _encabezadoGrupo('Perfil general', Icons.pets_rounded),
         _buildDatosBasicos(perro),
-        if (perro.historia.trim().isNotEmpty) ...[
-          const SizedBox(height: 12),
+        if (perro.historia.trim().isNotEmpty ||
+            perro.parientes.isNotEmpty ||
+            perro.historialEgresos.isNotEmpty)
           KeyedSubtree(
             key: _claveHistoria,
-            child: _tarjetaSeccion(
-              titulo: 'Historia y observaciones',
-              icono: Icons.menu_book_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _construirTextoFormateado(perro.historia),
+                if (perro.historia.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _tarjetaSeccion(
+                    titulo: 'Historia y observaciones',
+                    icono: Icons.menu_book_outlined,
+                    children: [
+                      _construirTextoFormateado(perro.historia),
+                    ],
+                  ),
+                ],
+                if (perro.parientes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _tarjetaSeccion(
+                    titulo: 'Familiares/Parientes',
+                    icono: Icons.people_outline,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: perro.parientes.map((familiar) {
+                          final nombre = familiar['nombre']?.toString() ?? '';
+                          final relacion = familiar['relacion']?.toString() ?? '';
+                          final idDoc = familiar['id_documento']?.toString() ?? '';
+                          return ActionChip(
+                            backgroundColor: context.paleta.relleno,
+                            avatar: Icon(Icons.pets, size: 18, color: colorIconoSeccion(context)),
+                            label: Text('$nombre ($relacion)', textScaler: _escala),
+                            onPressed: idDoc.isEmpty
+                                ? null
+                                : () => Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => FichaDetallePerro(idDocumento: idDoc),
+                                      ),
+                                    ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ],
+                if (perro.historialEgresos.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _historialEgresos(perro, esInvitado),
+                ],
               ],
             ),
           ),
-        ],
-        if (perro.parientes.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _tarjetaSeccion(
-            titulo: 'Familiares/Parientes',
-            icono: Icons.people_outline,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: perro.parientes.map((familiar) {
-                  final nombre = familiar['nombre']?.toString() ?? '';
-                  final relacion = familiar['relacion']?.toString() ?? '';
-                  final idDoc = familiar['id_documento']?.toString() ?? '';
-                  return ActionChip(
-                    backgroundColor: context.paleta.relleno,
-                    avatar: Icon(Icons.pets, size: 18, color: colorIconoSeccion(context)),
-                    label: Text('$nombre ($relacion)', textScaler: _escala),
-                    onPressed: idDoc.isEmpty
-                        ? null
-                        : () => Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => FichaDetallePerro(idDocumento: idDoc),
-                              ),
-                            ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ],
-        if (perro.historialEgresos.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _historialEgresos(perro, esInvitado),
-        ],
         if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo')) ...[
           const SizedBox(height: 28),
           KeyedSubtree(
@@ -2325,9 +2333,7 @@ mixin _FichaSecciones on _FichaEstado {
     final visible = seccionEstudiosVisible(esInvitado: esInvitado, cantidad: entradas.length) ||
         (!esInvitado && cargando && entradas.isEmpty);
     if (!visible) return null;
-    return KeyedSubtree(
-      key: _claveEstudios,
-      child: _tarjetaSeccion(
+    return _tarjetaSeccion(
       titulo: 'Estudios y registros',
       icono: Icons.description_outlined,
       children: [
@@ -2350,7 +2356,6 @@ mixin _FichaSecciones on _FichaEstado {
           child: _botonAgregarEstudio(),
         ),
       ],
-    ),
     );
   }
 
@@ -2429,13 +2434,6 @@ mixin _FichaSecciones on _FichaEstado {
                     'Tocá acá para subirla',
                     textScaler: _escala,
                     style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Fotos del perro. Los estudios médicos van en Estudios y registros.',
-                    textScaler: _escala,
-                    textAlign: TextAlign.center,
-                    style: textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
                   ),
                 ],
               ),
@@ -2582,24 +2580,9 @@ mixin _FichaSecciones on _FichaEstado {
   }
 
   Widget _rotuloFotos() {
-    final esInvitado = ref.read(sessionProvider).esInvitado;
-    final detalle = esInvitado
-        ? 'Fotos del perro.'
-        : 'Fotos del perro. Los estudios médicos van en Estudios y registros.';
     return Padding(
-      key: _claveGaleria,
       padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Galería', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 2),
-          Text(
-            detalle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
-          ),
-        ],
-      ),
+      child: Text('Galería de fotos', style: Theme.of(context).textTheme.titleMedium),
     );
   }
 

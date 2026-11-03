@@ -240,6 +240,56 @@ void main() {
     expect(find.text('Agregar un estudio'), findsNothing);
     expect(find.text('Estudios y registros'), findsNothing);
   });
+
+  testWidgets('la ficha muestra solo Salud e Historia y sin el texto viejo de la galería', (tester) async {
+    final perro = PerroModel(
+      id: 'p1',
+      nombre: 'Luna',
+      estado: 'activo',
+      sexo: 'hembra',
+      fechaIngreso: DateTime(2020, 4, 29),
+      historia: 'Llegó de cachorra.',
+      tratamientos: [
+        TratamientoModel(
+          id: 'diario',
+          categoria: 'diario',
+          medicacion: 'Pastilla',
+          indicaciones: '1',
+          fechaInicio: DateTime(2026, 6, 10),
+          diasDuracion: 10,
+          activo: true,
+        ),
+      ],
+    );
+
+    await _montarFicha(tester, perro, invitado: false);
+    expect(find.text('Salud'), findsOneWidget);
+    expect(find.text('Historia'), findsOneWidget);
+    expect(find.text('Estudios'), findsNothing);
+    expect(find.text('Galería'), findsNothing);
+    expect(find.text('Agregar la primera foto'), findsOneWidget);
+    expect(
+      find.text('Fotos del perro. Los estudios médicos van en Estudios y registros.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('con solo familiares aparece el acceso Historia', (tester) async {
+    final perro = PerroModel(
+      id: 'p1',
+      nombre: 'Luna',
+      estado: 'activo',
+      sexo: 'hembra',
+      fechaIngreso: DateTime(2020, 4, 29),
+      parientes: [
+        {'nombre': 'Canelo', 'relacion': 'hermano', 'id_documento': 'p2'},
+      ],
+    );
+
+    await _montarFicha(tester, perro, invitado: false);
+    expect(find.text('Historia'), findsOneWidget);
+    expect(find.text('Familiares/Parientes'), findsOneWidget);
+  });
 }
 
 Future<void> _montarCalendario(WidgetTester tester, PerroModel perro, {required bool invitado}) async {

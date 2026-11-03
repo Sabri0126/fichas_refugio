@@ -21,8 +21,6 @@ mixin _FichaEstado on ConsumerState<FichaDetallePerro> {
   bool _hojaDosisMostrada = false;
   final ValueNotifier<PerroModel?> _perroVisible = ValueNotifier<PerroModel?>(null);
   final GlobalKey _claveSalud = GlobalKey();
-  final GlobalKey _claveEstudios = GlobalKey();
-  final GlobalKey _claveGaleria = GlobalKey();
   final GlobalKey _claveHistoria = GlobalKey();
 
   static const inicialesDia = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];

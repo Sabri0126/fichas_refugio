@@ -284,6 +284,49 @@ void main() {
     expect(find.text('No se pudo marcar la dosis'), findsOneWidget);
   });
 
+  testWidgets('deshacer usa el tratamiento marcado aunque perrosProvider esté viejo', (tester) async {
+    final firestore = FakeFirebaseFirestore();
+    final perro = _luna();
+    await firestore.collection('perros').doc(perro.id).set(perro.toMap());
+
+    await _montarCalendario(
+      tester,
+      perros: AsyncData([perro]),
+      firestore: firestore,
+    );
+    await _esperarCalendario(tester);
+    await tester.tap(find.byTooltip('Marcar como dada'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Dosis marcada'), findsOneWidget);
+
+    await tester.tap(find.text('Deshacer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final data = (await firestore.collection('perros').doc(perro.id).get()).data()!;
+    final registro = ((data['tratamientos'] as List).single as Map)['registro_dosis'] as List;
+    expect(registro, isNot(contains(TratamientoController.fechaIso(_hoy))));
+  });
+
+  testWidgets('un fallo al deshacer la dosis muestra el aviso', (tester) async {
+    await _montarCalendario(
+      tester,
+      perros: AsyncData([_luna()]),
+      tratamientos: _TratamientosQueFallanAlDeshacer(),
+    );
+    await _esperarCalendario(tester);
+    await tester.tap(find.byTooltip('Marcar como dada'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Dosis marcada'), findsOneWidget);
+
+    await tester.tap(find.text('Deshacer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('No se pudo deshacer la dosis'), findsOneWidget);
+  });
+
   testWidgets('los reportes muestran carga, error, vacío y datos', (tester) async {
     await _montarReportes(tester, const AsyncLoading());
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -375,5 +418,20 @@ class _TratamientosQueFallan extends TratamientoController {
     DateTime fechaDosis,
   ) async {
     throw StateError('fallo');
+  }
+}
+
+class _TratamientosQueFallanAlDeshacer extends TratamientoController {
+  var _marcadas = 0;
+
+  @override
+  Future<bool> toggleDosis(
+    String perroId,
+    TratamientoModel tratamiento,
+    DateTime fechaDosis,
+  ) async {
+    _marcadas += 1;
+    if (_marcadas == 1) return true;
+    throw StateError('fallo al deshacer');
   }
 }

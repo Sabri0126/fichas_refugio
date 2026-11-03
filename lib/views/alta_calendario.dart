@@ -178,7 +178,10 @@ class _DialogoCategoria extends StatelessWidget {
             children: [
               Text('Agregar registro médico', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
-              GrillaRegistrosMedicos(alElegir: alElegir),
+              GrillaRegistrosMedicos(
+                alElegir: alElegir,
+                diseno: DisenoRegistros.lista,
+              ),
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,

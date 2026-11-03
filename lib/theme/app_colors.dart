@@ -24,6 +24,12 @@ abstract final class AppColors {
 
   static const Color error = Color(0xFFB3261E);
   static const Color sombra = Color(0x0F000000);
+
+  // --- Menú principal (texto blanco) ---
+  static const Color avisoMenu = Color(0xFFA35A00);
+  static const Color avisoMenuOscuro = Color(0xFF8D6B2A);
+  static const Color veterinariasMenu = Color(0xFF8A3D62);
+  static const Color veterinariasMenuOscuro = Color(0xFF6E3550);
 }
 
 /// Colores que cambian entre el tema claro y el oscuro.

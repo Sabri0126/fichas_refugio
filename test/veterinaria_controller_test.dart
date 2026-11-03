@@ -136,16 +136,17 @@ void main() {
     expect(compartio, isTrue);
   });
 
-  testWidgets('el botón del menú queda arena con texto navy', (tester) async {
+  testWidgets('el botón de veterinarias usa el color del menú con texto blanco', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData.light(),
         home: Scaffold(
           body: BotonMenu(
             label: 'Veterinarias y contactos',
             detalle: 'Llamar o compartir',
             icon: Icons.local_hospital_outlined,
-            color: AppColors.arena,
-            textoOscuro: true,
+            color: AppColors.veterinariasMenu,
+            colorOscuro: AppColors.veterinariasMenuOscuro,
             onTap: () {},
           ),
         ),
@@ -153,8 +154,30 @@ void main() {
     );
 
     final boton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
-    expect(boton.style?.backgroundColor?.resolve({}), AppColors.arena);
-    expect(boton.style?.foregroundColor?.resolve({}), AppColors.navy);
+    expect(boton.style?.backgroundColor?.resolve({}), AppColors.veterinariasMenu);
+    expect(boton.style?.foregroundColor?.resolve({}), Colors.white);
     expect(find.text('Veterinarias y contactos'), findsOneWidget);
+  });
+
+  testWidgets('en oscuro el botón de veterinarias usa el color oscuro', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: BotonMenu(
+            label: 'Veterinarias y contactos',
+            detalle: 'Llamar o compartir',
+            icon: Icons.local_hospital_outlined,
+            color: AppColors.veterinariasMenu,
+            colorOscuro: AppColors.veterinariasMenuOscuro,
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    final boton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+    expect(boton.style?.backgroundColor?.resolve({}), AppColors.veterinariasMenuOscuro);
+    expect(boton.style?.foregroundColor?.resolve({}), Colors.white);
   });
 }

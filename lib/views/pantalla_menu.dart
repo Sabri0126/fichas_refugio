@@ -355,13 +355,29 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                                 ),
                                               ),
                                             ),
+                                            const SizedBox(height: 16),
+                                            BotonMenu(
+                                              label: 'Calendario general',
+                                              detalle: pendientes == 0
+                                                  ? null
+                                                  : (pendientes == 1 ? '1 pendiente hoy' : '$pendientes pendientes hoy'),
+                                              icon: Icons.calendar_month_rounded,
+                                              color: CategoryColors.unicoTexto,
+                                              onTap: () => Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) => const PantallaCalendarioGeneral(),
+                                                ),
+                                              ),
+                                            ),
                                             if (!esInvitado && incompletas > 0) ...[
                                               const SizedBox(height: 16),
                                               BotonMenu(
                                                 label: 'Fichas con datos faltantes ($incompletas)',
                                                 detalle: 'Sin edad, fecha o foto',
                                                 icon: Icons.warning_amber_rounded,
-                                                color: AppColors.pausado,
+                                                color: AppColors.avisoMenu,
+                                                colorOscuro: AppColors.avisoMenuOscuro,
                                                 onTap: () => Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
@@ -373,23 +389,6 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                                 ),
                                               ),
                                             ],
-                                            const SizedBox(height: 16),
-                                            BotonMenu(
-                                              label: 'Difuntos',
-                                              detalle: difuntos == null
-                                                  ? null
-                                                  : (difuntos == 1 ? '1 en memoria' : '$difuntos en memoria'),
-                                              icon: Icons.local_florist,
-                                              color: AppColors.navy,
-                                              onTap: () => Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) => const PantallaPerros(
-                                                    seccion: SeccionPerros.difuntos,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
                                             const SizedBox(height: 16),
                                             BotonMenu(
                                               label: 'Adoptados y reencontrados',
@@ -409,16 +408,18 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                             ),
                                             const SizedBox(height: 16),
                                             BotonMenu(
-                                              label: 'Calendario general',
-                                              detalle: pendientes == 0
+                                              label: 'Difuntos',
+                                              detalle: difuntos == null
                                                   ? null
-                                                  : (pendientes == 1 ? '1 pendiente hoy' : '$pendientes pendientes hoy'),
-                                              icon: Icons.calendar_month_rounded,
-                                              color: CategoryColors.unicoTexto,
+                                                  : (difuntos == 1 ? '1 en memoria' : '$difuntos en memoria'),
+                                              icon: Icons.local_florist,
+                                              color: AppColors.navy,
                                               onTap: () => Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (_) => const PantallaCalendarioGeneral(),
+                                                  builder: (_) => const PantallaPerros(
+                                                    seccion: SeccionPerros.difuntos,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -441,8 +442,8 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                                 label: 'Veterinarias y contactos',
                                                 detalle: 'Llamar o compartir',
                                                 icon: Icons.local_hospital_outlined,
-                                                color: AppColors.arena,
-                                                textoOscuro: true,
+                                                color: AppColors.veterinariasMenu,
+                                                colorOscuro: AppColors.veterinariasMenuOscuro,
                                                 onTap: () => Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
@@ -519,8 +520,8 @@ class BotonMenu extends StatelessWidget {
   final String? detalle;
   final IconData icon;
   final Color color;
+  final Color? colorOscuro;
   final VoidCallback onTap;
-  final bool textoOscuro;
 
   const BotonMenu({
     super.key,
@@ -528,15 +529,17 @@ class BotonMenu extends StatelessWidget {
     this.detalle,
     required this.icon,
     required this.color,
+    this.colorOscuro,
     required this.onTap,
-    this.textoOscuro = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final oscuro = context.temaOscuro;
-    final fondo = textoOscuro || !oscuro ? color : Color.lerp(color, Colors.black, 0.35)!;
-    final tinta = textoOscuro ? AppColors.navy : Colors.white;
+    final fondo = oscuro
+        ? (colorOscuro ?? Color.lerp(color, Colors.black, 0.35)!)
+        : color;
+    const tinta = Colors.white;
     final etiqueta = detalle == null || detalle!.isEmpty ? label : '$label. $detalle';
     return Semantics(
       button: true,
@@ -555,11 +558,9 @@ class BotonMenu extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
-                side: textoOscuro
-                    ? BorderSide(color: AppColors.navy.withValues(alpha: 0.18))
-                    : oscuro
-                        ? BorderSide(color: Colors.white.withValues(alpha: 0.22))
-                        : BorderSide.none,
+                side: oscuro
+                    ? BorderSide(color: Colors.white.withValues(alpha: 0.22))
+                    : BorderSide.none,
               ),
             ),
             child: Row(
@@ -568,9 +569,7 @@ class BotonMenu extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: textoOscuro
-                        ? AppColors.navy.withValues(alpha: 0.12)
-                        : Colors.white.withValues(alpha: 0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, size: 22, color: tinta),
@@ -588,7 +587,7 @@ class BotonMenu extends StatelessWidget {
                         Text(
                           detalle!,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: tinta.withValues(alpha: textoOscuro ? 0.8 : 0.9),
+                            color: tinta.withValues(alpha: 0.9),
                             fontSize: esWindows ? 15 : 13,
                           ),
                         ),

@@ -22,15 +22,38 @@ const categoriasRegistroMedico = <(String, String)>[
   ('vacuna', 'Vacuna'),
 ];
 
-/// Dos columnas cuando cada una alcanza para el ícono y el nombre entero.
-/// En un teléfono queda una columna, para que no se corte el texto.
+enum DisenoRegistros { grilla, lista }
+
+/// Dos columnas en [DisenoRegistros.grilla] (Editar ficha).
+/// Una opción por renglón en [DisenoRegistros.lista] (ventana flotante).
 class GrillaRegistrosMedicos extends StatelessWidget {
   final ValueChanged<String> alElegir;
+  final DisenoRegistros diseno;
 
-  const GrillaRegistrosMedicos({super.key, required this.alElegir});
+  const GrillaRegistrosMedicos({
+    super.key,
+    required this.alElegir,
+    this.diseno = DisenoRegistros.grilla,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (diseno == DisenoRegistros.lista) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < categoriasRegistroMedico.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            _BotonCategoria(
+              etiqueta: categoriasRegistroMedico[i].$2,
+              categoria: categoriasRegistroMedico[i].$1,
+              alElegir: () => alElegir(categoriasRegistroMedico[i].$1),
+              lista: true,
+            ),
+          ],
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         const espacio = 12.0;
@@ -62,11 +85,13 @@ class _BotonCategoria extends StatelessWidget {
   final String etiqueta;
   final String categoria;
   final VoidCallback alElegir;
+  final bool lista;
 
   const _BotonCategoria({
     required this.etiqueta,
     required this.categoria,
     required this.alElegir,
+    this.lista = false,
   });
 
   @override
@@ -100,7 +125,9 @@ class _BotonCategoria extends StatelessWidget {
             Expanded(
               child: Text(
                 etiqueta,
-                maxLines: 2,
+                maxLines: lista ? null : 2,
+                softWrap: true,
+                overflow: TextOverflow.visible,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: colorTexto,
                   fontSize: 15,
@@ -868,16 +895,25 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
       focusNode: foco,
       controller: controller,
       textCapitalization: capitalizacion,
-      minLines: largo ? 1 : null,
-      maxLines: largo ? 4 : 1,
+      minLines: largo ? 2 : null,
+      maxLines: largo ? null : 1,
       keyboardType: largo ? TextInputType.multiline : null,
+      textInputAction: largo ? TextInputAction.newline : TextInputAction.next,
       onChanged: alEscribir,
       decoration: InputDecoration(
         labelText: etiqueta,
         hintText: ayuda,
         errorText: error,
+        alignLabelWithHint: largo,
       ),
     );
+  }
+
+  bool get _nombreLargo {
+    return switch (widget.categoria) {
+      'veterinaria' || 'evento' || 'higiene' => true,
+      _ => false,
+    };
   }
 
   Widget _campoNombre() {
@@ -885,6 +921,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     return _campo(
       _medicacion,
       _rotuloNombreObligatorio(categoria),
+      largo: _nombreLargo,
       ayuda: _ejemploNombre(categoria),
       error: _errorNombre ? 'Escribí el nombre para poder guardar' : null,
       foco: _focoNombre,
@@ -915,10 +952,11 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
 
   Widget _campoIndicaciones() {
     final categoria = widget.categoria;
+    final dosisCorta = categoria == 'unico' || categoria == 'vacuna';
     return _campo(
       _indicaciones,
       _rotuloIndicaciones(categoria),
-      largo: true,
+      largo: !dosisCorta,
       ayuda: categoria == 'diario' ? 'Ej.: medio comprimido con la comida' : null,
     );
   }
