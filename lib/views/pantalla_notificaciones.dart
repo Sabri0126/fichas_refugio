@@ -275,7 +275,7 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
         fondo: AppColors.terracota.withValues(alpha: 0.12),
       );
     }
-    if (item.categoria == 'ingreso') {
+    if (item.categoria == 'ingreso' || item.categoria == 'cumple_1') {
       return (
         icono: Icons.cake_outlined,
         color: AppColors.terracota,

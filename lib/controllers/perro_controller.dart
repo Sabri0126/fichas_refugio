@@ -167,10 +167,12 @@ class PerroController {
   /// del año en que se registró dicha edad (`edad_anio_base`). Los perros con
   /// estado `'inactivo'` (fallecidos) o `'egresado'` quedan con la edad congelada.
   ///
+  /// No aplica a quienes [cuentaPorMeses]: su edad ya está guardada en años y meses.
+  ///
   /// @param perro el perro sobre el cual calcular la edad.
   /// @return la edad estimada en años.
   static int calcularEdadEstimada(PerroModel perro) {
-    if (perro.estado == 'inactivo' || perro.estado == 'egresado') {
+    if (perro.estado == 'inactivo' || perro.estado == 'egresado' || cuentaPorMeses(perro)) {
       return perro.edad;
     }
 
@@ -178,6 +180,41 @@ class PerroController {
     final aniosTranscurridos = DateTime.now().year - anioBase;
 
     return perro.edad + (aniosTranscurridos > 0 ? aniosTranscurridos : 0);
+  }
+
+  /// Ingresó con menos de un año, o el documento todavía no tiene la marca
+  /// pero la edad guardada es 0.
+  static bool cuentaPorMeses(PerroModel perro) =>
+      !perro.edadIndeterminada && (perro.cuentaMeses || perro.edad == 0);
+
+  /// Meses de calendario entre [desde] y [hasta], sin mirar el día.
+  static int mesesCalendario(DateTime desde, DateTime hasta) =>
+      (hasta.year - desde.year) * 12 + hasta.month - desde.month;
+
+  /// Suma [mesesPasados] a una edad en años y meses.
+  /// [cruzoUnAnio] es true solo la primera vez que se pasa de 0 años a 1 o más.
+  static ({int edad, int meses, bool cruzoUnAnio})? avanzarEdad({
+    required int edad,
+    required int meses,
+    required int mesesPasados,
+  }) {
+    if (mesesPasados <= 0) return null;
+    final total = edad * 12 + meses + mesesPasados;
+    if (total < 0) return null;
+    return (
+      edad: total ~/ 12,
+      meses: total % 12,
+      cruzoUnAnio: edad == 0 && total >= 12,
+    );
+  }
+
+  /// Del más joven al más viejo. Quien cuenta por meses usa los meses guardados.
+  static int compararPorEdad(PerroModel a, PerroModel b) {
+    final porAnios = calcularEdadEstimada(a).compareTo(calcularEdadEstimada(b));
+    if (porAnios != 0) return porAnios;
+    final mesesA = cuentaPorMeses(a) ? a.meses : 0;
+    final mesesB = cuentaPorMeses(b) ? b.meses : 0;
+    return mesesA.compareTo(mesesB);
   }
 
   /// Genera el texto descriptivo de la edad de un perro para mostrar en la UI,
@@ -190,8 +227,15 @@ class PerroController {
       return 'Edad: Indeterminada';
     }
 
-    if (perro.edad == 0) {
-      return perro.meses == 1 ? 'Edad: 1 mes' : 'Edad: ${perro.meses} meses';
+    if (cuentaPorMeses(perro)) {
+      if (perro.edad == 0) {
+        return perro.meses == 1 ? 'Edad: 1 mes' : 'Edad: ${perro.meses} meses';
+      }
+      final anios = perro.edad;
+      final unidadAnio = anios == 1 ? 'año' : 'años';
+      if (perro.meses <= 0) return 'Edad estimada: $anios $unidadAnio';
+      final unidadMes = perro.meses == 1 ? 'mes' : 'meses';
+      return 'Edad estimada: $anios $unidadAnio y ${perro.meses} $unidadMes';
     }
 
     final anios = calcularEdadEstimada(perro);
@@ -537,11 +581,11 @@ class PerroController {
     return idPerroActual;
   }
 
-  /// Regla de negocio de envejecimiento incremental: recorre los perros
-  /// cachorros (edad en años igual a `0`) y, si transcurrieron meses
-  /// completos desde la última actualización, incrementa sus meses o los
-  /// convierte a `1` año al llegar a los `12` meses. No afecta a perros con
-  /// edad indeterminada ni a los fallecidos o egresados, que quedan congelados.
+  /// Regla de negocio de envejecimiento incremental: recorre los perros que
+  /// cuentan por meses y, si transcurrieron meses completos desde la última
+  /// actualización, suma esos meses. Al llegar a 12 pasa al año siguiente.
+  /// No afecta a perros con edad indeterminada ni a los fallecidos o egresados,
+  /// que quedan congelados.
   ///
   /// @param batch el lote de escritura de Firestore donde se acumulan las
   /// actualizaciones (se agrega a la misma transacción que guarda la ficha).
@@ -552,39 +596,45 @@ class PerroController {
   /// hacer `batch.commit()`).
   Future<void> _actualizarEdadesCachorros(WriteBatch batch, String idExcluir) async {
     final ahora = DateTime.now();
-    final cachorrosSnapshot = await _perrosRef.where('edad', isEqualTo: 0).get();
+    final consultas = await Future.wait([
+      _perrosRef.where('edad', isEqualTo: 0).get(),
+      _perrosRef.where('cuenta_meses', isEqualTo: true).get(),
+    ]);
+    final vistos = <String>{};
 
-    for (final doc in cachorrosSnapshot.docs) {
-      if (doc.id == idExcluir) continue;
+    for (final snapshot in consultas) {
+      for (final doc in snapshot.docs) {
+        if (doc.id == idExcluir || !vistos.add(doc.id)) continue;
 
-      final datos = doc.data();
+        final datos = doc.data();
 
-      // Los perros fallecidos y los egresados quedan congelados: nunca deben envejecer.
-      final fechaFallecimiento = datos['fecha_fallecimiento'];
-      final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
-      final estado = datos['estado']?.toString();
-      if (tieneFechaFallecimiento || estado == 'inactivo' || estado == 'egresado') continue;
+        // Los perros fallecidos y los egresados quedan congelados: nunca deben envejecer.
+        final fechaFallecimiento = datos['fecha_fallecimiento'];
+        final tieneFechaFallecimiento = fechaFallecimiento != null && fechaFallecimiento.toString().trim().isNotEmpty;
+        final estado = datos['estado']?.toString();
+        if (tieneFechaFallecimiento || estado == 'inactivo' || estado == 'egresado') continue;
 
-      if (datos['edad_indeterminada'] == true) continue;
+        if (datos['edad_indeterminada'] == true) continue;
 
-      final ultimaActualizacion = _fechaDesdeValor(datos['ultima_actualizacion_edad']) ?? _fechaDesdeValor(datos['fecha_ingreso']);
-      if (ultimaActualizacion == null) continue;
+        final edad = int.tryParse(datos['edad']?.toString() ?? '') ?? 0;
+        final cuenta = datos['cuenta_meses'] == true || edad == 0;
+        if (!cuenta) continue;
 
-      final mesesPasados = (ahora.year - ultimaActualizacion.year) * 12 + ahora.month - ultimaActualizacion.month;
-      if (mesesPasados <= 0) continue;
+        final ultimaActualizacion = _fechaDesdeValor(datos['ultima_actualizacion_edad']) ?? _fechaDesdeValor(datos['fecha_ingreso']);
+        if (ultimaActualizacion == null) continue;
 
-      final mesesActuales = int.tryParse(datos['meses']?.toString() ?? '') ?? 0;
-      final nuevoTotalMeses = mesesActuales + mesesPasados;
+        final mesesActuales = int.tryParse(datos['meses']?.toString() ?? '') ?? 0;
+        final avance = avanzarEdad(
+          edad: edad,
+          meses: mesesActuales,
+          mesesPasados: mesesCalendario(ultimaActualizacion, ahora),
+        );
+        if (avance == null) continue;
 
-      if (nuevoTotalMeses >= 12) {
         batch.update(doc.reference, {
-          'edad': 1,
-          'meses': 0,
-          'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
-        });
-      } else {
-        batch.update(doc.reference, {
-          'meses': nuevoTotalMeses,
+          'edad': avance.edad,
+          'meses': avance.meses,
+          'cuenta_meses': true,
           'ultima_actualizacion_edad': Timestamp.fromDate(ahora),
         });
       }

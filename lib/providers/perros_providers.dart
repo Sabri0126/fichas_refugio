@@ -206,13 +206,7 @@ List<PerroModel> filtrarPerros(
   return perros;
 }
 
-int _compararEdad(PerroModel a, PerroModel b) {
-  final porEdad = PerroController.calcularEdadEstimada(a).compareTo(
-    PerroController.calcularEdadEstimada(b),
-  );
-  if (porEdad != 0) return porEdad;
-  return a.meses.compareTo(b.meses);
-}
+int _compararEdad(PerroModel a, PerroModel b) => PerroController.compararPorEdad(a, b);
 
 int _compararFechaDesc(DateTime? a, DateTime? b) {
   if (a == null && b == null) return 0;

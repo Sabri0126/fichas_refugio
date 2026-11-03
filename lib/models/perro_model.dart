@@ -63,6 +63,10 @@ class PerroModel {
   /// significa 1 año y 3 meses).
   final int meses;
 
+  /// El perro ingresó con menos de un año: la edad suma un mes por mes
+  /// calendario. Si falta el campo y [edad] es 0, se trata igual.
+  final bool cuentaMeses;
+
   /// Indica si la edad del perro es una estimación desconocida y no debe
   /// actualizarse automáticamente con el paso del tiempo.
   final bool edadIndeterminada;
@@ -149,6 +153,7 @@ class PerroModel {
     this.estado = 'activo',
     this.edad = 0,
     this.meses = 0,
+    this.cuentaMeses = false,
     this.edadIndeterminada = false,
     this.edadAnioBase,
     this.fechaIngreso,
@@ -242,6 +247,7 @@ class PerroModel {
       estado: data['estado']?.toString() ?? 'activo',
       edad: int.tryParse(data['edad']?.toString() ?? '') ?? 0,
       meses: int.tryParse(data['meses']?.toString() ?? '') ?? 0,
+      cuentaMeses: data['cuenta_meses'] == true,
       edadIndeterminada: data['edad_indeterminada'] == true,
       edadAnioBase: int.tryParse(data['edad_anio_base']?.toString() ?? ''),
       fechaIngreso: _fechaDesdeValor(data['fecha_ingreso']),
@@ -277,6 +283,7 @@ class PerroModel {
       'estado': estado,
       'edad': edad,
       'meses': meses,
+      'cuenta_meses': cuentaMeses,
       'edad_indeterminada': edadIndeterminada,
       if (edadAnioBase != null) 'edad_anio_base': edadAnioBase,
       if (fechaIngreso != null) 'fecha_ingreso': Timestamp.fromDate(fechaIngreso!),
@@ -323,6 +330,7 @@ class PerroModel {
       estado: estado,
       edad: edad,
       meses: meses,
+      cuentaMeses: cuentaMeses,
       edadIndeterminada: edadIndeterminada,
       edadAnioBase: edadAnioBase,
       fechaIngreso: fechaIngreso,

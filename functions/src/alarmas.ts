@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 export const ZONA = 'America/Argentina/Buenos_Aires';
 
-export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'seguimiento' | 'legacy' | 'ingreso';
+export type TipoAlarma = 'diaria' | 'ultimo_dia' | 'recordatorio' | 'seguimiento' | 'legacy' | 'ingreso' | 'cumple_1';
 
 export interface Alarma {
   clave: string;

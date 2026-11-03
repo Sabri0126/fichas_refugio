@@ -20,6 +20,7 @@ import {
 } from './alarmas.js';
 import { esMananaDeAniversario, mensajeAniversario } from './aniversario.js';
 import { type CategoriaClima, evaluarClima, momentoClima, normalizarConfig, rachaGuardada } from './clima.js';
+import { actualizarEdadesPorMes } from './edad.js';
 import { crearNotificacion, enviarAlarma } from './envio.js';
 import { metadataParaQuitarToken } from './token_estudios.js';
 
@@ -62,9 +63,10 @@ export const enviarNotificaciones = onSchedule(
 
     const perrosSnap = await db.collection('perros').where('estado', '==', 'activo').get();
     const perros = perrosSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as PerroEntrada);
+    const cumpleUnAnio = await actualizarEdadesPorMes(db, perrosSnap.docs, ahora);
     const alarmas = agruparIngresos(perros.flatMap((perro) => calcularAlarmas(perro, desde, ahora)));
 
-    const nuevas: Alarma[] = [];
+    const nuevas: Alarma[] = [...cumpleUnAnio];
     for (const alarma of alarmas) {
       const creada = await crearNotificacion(db, alarma);
       if (creada) nuevas.push(alarma);

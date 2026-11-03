@@ -2195,6 +2195,8 @@ mixin _FichaSecciones on _FichaEstado {
       titulo: 'Estudios y registros',
       icono: Icons.grid_view_rounded,
       children: [
+        _aclaracionEstudios(),
+        const SizedBox(height: 12),
         if (cargando && entradas.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -2248,7 +2250,7 @@ mixin _FichaSecciones on _FichaEstado {
                     Text('Agregar un estudio', textScaler: _escala, style: textTheme.titleMedium),
                     const SizedBox(height: 2),
                     Text(
-                      'Radiografías, análisis u otros registros.',
+                      'Estas fotos quedan en la ficha. Los registros médicos del calendario se cargan en Editar ficha.',
                       textScaler: _escala,
                       style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                     ),
@@ -2275,21 +2277,31 @@ mixin _FichaSecciones on _FichaEstado {
         child: CustomPaint(
           painter: _BordePunteado(color: colorBorde),
           child: SizedBox(
-            height: 140,
+            height: 168,
             width: double.infinity,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add_a_photo_outlined, size: 32, color: context.paleta.lienzo),
-                const SizedBox(height: 8),
-                Text('Agregar la primera foto', textScaler: _escala, style: textTheme.titleMedium),
-                const SizedBox(height: 2),
-                Text(
-                  'Tocá acá para subirla',
-                  textScaler: _escala,
-                  style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_a_photo_outlined, size: 32, color: context.paleta.lienzo),
+                  const SizedBox(height: 8),
+                  Text('Agregar la primera foto', textScaler: _escala, style: textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tocá acá para subirla',
+                    textScaler: _escala,
+                    style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Fotos del perro, aparte de los estudios médicos.',
+                    textScaler: _escala,
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2424,10 +2436,28 @@ mixin _FichaSecciones on _FichaEstado {
       },
     );
   }
+  Widget _aclaracionEstudios() {
+    return Text(
+      'Estas fotos quedan en la ficha. Los registros médicos del calendario se cargan en Editar ficha.',
+      textScaler: _escala,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+    );
+  }
+
   Widget _rotuloFotos() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Galería', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text(
+            'Fotos del perro, aparte de los estudios médicos.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
+          ),
+        ],
+      ),
     );
   }
 

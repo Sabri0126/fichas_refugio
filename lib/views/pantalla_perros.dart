@@ -50,13 +50,7 @@ String? resumenFiltros(List<String> etiquetas, int cantidad) {
 }
 
 /// Del más joven al más viejo: primero los años, después los meses.
-int compararEdadListado(PerroModel a, PerroModel b) {
-  final porEdad = PerroController.calcularEdadEstimada(a).compareTo(
-    PerroController.calcularEdadEstimada(b),
-  );
-  if (porEdad != 0) return porEdad;
-  return a.meses.compareTo(b.meses);
-}
+int compararEdadListado(PerroModel a, PerroModel b) => PerroController.compararPorEdad(a, b);
 
 class PantallaPerros extends ConsumerStatefulWidget {
   final SeccionPerros seccion;
@@ -187,9 +181,12 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
 
   String _edadCompacta(PerroModel perro) {
     if (perro.edadIndeterminada) return 'Ind.';
-    if (perro.edad == 0) {
-      final meses = perro.meses;
-      return meses == 1 ? '1 m' : '$meses m';
+    if (PerroController.cuentaPorMeses(perro)) {
+      if (perro.edad == 0) {
+        return perro.meses == 1 ? '1 m' : '${perro.meses} m';
+      }
+      if (perro.meses <= 0) return perro.edad == 1 ? '1 a' : '${perro.edad} a';
+      return '${perro.edad} a ${perro.meses} m';
     }
     final anios = PerroController.calcularEdadEstimada(perro);
     return anios == 1 ? '1 a' : '$anios a';
