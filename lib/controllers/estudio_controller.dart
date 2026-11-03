@@ -18,11 +18,14 @@ abstract class AlmacenEstudios {
 class AlmacenFirebase implements AlmacenEstudios {
   AlmacenFirebase(this._storage);
 
+  /// El contentType de un estudio. La galería pública no lo usa: va con putFile.
+  static const contentTypeJpeg = 'image/jpeg';
+
   final FirebaseStorage _storage;
 
   @override
   Future<void> subirJpeg(String ruta, Uint8List bytes) {
-    return _storage.ref(ruta).putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return _storage.ref(ruta).putData(bytes, SettableMetadata(contentType: contentTypeJpeg));
   }
 
   @override
@@ -56,7 +59,7 @@ class AlmacenFirebase implements AlmacenEstudios {
   @override
   Future<String> subirPublico(String ruta, Uint8List bytes) async {
     final ref = _storage.ref(ruta);
-    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    await ref.putData(bytes, SettableMetadata(contentType: contentTypeJpeg));
     return ref.getDownloadURL();
   }
 }
@@ -124,10 +127,21 @@ class EstudioController {
   static const topeBytes = 20 * 1024 * 1024;
   static const espera = Duration(seconds: 20);
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('EstudioController sin Firestore');
+    return db;
+  }
 
-  AlmacenEstudios get _almacen =>
-      _almacenInyectado ?? AlmacenFirebase(_storage ?? _leerStorage?.call() ?? FirebaseStorage.instance);
+  AlmacenEstudios get _almacen {
+    final inyectado = _almacenInyectado;
+    if (inyectado != null) return inyectado;
+    final storage = _storage ?? _leerStorage?.call();
+    if (storage == null) {
+      throw StateError('EstudioController sin almacenamiento');
+    }
+    return AlmacenFirebase(storage);
+  }
 
   CollectionReference<Map<String, dynamic>> _estudios(String perroId) {
     return _db.collection('perros').doc(perroId).collection('estudios');

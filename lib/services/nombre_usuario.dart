@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 
 /// Nombre con el que la persona aparece en las fichas.
 ///

@@ -10,7 +10,7 @@ import '../providers/firestore_providers.dart';
 import '../providers/veterinarias_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 
 class PantallaVeterinarias extends ConsumerStatefulWidget {
   const PantallaVeterinarias({super.key});

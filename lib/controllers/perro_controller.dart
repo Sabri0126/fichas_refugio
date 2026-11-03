@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/egreso_model.dart';
 import '../models/perro_model.dart';
@@ -11,6 +10,7 @@ import '../models/recordatorio_model.dart';
 import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../services/nombre_usuario.dart';
+import '../services/fotos_service.dart';
 import 'estudio_controller.dart';
 
 /// Una emisión de [PerroController.observarPerroConOrigen].
@@ -26,12 +26,21 @@ class LecturaPerro {
 /// formulario, cálculo de edades y sincronización del árbol de familiares.
 /// No contiene código de UI.
 class PerroController {
-  PerroController({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _perrosRef = (firestore ?? FirebaseFirestore.instance).collection('perros');
+  PerroController({FirebaseFirestore? firestore, this._fotos, this._estudios}) {
+    _firestore = firestore;
+  }
 
-  final FirebaseFirestore _db;
-  final CollectionReference<Map<String, dynamic>> _perrosRef;
+  late final FirebaseFirestore? _firestore;
+  final FotosService? _fotos;
+  final EstudioController? _estudios;
+
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('PerroController sin Firestore');
+    return db;
+  }
+
+  CollectionReference<Map<String, dynamic>> get _perrosRef => _db.collection('perros');
 
   /// Escucha en tiempo real todos los perros de la colección `perros`.
   ///
@@ -606,7 +615,7 @@ class PerroController {
         await _borrarFotos(perro);
       } catch (_) {}
       try {
-        await EstudioController(firestore: _db).eliminarDelPerro(id);
+        await _estudios?.eliminarDelPerro(id);
       } catch (_) {}
       try {
         await _borrarAvisos(id);
@@ -663,8 +672,12 @@ class PerroController {
       if (url.isNotEmpty) urls.add(url);
     }
     for (final url in urls) {
+      final fotos = _fotos;
+      // Sin servicio no hay Storage. Lo dejan así los tests que no borran fotos;
+      // el provider de la app siempre lo pasa.
+      if (fotos == null) continue;
       try {
-        await FirebaseStorage.instance.refFromURL(url).delete();
+        await fotos.borrarPorUrl(url);
       } catch (_) {}
     }
   }

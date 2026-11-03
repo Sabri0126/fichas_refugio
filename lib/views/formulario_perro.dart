@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_cropper/image_cropper.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../controllers/perro_controller.dart';
@@ -27,7 +25,7 @@ import '../providers/firestore_providers.dart';
 import '../providers/guardado_provider.dart';
 import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import '../theme/category_colors.dart';
 import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
@@ -53,10 +51,10 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   static const _esperaFirestore = Duration(seconds: 20);
 
   PerroController get _perroController => ref.read(perroControllerProvider);
-  final TratamientoController _tratamientoController = TratamientoController();
-  final RecordatorioController _recordatorioController = RecordatorioController();
-  final SeguimientoController _seguimientoController = SeguimientoController();
-  final PesoController _pesoController = PesoController();
+  TratamientoController get _tratamientoController => ref.read(tratamientoControllerProvider);
+  RecordatorioController get _recordatorioController => ref.read(recordatorioControllerProvider);
+  SeguimientoController get _seguimientoController => ref.read(seguimientoControllerProvider);
+  PesoController get _pesoController => ref.read(pesoControllerProvider);
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
@@ -100,7 +98,6 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   bool _hayCambios = false;
 
   File? _imagenSeleccionada;
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -415,7 +412,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   }
 
   Future<void> _seleccionarImagen() async {
-    final XFile? imagen = await _picker.pickImage(source: ImageSource.gallery);
+    final imagen = await ref.read(fotosServiceProvider).elegirDeGaleria();
     if (imagen == null || !mounted) return;
 
     try {
@@ -515,13 +512,8 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
       String? urlImagen = widget.perroActual?.fotoPerfil;
 
         if (_imagenSeleccionada != null) {
-          final nombreArchivo = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final ref = FirebaseStorage.instance
-              .ref()
-              .child('fotos_perfil')
-              .child(nombreArchivo);
-          await ref.putFile(_imagenSeleccionada!);
-          urlImagen = await ref.getDownloadURL();
+          final fotos = ref.read(fotosServiceProvider);
+          urlImagen = await fotos.subirPerfil(_imagenSeleccionada!);
         }
 
         final parientesNormalizados = _parientes
@@ -1385,7 +1377,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   }
 
   Widget _seccionSeguimientos() {
-    final vigentes = _seguimientoController.vigentes(_seguimientos);
+    final vigentes = SeguimientoController.vigentes(_seguimientos);
     final cerrados = _seguimientoController.cerrados(_seguimientos);
     final textTheme = Theme.of(context).textTheme;
 
@@ -1464,7 +1456,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
     final seguimiento = _seguimientos[indice];
     final visual = SeguimientoTipos.de(seguimiento.motivo);
     final textTheme = Theme.of(context).textTheme;
-    final plazo = _seguimientoController.describirPlazo(seguimiento);
+    final plazo = SeguimientoController.describirPlazo(seguimiento);
     final detalle = seguimiento.detalle.trim();
     final subtitulo = detalle.isEmpty
         ? '$plazo · ${seguimiento.hora} h'

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:fichas_refugio/controllers/estudio_controller.dart';
+import 'package:fichas_refugio/controllers/perro_controller.dart';
 import 'package:fichas_refugio/models/estudio_model.dart';
 import 'package:fichas_refugio/models/perro_model.dart';
 import 'package:fichas_refugio/providers/auth_providers.dart';
@@ -39,6 +40,24 @@ void main() {
     expect(() => falla.agregar('luna', bytes, 'otra'), throwsStateError);
     await pumpEventQueue();
     expect(memoria.archivos.values, isEmpty);
+  });
+
+  test('eliminar un perro borra sus estudios y los archivos', () async {
+    final firestore = FakeFirebaseFirestore();
+    final memoria = AlmacenMemoria();
+    final estudios = EstudioController(firestore: firestore, almacen: memoria);
+    await firestore.collection('perros').doc('luna').set({'nombre': 'Luna'});
+    final bytes = Uint8List.fromList([1, 2, 3]);
+    final primero = await estudios.agregar('luna', bytes, 'radio');
+    final segundo = await estudios.agregar('luna', bytes, 'análisis');
+
+    await PerroController(firestore: firestore, estudios: estudios).eliminarPerro('luna');
+
+    final restantes = await firestore.collection('perros').doc('luna').collection('estudios').get();
+    expect(restantes.docs, isEmpty);
+    expect(memoria.archivos.containsKey(primero.ruta), isFalse);
+    expect(memoria.archivos.containsKey(segundo.ruta), isFalse);
+    expect((await firestore.collection('perros').doc('luna').get()).exists, isFalse);
   });
 
   test('mover de galería a estudios y de vuelta', () async {

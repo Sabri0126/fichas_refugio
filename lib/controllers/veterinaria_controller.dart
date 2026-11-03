@@ -4,12 +4,19 @@ import '../models/contacto_veterinario_model.dart';
 
 /// Contactos de veterinarias compartidos entre los administradores.
 class VeterinariaController {
-  final CollectionReference<Map<String, dynamic>> _ref;
+  VeterinariaController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
 
-  VeterinariaController({FirebaseFirestore? firestore})
-    : _ref = (firestore ?? FirebaseFirestore.instance).collection(
-        'veterinarias',
-      );
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('VeterinariaController sin Firestore');
+    return db;
+  }
+
+  CollectionReference<Map<String, dynamic>> get _ref => _db.collection('veterinarias');
 
   static const int maxNombre = 80;
   static const int maxUbicacion = 160;

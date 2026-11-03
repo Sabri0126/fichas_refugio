@@ -4,6 +4,7 @@ import 'package:fichas_refugio/controllers/calendario_general_controller.dart';
 import 'package:fichas_refugio/providers/firestore_providers.dart';
 import 'package:fichas_refugio/providers/perros_providers.dart';
 import 'package:fichas_refugio/providers/theme_mode_provider.dart';
+import 'package:fichas_refugio/services/fotos_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -159,6 +160,7 @@ Future<ProviderContainer> _contenedor(FirebaseFirestore firestore) async {
   final container = ProviderContainer(
     overrides: [
       firestoreProvider.overrideWithValue(firestore),
+      fotosServiceProvider.overrideWithValue(FotosService(almacen: AlmacenFotosMemoria())),
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
   );

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 
 TextTheme _buildTextTheme(PaletaApp paleta, {required bool windows}) {
   final base = GoogleFonts.nunitoTextTheme().apply(

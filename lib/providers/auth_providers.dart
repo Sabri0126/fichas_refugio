@@ -6,8 +6,8 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
 });
 
-/// Usuario de Firebase. Sin reintento: un error se muestra igual que el
-/// StreamBuilder anterior (login), en vez de volver a suscribirse.
+/// Usuario de Firebase. Sin reintento: un error se muestra en el login,
+/// sin volver a suscribirse. No es autoDispose.
 final authStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(firebaseAuthProvider).authStateChanges();
 }, retry: (_, _) => null);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -58,7 +60,18 @@ class FiltrosCalendario {
 
 final relojProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
-/// Una sola vez por ejecución. El calendario espera este futuro para usar `es_ES`.
+/// Fecha de hoy, sin hora. No es autoDispose: el menú lo mira mientras la app
+/// está abierta y el timer se invalida solo al pasar la medianoche.
+final hoyProvider = Provider<DateTime>((ref) {
+  final ahora = ref.watch(relojProvider)();
+  final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+  final espera = hoy.add(const Duration(days: 1)).difference(ahora);
+  final timer = Timer(espera.isNegative ? Duration.zero : espera, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  return hoy;
+});
+
+/// Locale `es_ES`, una sola vez. No es autoDispose: la ficha y el calendario lo esperan.
 final localeCalendarioProvider = FutureProvider<void>((ref) {
   return initializeDateFormatting('es_ES');
 });
@@ -192,12 +205,11 @@ final seguimientosActivosProvider = Provider.autoDispose<AsyncValue<List<ItemRes
   });
 });
 
-/// Pendientes de hoy para el menú. Sin lista, cero.
+/// Pendientes de hoy para el menú. Sin lista, cero. Sigue [hoyProvider].
 final pendientesHoyProvider = Provider<int>((ref) {
+  final hoy = ref.watch(hoyProvider);
   final datos = ref.watch(perrosProvider).value;
   if (datos == null) return 0;
-  final ahora = ref.watch(relojProvider)();
-  final hoy = DateTime(ahora.year, ahora.month, ahora.day);
   return CalendarioGeneralController.construirResumen(datos, hoy, hoy: hoy).pendientes.length;
 });
 

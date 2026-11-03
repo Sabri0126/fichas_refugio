@@ -24,7 +24,11 @@ class TratamientoController {
 
   late final FirebaseFirestore? _firestore;
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('TratamientoController sin Firestore');
+    return db;
+  }
 
   CollectionReference<Map<String, dynamic>> get _perrosRef => _db.collection('perros');
 
@@ -697,7 +701,7 @@ class TratamientoController {
       tratamientos.where((t) => t.categoria == 'diario').toList();
 
   /// Tratamientos diarios activos (checkbox de dosis del día).
-  List<TratamientoModel> obtenerActivosDiarios(
+  static List<TratamientoModel> obtenerActivosDiarios(
     List<TratamientoModel> tratamientos,
   ) => tratamientos.where((t) => t.activo && t.categoria == 'diario').toList();
 

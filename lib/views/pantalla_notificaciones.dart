@@ -9,7 +9,7 @@ import '../providers/notificaciones_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../theme/entrada_escalonada.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 
 class PantallaNotificaciones extends ConsumerStatefulWidget {

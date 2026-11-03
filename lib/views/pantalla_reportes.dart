@@ -5,7 +5,7 @@ import '../controllers/reportes_controller.dart';
 import '../providers/calendario_providers.dart';
 import '../providers/reportes_providers.dart';
 import '../theme/app_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
 import '../widgets/grafico_poblacion.dart';
 import 'ficha_detalle_perro.dart';

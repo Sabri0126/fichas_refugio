@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../controllers/peso_controller.dart';
 import '../models/peso_model.dart';
 import '../theme/app_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 
 /// Evolución del peso. Los puntos estimados se dibujan huecos.
 class GraficoPeso extends StatelessWidget {

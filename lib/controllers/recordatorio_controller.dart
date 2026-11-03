@@ -12,7 +12,11 @@ class RecordatorioController {
 
   late final FirebaseFirestore? _firestore;
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('RecordatorioController sin Firestore');
+    return db;
+  }
 
   /// Id de documento de Firestore, sin persistir nada.
   String generarId() => _db.collection('perros').doc().id;

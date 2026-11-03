@@ -247,7 +247,8 @@ void main() {
     );
     await _esperarCalendario(tester);
     expect(find.text('Agregar registro'), findsNothing);
-    expect(find.byTooltip('Marcar como dada'), findsOneWidget);
+    expect(find.text('Pendientes de hoy'), findsOneWidget);
+    expect(find.byTooltip('Marcar como dada'), findsNothing);
   });
 
   testWidgets('marcar la dosis escribe en el firestore inyectado', (tester) async {

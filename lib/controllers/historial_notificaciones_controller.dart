@@ -9,10 +9,17 @@ import '../services/mensajeria_service.dart';
 
 /// Historial de avisos del servidor. Lo leído y lo borrado queda en este teléfono.
 class HistorialNotificacionesController {
-  HistorialNotificacionesController({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+  HistorialNotificacionesController({FirebaseFirestore? firestore}) {
+    _firestore = firestore;
+  }
 
-  final FirebaseFirestore _db;
+  late final FirebaseFirestore? _firestore;
+
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('HistorialNotificacionesController sin Firestore');
+    return db;
+  }
 
   static const _claveLeidas = 'notif_leidas_hasta';
   static const _claveBorrado = 'notif_borrado_hasta';

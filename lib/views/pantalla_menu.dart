@@ -6,15 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_providers.dart';
 import '../providers/calendario_providers.dart';
+import '../providers/mensajeria_providers.dart';
 import '../providers/notificaciones_providers.dart';
 import '../providers/perros_providers.dart';
 import '../providers/theme_mode_provider.dart';
-import '../services/mensajeria_service.dart';
 import '../services/nombre_usuario.dart';
-import '../services/notificaciones_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
 import 'pantalla_calendario_general.dart';
 import 'pantalla_login.dart';
@@ -40,10 +39,12 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
     ref.listenManual<bool>(
       sessionProvider.select((sesion) => sesion.esInvitado),
       (anterior, esInvitado) {
+        final mensajeria = ref.read(mensajeriaServiceProvider);
+        final avisos = ref.read(notificacionesServiceProvider);
         if (esInvitado || _efectosStaff) return;
         _efectosStaff = true;
-        unawaited(MensajeriaService.instance.registrarDispositivo().catchError((Object _) {}));
-        unawaited(NotificacionesService.instance.migrarAlarmasLocales());
+        unawaited(mensajeria.registrarDispositivo().catchError((Object _) {}));
+        unawaited(avisos.migrarAlarmasLocales());
         unawaited(_prepararNombre());
       },
       fireImmediately: true,
@@ -363,10 +364,11 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                       );
                       if (confirmar != true || !context.mounted) return;
                       if (!esInvitado) {
-                        await MensajeriaService.instance
-                            .desregistrarDispositivo();
+                        final mensajeria = ref.read(mensajeriaServiceProvider);
+                        final auth = ref.read(firebaseAuthProvider);
+                        await mensajeria.desregistrarDispositivo();
                         NombreUsuario.olvidar();
-                        await FirebaseAuth.instance.signOut();
+                        await auth.signOut();
                       }
                       if (!context.mounted) return;
                       Navigator.pushAndRemoveUntil(

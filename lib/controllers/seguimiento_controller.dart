@@ -10,7 +10,11 @@ class SeguimientoController {
 
   late final FirebaseFirestore? _firestore;
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('SeguimientoController sin Firestore');
+    return db;
+  }
 
   /// Id de documento de Firestore, sin persistir nada.
   String generarId() => _db.collection('perros').doc().id;
@@ -51,7 +55,7 @@ class SeguimientoController {
 
   SeguimientoModel cerrar(SeguimientoModel actual) => actual.copyWith(activo: false);
 
-  List<SeguimientoModel> vigentes(List<SeguimientoModel> lista, {DateTime? ahora}) {
+  static List<SeguimientoModel> vigentes(List<SeguimientoModel> lista, {DateTime? ahora}) {
     final momento = ahora ?? DateTime.now();
     return [
       for (final seguimiento in lista)
@@ -68,7 +72,7 @@ class SeguimientoController {
   }
 
   /// "Día 2 de 5", "Día 2" si no tiene fin, o "Empieza el dd/mm" si todavía no arrancó.
-  String describirPlazo(SeguimientoModel seguimiento, {DateTime? ahora}) {
+  static String describirPlazo(SeguimientoModel seguimiento, {DateTime? ahora}) {
     final momento = ahora ?? DateTime.now();
     if (!seguimiento.activo) return 'Cerrado';
     final hoy = DateTime(momento.year, momento.month, momento.day);

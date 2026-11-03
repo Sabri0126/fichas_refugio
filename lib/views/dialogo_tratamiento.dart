@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/historial_notificaciones_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/tratamiento_model.dart';
+import '../providers/mensajeria_providers.dart';
 import '../services/mensajeria_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 
 enum _AlcanceAviso { todos, esteCelular, nadie }
 
@@ -473,7 +475,7 @@ class _DialogoTratamientoState extends State<_DialogoTratamiento> {
     }
     if (_esDiario) {
       try {
-        await MensajeriaService.instance.definirSilencio(
+        await ProviderScope.containerOf(context).read(mensajeriaServiceProvider).definirSilencio(
           modelo.id,
           silenciar: _alcance == _AlcanceAviso.esteCelular,
         );

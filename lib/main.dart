@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +37,9 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   final prefs = await SharedPreferences.getInstance();
   await _capturarNotificacionDeInicio();
+  MensajeriaService.instance.conectar(
+    push: FuentePushFirebase(FirebaseMessaging.instance),
+  );
   final idPush = await MensajeriaService.instance.prepararToques();
   if (idPush != null && idPush.isNotEmpty) {
     EstadoNotificacion.payloadPendiente = idPush;
@@ -82,7 +86,7 @@ class MyApp extends ConsumerWidget {
   }
 }
 
-/// Misma puerta que el StreamBuilder anterior: cargando, usuario o login.
+/// Puerta de la app: cargando, usuario o login.
 class _PuertaAuth extends ConsumerWidget {
   const _PuertaAuth();
 

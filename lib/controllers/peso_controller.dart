@@ -18,7 +18,11 @@ class PesoController {
 
   late final FirebaseFirestore? _firestore;
 
-  FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
+  FirebaseFirestore get _db {
+    final db = _firestore;
+    if (db == null) throw StateError('PesoController sin Firestore');
+    return db;
+  }
 
   String generarId() => _db.collection('perros').doc().id;
 

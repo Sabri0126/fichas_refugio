@@ -12,7 +12,7 @@ import '../providers/firestore_providers.dart';
 import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/entrada_escalonada.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import 'ficha_detalle_perro.dart';
 import 'formulario_perro.dart';
 

@@ -15,7 +15,7 @@ import '../providers/guardado_provider.dart';
 import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
-import '../util/plataforma.dart';
+import '../utils/plataforma.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
@@ -159,7 +159,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                               const SizedBox(height: 12),
                               _leyenda(perros, filtro, filtros),
                               const SizedBox(height: 20),
-                              _resumen(resumen ?? const ResumenDia(), filtros, seguimientos),
+                              _resumen(resumen ?? const ResumenDia(), filtros, seguimientos, esInvitado),
                             ],
                           ],
                         );
@@ -237,7 +237,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                                   alignment: Alignment.topLeft,
                                   child: ConstrainedBox(
                                     constraints: const BoxConstraints(maxWidth: 880),
-                                    child: _resumen(resumen ?? const ResumenDia(), filtros, seguimientos),
+                                    child: _resumen(resumen ?? const ResumenDia(), filtros, seguimientos, esInvitado),
                                   ),
                                 ),
                               ),
@@ -824,7 +824,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     );
   }
 
-  Widget _resumen(ResumenDia resumen, FiltrosCalendario filtros, List<ItemResumen> seguimientos) {
+  Widget _resumen(ResumenDia resumen, FiltrosCalendario filtros, List<ItemResumen> seguimientos, bool esInvitado) {
     final textTheme = Theme.of(context).textTheme;
     final dia = _soloFecha(filtros.diaSeleccionado);
     final fecha = DateFormat("EEEE d 'de' MMMM", 'es_ES').format(dia);
@@ -840,7 +840,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
           'Pendientes de hoy',
           Icons.pending_outlined,
           resumen.pendientes,
-          permitirMarcar: true,
+          permitirMarcar: !esInvitado,
         ),
       );
       secciones.add(

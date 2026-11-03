@@ -68,8 +68,6 @@ class ResumenDia {
 
 /// Reglas del calendario general. No lee Firebase: recibe los perros ya cargados.
 abstract final class CalendarioGeneralController {
-  static final TratamientoController _fechas = TratamientoController();
-
   static ResumenDia construirResumen(
     List<PerroModel> perros,
     DateTime dia, {
@@ -78,7 +76,7 @@ abstract final class CalendarioGeneralController {
   }) {
     final diaFecha = _soloFecha(dia);
     final hoyFecha = _soloFecha(hoy);
-    final iso = _fechas.formatearFechaISO(diaFecha);
+    final iso = TratamientoController.fechaIso(diaFecha);
     final dadas = <ItemResumen>[];
     final pendientes = <ItemResumen>[];
     final programadas = <ItemResumen>[];
@@ -175,14 +173,13 @@ abstract final class CalendarioGeneralController {
     required DateTime hoy,
     String? idPerro,
   }) {
-    final controlador = SeguimientoController();
     final items = <ItemResumen>[];
     for (final perro in perros) {
       if (idPerro != null && perro.id != idPerro) continue;
-      for (final seguimiento in controlador.vigentes(perro.seguimientos, ahora: hoy)) {
+      for (final seguimiento in SeguimientoController.vigentes(perro.seguimientos, ahora: hoy)) {
         final visual = SeguimientoTipos.de(seguimiento.motivo);
         final detalle = seguimiento.detalle.trim();
-        final plazo = controlador.describirPlazo(seguimiento, ahora: hoy);
+        final plazo = SeguimientoController.describirPlazo(seguimiento, ahora: hoy);
         items.add(ItemResumen(
           perro: perro,
           titulo: visual.etiqueta,

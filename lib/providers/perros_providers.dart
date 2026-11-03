@@ -20,7 +20,7 @@ const claveVistaListado = 'vista_listado_perros';
 bool tieneTratamientoActivo(List<TratamientoModel> tratamientos, {DateTime? hoy}) {
   final momento = hoy ?? DateTime.now();
   final dia = DateTime(momento.year, momento.month, momento.day);
-  final activos = TratamientoController().obtenerActivosDiarios(tratamientos);
+  final activos = TratamientoController.obtenerActivosDiarios(tratamientos);
   for (final tratamiento in activos) {
     final fase = TratamientoController.calcularEstadoDuracion(tratamiento, hoy: dia).fase;
     if (fase != FaseTratamiento.finalizado) return true;
