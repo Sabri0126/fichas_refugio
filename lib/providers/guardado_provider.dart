@@ -12,6 +12,7 @@ const claveGuardadoSuspender = 'ficha-suspender';
 const claveGuardadoDosis = 'ficha-dosis';
 const claveGuardadoReanudar = 'ficha-reanudar';
 const claveGuardadoEstudio = 'ficha-estudio';
+const claveGuardadoCalendario = 'calendario-dosis';
 
 const clavesGuardadoFicha = <String>[
   claveGuardadoPeso,

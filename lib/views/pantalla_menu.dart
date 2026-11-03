@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../controllers/calendario_general_controller.dart';
 import '../providers/auth_providers.dart';
+import '../providers/calendario_providers.dart';
 import '../providers/notificaciones_providers.dart';
 import '../providers/perros_providers.dart';
 import '../providers/theme_mode_provider.dart';
@@ -119,6 +119,7 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
     final datos = ref.watch(perrosProvider).value;
     final desdeCache = ref.watch(perrosDesdeCacheProvider);
     final noLeidas = ref.watch(notificacionesNoLeidasProvider);
+    final pendientes = ref.watch(pendientesHoyProvider);
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -187,10 +188,6 @@ class _PantallaMenuState extends ConsumerState<PantallaMenu> {
                                     final difuntos = datos?.where((perro) => perro.estado == 'inactivo').length;
                                     final adoptados = datos?.where((perro) => perro.estado == 'egresado' && perro.motivoEgreso == 'adopcion').length;
                                     final reencontrados = datos?.where((perro) => perro.estado == 'egresado' && perro.motivoEgreso == 'familia').length;
-                                    final hoy = DateTime.now();
-                                    final pendientes = datos == null
-                                        ? 0
-                                        : CalendarioGeneralController.construirResumen(datos, hoy, hoy: hoy).pendientes.length;
                                     final cuidado = activos.length == 1
                                         ? '1 perrito a nuestro cuidado'
                                         : '${activos.length} perritos a nuestro cuidado';

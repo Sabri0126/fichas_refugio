@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../controllers/calendario_general_controller.dart';
-import '../controllers/recordatorio_controller.dart';
-import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/dosis_avisada.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
+import '../providers/calendario_providers.dart';
 import '../providers/firestore_providers.dart';
+import '../providers/guardado_provider.dart';
 import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
@@ -23,8 +22,6 @@ import '../theme/seguimiento_tipos.dart';
 import 'alta_calendario.dart';
 import 'ficha_detalle_perro.dart';
 
-enum _VistaCalendario { mes, lista }
-
 class PantallaCalendarioGeneral extends ConsumerStatefulWidget {
   const PantallaCalendarioGeneral({super.key});
 
@@ -34,19 +31,6 @@ class PantallaCalendarioGeneral extends ConsumerStatefulWidget {
 }
 
 class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGeneral> {
-  final TratamientoController _tratamientoController = TratamientoController();
-  final RecordatorioController _recordatorioController = RecordatorioController();
-  final SeguimientoController _seguimientoController = SeguimientoController();
-  late final Future<void> _localeListo;
-  late final DateTime _hoy;
-  late final DateTime _primerDia;
-  late final DateTime _ultimoDia;
-
-  DateTime _diaSeleccionado = DateTime.now();
-  DateTime _diaEnfocado = DateTime.now();
-  _VistaCalendario _vista = _VistaCalendario.mes;
-  String? _idPerroFiltro;
-  String? _filtroTipo;
   final TextEditingController _busqueda = TextEditingController();
   final ScrollController _scrollCalendario = ScrollController();
   final ScrollController _scrollResumen = ScrollController();
@@ -54,23 +38,10 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
   @override
   void initState() {
     super.initState();
-    final ahora = DateTime.now();
-    _hoy = DateTime(ahora.year, ahora.month, ahora.day);
-    _diaSeleccionado = _hoy;
-    _diaEnfocado = _hoy;
-    _primerDia = _fechaEnAnio(_hoy, -2);
-    _ultimoDia = _fechaEnAnio(_hoy, 1);
-    _localeListo = initializeDateFormatting('es_ES');
     _busqueda.addListener(() {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      ref.read(filtrosCalendarioProvider.notifier).buscar(_busqueda.text);
     });
-  }
-
-  DateTime _fechaEnAnio(DateTime base, int deltaAnios) {
-    final anio = base.year + deltaAnios;
-    final ultimoDiaMes = DateTime(anio, base.month + 1, 0).day;
-    final dia = base.day > ultimoDiaMes ? ultimoDiaMes : base.day;
-    return DateTime(anio, base.month, dia);
   }
 
   DateTime _soloFecha(DateTime fecha) =>
@@ -84,13 +55,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     super.dispose();
   }
 
-  void _irAHoy() {
-    setState(() {
-      _diaSeleccionado = _hoy;
-      _diaEnfocado = _hoy;
-      if (_vista == _VistaCalendario.lista) _vista = _VistaCalendario.mes;
-    });
-  }
+  void _irAHoy() => ref.read(filtrosCalendarioProvider.notifier).irAHoy();
 
   String _capitalizar(String texto) {
     final limpio = texto.trim();
@@ -109,14 +74,17 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
       }
     }
     if (tratamiento == null) return;
-    try {
-      await _tratamientoController.toggleDosis(item.perro.id, tratamiento, _diaSeleccionado);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo marcar la dosis')),
-      );
-    }
+    final dia = ref.read(filtrosCalendarioProvider).diaSeleccionado;
+    final tratamientos = ref.read(tratamientoControllerProvider);
+    final resultado = await ref.read(guardadoProvider(claveGuardadoCalendario).notifier).ejecutar(
+      () async {
+        await tratamientos.toggleDosis(item.perro.id, tratamiento!, dia);
+      },
+    );
+    if (!mounted || resultado != ResultadoGuardado.error) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudo marcar la dosis')),
+    );
   }
 
   String _plural(int n, String singular, String plural) {
@@ -126,6 +94,14 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
   @override
   Widget build(BuildContext context) {
     final asyncPerros = ref.watch(perrosProvider);
+    final filtros = ref.watch(filtrosCalendarioProvider);
+    final locale = ref.watch(localeCalendarioProvider);
+    final activosAsync = ref.watch(perrosActivosCalendarioProvider);
+    final resumen = ref.watch(resumenDiaProvider).asData?.value;
+    final entradas = ref.watch(listaCalendarioProvider).asData?.value.entradas ?? const <EntradaListaGeneral>[];
+    final seguimientos = ref.watch(seguimientosActivosProvider).asData?.value ?? const <ItemResumen>[];
+    final esInvitado = ref.watch(sessionProvider).esInvitado;
+    ref.watch(guardadoProvider(claveGuardadoCalendario));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Calendario general'),
@@ -152,44 +128,38 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
             if (perros.isEmpty) {
               return _estadoMensaje('No hay perritos registrados aún.');
             }
-            final activos =
-                perros.where((perro) => perro.estado == 'activo').toList()
-                  ..sort((a, b) => a.nombre.compareTo(b.nombre));
-            final filtro = activos.any((perro) => perro.id == _idPerroFiltro)
-                ? _idPerroFiltro
-                : null;
+            final activos = activosAsync.asData?.value ?? const <PerroModel>[];
+            final filtro = idPerroEnActivos(activos, filtros.idPerro);
             return LayoutBuilder(
               builder: (context, constraints) {
                 final ancho = constraints.maxWidth >= 900;
                 return SizedBox(
                   width: constraints.maxWidth,
                   height: constraints.maxHeight,
-                  child: FutureBuilder<void>(
-                    future: _localeListo,
-                    builder: (context, locale) {
-                      if (locale.connectionState != ConnectionState.done) {
+                  child: () {
+                      if (locale.isLoading) {
                         return const Center(child: CircularProgressIndicator());
                       }
                       final filtroPerro = _filtroPerro(activos, filtro);
-                      final esLista = _vista == _VistaCalendario.lista;
+                      final esLista = filtros.vista == VistaCalendario.lista;
                       if (!ancho) {
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                           children: [
                             filtroPerro,
                             const SizedBox(height: 12),
-                            _selectorFormato(),
+                            _selectorFormato(filtros),
                             const SizedBox(height: 12),
-                            _botonesAlta(activos),
+                            _botonesAlta(activos, filtros, esInvitado),
                             const SizedBox(height: 12),
                             if (esLista)
-                              _panelLista(perros, filtro)
+                              _panelLista(entradas, filtros, seguimientos)
                             else ...[
-                              _calendario(perros, filtro, altoCelda: 52),
+                              _calendario(perros, filtro, filtros, altoCelda: 52),
                               const SizedBox(height: 12),
-                              _leyenda(perros, filtro),
+                              _leyenda(perros, filtro, filtros),
                               const SizedBox(height: 20),
-                              _resumen(perros, filtro),
+                              _resumen(resumen ?? const ResumenDia(), filtros, seguimientos),
                             ],
                           ],
                         );
@@ -208,11 +178,11 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                                   children: [
                                     filtroPerro,
                                     const SizedBox(height: 12),
-                                    _selectorFormato(),
+                                    _selectorFormato(filtros),
                                     const SizedBox(height: 12),
-                                    _botonesAlta(activos),
+                                    _botonesAlta(activos, filtros, esInvitado),
                                     const SizedBox(height: 12),
-                                    _panelLista(perros, filtro),
+                                    _panelLista(entradas, filtros, seguimientos),
                                   ],
                                 ),
                               ),
@@ -243,13 +213,13 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                                           children: [
                                             filtroPerro,
                                             const SizedBox(height: 12),
-                                            _selectorFormato(),
+                                            _selectorFormato(filtros),
                                             const SizedBox(height: 12),
-                                            _botonesAlta(activos),
+                                            _botonesAlta(activos, filtros, esInvitado),
                                             const SizedBox(height: 12),
-                                            _calendario(perros, filtro, altoCelda: altoCelda),
+                                            _calendario(perros, filtro, filtros, altoCelda: altoCelda),
                                             const SizedBox(height: 12),
-                                            _leyenda(perros, filtro),
+                                            _leyenda(perros, filtro, filtros),
                                           ],
                                         ),
                                       ),
@@ -267,7 +237,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                                   alignment: Alignment.topLeft,
                                   child: ConstrainedBox(
                                     constraints: const BoxConstraints(maxWidth: 880),
-                                    child: _resumen(perros, filtro),
+                                    child: _resumen(resumen ?? const ResumenDia(), filtros, seguimientos),
                                   ),
                                 ),
                               ),
@@ -275,8 +245,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                           ],
                         ),
                       );
-                    },
-                  ),
+                  }(),
                 );
               },
             );
@@ -309,19 +278,11 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     'deceso': 'Fallecimiento',
   };
 
-  Widget _panelLista(List<PerroModel> perros, String? filtro) {
-    final antigua = CalendarioGeneralController.fechaMasAntigua(perros, idPerro: filtro);
-    final desde = antigua != null && antigua.isBefore(_primerDia) ? antigua : _primerDia;
-    final todas = CalendarioGeneralController.construirLista(
-      perros,
-      desde: desde,
-      hasta: _ultimoDia,
-      idPerro: filtro,
-    );
-    final consulta = _busqueda.text.trim().toLowerCase();
+  Widget _panelLista(List<EntradaListaGeneral> todas, FiltrosCalendario filtros, List<ItemResumen> seguimientos) {
+    final consulta = filtros.busqueda.trim().toLowerCase();
     final filtradas = [
       for (final entrada in todas)
-        if (_filtroTipo == null || entrada.categoria == _filtroTipo)
+        if (filtros.tipo == null || entrada.categoria == filtros.tipo)
           if (consulta.isEmpty || _coincideLista(entrada, consulta)) entrada,
     ];
     final categorias = [
@@ -334,7 +295,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _seguimientosActivos(perros, filtro),
+        _seguimientosActivos(seguimientos),
         TextField(
           controller: _busqueda,
           textCapitalization: TextCapitalization.sentences,
@@ -351,10 +312,10 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
             children: [
               ChoiceChip(
                 label: const Text('Todas'),
-                selected: _filtroTipo == null,
+                selected: filtros.tipo == null,
                 onSelected: (seleccionado) {
                   if (!seleccionado) return;
-                  setState(() => _filtroTipo = null);
+                  ref.read(filtrosCalendarioProvider.notifier).filtrarTipo(null);
                 },
               ),
               for (final categoria in categorias)
@@ -374,9 +335,9 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                       Text(_etiquetasTipo[categoria] ?? categoria),
                     ],
                   ),
-                  selected: _filtroTipo == categoria,
+                  selected: filtros.tipo == categoria,
                   onSelected: (seleccionado) {
-                    setState(() => _filtroTipo = seleccionado ? categoria : null);
+                    ref.read(filtrosCalendarioProvider.notifier).filtrarTipo(seleccionado ? categoria : null);
                   },
                 ),
             ],
@@ -473,11 +434,10 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => setState(() {
-          _vista = _VistaCalendario.mes;
-          _diaSeleccionado = entrada.fecha;
-          _diaEnfocado = entrada.fecha;
-        }),
+        onTap: () => ref.read(filtrosCalendarioProvider.notifier).seleccionarDia(
+          entrada.fecha,
+          vista: VistaCalendario.mes,
+        ),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -564,8 +524,8 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     );
   }
 
-  Widget _botonesAlta(List<PerroModel> activos) {
-    if (ref.watch(sessionProvider).esInvitado) return const SizedBox.shrink();
+  Widget _botonesAlta(List<PerroModel> activos, FiltrosCalendario filtros, bool esInvitado) {
+    if (esInvitado) return const SizedBox.shrink();
     final hayPerros = activos.isNotEmpty;
     return Material(
       color: context.paleta.superficie,
@@ -585,9 +545,9 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                 alTocar: () => abrirAltaRegistroCalendario(
                   context,
                   activos: activos,
-                  idPreseleccionado: _idPerroFiltro,
-                  fecha: _diaSeleccionado,
-                  tratamientos: _tratamientoController,
+                  idPreseleccionado: filtros.idPerro,
+                  fecha: filtros.diaSeleccionado,
+                  tratamientos: ref.read(tratamientoControllerProvider),
                   perros: ref.read(perroControllerProvider),
                 ),
               ),
@@ -601,9 +561,9 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                 alTocar: () => abrirAltaRecordatorioCalendario(
                   context,
                   activos: activos,
-                  idPreseleccionado: _idPerroFiltro,
-                  fecha: _diaSeleccionado,
-                  recordatorios: _recordatorioController,
+                  idPreseleccionado: filtros.idPerro,
+                  fecha: filtros.diaSeleccionado,
+                  recordatorios: ref.read(recordatorioControllerProvider),
                   perros: ref.read(perroControllerProvider),
                 ),
               ),
@@ -617,9 +577,9 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
                 alTocar: () => abrirAltaSeguimientoCalendario(
                   context,
                   activos: activos,
-                  idPreseleccionado: _idPerroFiltro,
-                  fecha: _diaSeleccionado,
-                  seguimientos: _seguimientoController,
+                  idPreseleccionado: filtros.idPerro,
+                  fecha: filtros.diaSeleccionado,
+                  seguimientos: ref.read(seguimientoControllerProvider),
                   perros: ref.read(perroControllerProvider),
                 ),
               ),
@@ -659,15 +619,15 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     );
   }
 
-  Widget _selectorFormato() {
-    return SegmentedButton<_VistaCalendario>(
+  Widget _selectorFormato(FiltrosCalendario filtros) {
+    return SegmentedButton<VistaCalendario>(
       showSelectedIcon: false,
       segments: const [
-        ButtonSegment(value: _VistaCalendario.mes, label: Text('Mes'), icon: Icon(Icons.calendar_month_outlined)),
-        ButtonSegment(value: _VistaCalendario.lista, label: Text('Resumen'), icon: Icon(Icons.view_list_outlined)),
+        ButtonSegment(value: VistaCalendario.mes, label: Text('Mes'), icon: Icon(Icons.calendar_month_outlined)),
+        ButtonSegment(value: VistaCalendario.lista, label: Text('Resumen'), icon: Icon(Icons.view_list_outlined)),
       ],
-      selected: {_vista},
-      onSelectionChanged: (seleccion) => setState(() => _vista = seleccion.first),
+      selected: {filtros.vista},
+      onSelectionChanged: (seleccion) => ref.read(filtrosCalendarioProvider.notifier).cambiarVista(seleccion.first),
     );
   }
 
@@ -690,11 +650,16 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
             ),
           ),
       ],
-      onChanged: (id) => setState(() => _idPerroFiltro = id),
+      onChanged: (id) => ref.read(filtrosCalendarioProvider.notifier).filtrarPerro(id),
     );
   }
 
-  Widget _calendario(List<PerroModel> perros, String? filtro, {required double altoCelda}) {
+  Widget _calendario(
+    List<PerroModel> perros,
+    String? filtro,
+    FiltrosCalendario filtros, {
+    required double altoCelda,
+  }) {
     final textTheme = Theme.of(context).textTheme;
     return Card(
       child: Padding(
@@ -702,17 +667,17 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
         child: TableCalendar<void>(
       rowHeight: altoCelda,
       locale: 'es_ES',
-      firstDay: _primerDia,
-      lastDay: _ultimoDia,
-      focusedDay: _diaEnfocado,
-      currentDay: _hoy,
+      firstDay: filtros.primerDia,
+      lastDay: filtros.ultimoDia,
+      focusedDay: filtros.diaEnfocado,
+      currentDay: filtros.hoy,
       calendarFormat: CalendarFormat.month,
       startingDayOfWeek: StartingDayOfWeek.monday,
       availableCalendarFormats: const {
         CalendarFormat.month: 'Mes',
       },
       availableGestures: AvailableGestures.horizontalSwipe,
-      selectedDayPredicate: (dia) => isSameDay(dia, _diaSeleccionado),
+      selectedDayPredicate: (dia) => isSameDay(dia, filtros.diaSeleccionado),
       headerStyle: HeaderStyle(
         formatButtonVisible: false,
         titleCentered: true,
@@ -768,7 +733,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
           final claves = CalendarioGeneralController.marcadoresDelDia(
             perros,
             date,
-            hoy: _hoy,
+            hoy: filtros.hoy,
             idPerro: filtro,
           );
           if (claves.isEmpty) return null;
@@ -791,23 +756,20 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
         },
       ),
       onDaySelected: (seleccionado, enfocado) {
-        setState(() {
-          _diaSeleccionado = _soloFecha(seleccionado);
-          _diaEnfocado = enfocado;
-        });
+        ref.read(filtrosCalendarioProvider.notifier).seleccionarDia(seleccionado, enfocado: enfocado);
       },
-      onPageChanged: (enfocado) => _diaEnfocado = enfocado,
+      onPageChanged: (enfocado) => ref.read(filtrosCalendarioProvider.notifier).enfocar(enfocado),
       onFormatChanged: (_) {},
         ),
       ),
     );
   }
 
-  Widget _leyenda(List<PerroModel> perros, String? filtro) {
+  Widget _leyenda(List<PerroModel> perros, String? filtro, FiltrosCalendario filtros) {
     final claves = CalendarioGeneralController.clavesEnMes(
       perros,
-      _diaEnfocado,
-      hoy: _hoy,
+      filtros.diaEnfocado,
+      hoy: filtros.hoy,
       idPerro: filtro,
     );
     if (claves.isEmpty) return const SizedBox.shrink();
@@ -862,20 +824,14 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     );
   }
 
-  Widget _resumen(List<PerroModel> perros, String? filtro) {
+  Widget _resumen(ResumenDia resumen, FiltrosCalendario filtros, List<ItemResumen> seguimientos) {
     final textTheme = Theme.of(context).textTheme;
-    final resumen = CalendarioGeneralController.construirResumen(
-      perros,
-      _diaSeleccionado,
-      hoy: _hoy,
-      idPerro: filtro,
-    );
-    final dia = _soloFecha(_diaSeleccionado);
+    final dia = _soloFecha(filtros.diaSeleccionado);
     final fecha = DateFormat("EEEE d 'de' MMMM", 'es_ES').format(dia);
     final fechaLegible = fecha.isEmpty
         ? fecha
         : '${fecha[0].toUpperCase()}${fecha.substring(1)}';
-    final comparacion = dia.compareTo(_hoy);
+    final comparacion = dia.compareTo(filtros.hoy);
     final secciones = <Widget>[];
 
     if (comparacion == 0) {
@@ -935,7 +891,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _seguimientosActivos(perros, filtro),
+        _seguimientosActivos(seguimientos),
         Text('Resumen del día', style: textTheme.titleLarge?.copyWith(color: context.paleta.lienzo)),
         const SizedBox(height: 4),
         Text(
@@ -1000,12 +956,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
     );
   }
 
-  Widget _seguimientosActivos(List<PerroModel> perros, String? filtro) {
-    final items = CalendarioGeneralController.seguimientosActivos(
-      perros,
-      hoy: _hoy,
-      idPerro: filtro,
-    );
+  Widget _seguimientosActivos(List<ItemResumen> items) {
     return _seccion('Seguimientos activos', Icons.visibility_outlined, items);
   }
 
@@ -1082,7 +1033,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
               final dosis = permitirMarcar && idTratamiento != null
                   ? DosisAvisada(
                       idTratamiento: idTratamiento,
-                      dia: TratamientoController.fechaIso(_diaSeleccionado),
+                      dia: TratamientoController.fechaIso(ref.read(filtrosCalendarioProvider).diaSeleccionado),
                     )
                   : null;
               Navigator.push(

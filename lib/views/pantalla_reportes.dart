@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../controllers/reportes_controller.dart';
-import '../providers/perros_providers.dart';
+import '../providers/calendario_providers.dart';
+import '../providers/reportes_providers.dart';
 import '../theme/app_colors.dart';
 import '../util/plataforma.dart';
 import '../utils/fundacion_refugio.dart';
@@ -24,26 +25,14 @@ const _nombresMes = [
   'Diciembre',
 ];
 
-class PantallaReportes extends ConsumerStatefulWidget {
+class PantallaReportes extends ConsumerWidget {
   const PantallaReportes({super.key});
 
   @override
-  ConsumerState<PantallaReportes> createState() => _PantallaReportesState();
-}
-
-class _PantallaReportesState extends ConsumerState<PantallaReportes> {
-  late DateTime _mes;
-
-  @override
-  void initState() {
-    super.initState();
-    final hoy = DateTime.now();
-    _mes = DateTime(hoy.year, hoy.month);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final asyncPerros = ref.watch(perrosProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncReporte = ref.watch(reporteProvider);
+    final mes = ref.watch(mesReporteProvider);
+    final hoy = ref.watch(relojProvider)();
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -56,14 +45,13 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
         ),
       ),
       body: () {
-          if (asyncPerros.hasError) {
+          if (asyncReporte.hasError) {
             return const Center(child: Text('No se pudieron cargar los reportes.'));
           }
-          if (!asyncPerros.hasValue) {
+          if (!asyncReporte.hasValue) {
             return const Center(child: CircularProgressIndicator());
           }
-          final hoy = DateTime.now();
-          final reporte = ReportesController.calcular(asyncPerros.value!, hoy: hoy, mes: _mes);
+          final reporte = asyncReporte.value!;
           final abajo = esAndroid
               ? 32 + MediaQuery.of(context).padding.bottom + 24
               : 32.0;
@@ -136,7 +124,7 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _ayuda(context, 'Movimientos con fecha en el mes elegido.'),
-                    _selectorMes(context),
+                    _selectorMes(context, ref, mes),
                     const SizedBox(height: 16),
                     _fila(context, Icons.login, 'Ingresos', reporte.mes.ingresos),
                     _fila(context, Icons.favorite, 'Adopciones', reporte.mes.adopciones),
@@ -152,7 +140,7 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
     );
   }
 
-  void _verAnio(PuntoPoblacion punto) {
+  void _verAnio(BuildContext context, PuntoPoblacion punto) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -221,7 +209,7 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.paleta.texto),
           )
         else
-          GraficoPoblacion(puntos: serie.puntos, alVer: _verAnio),
+          GraficoPoblacion(puntos: serie.puntos, alVer: (punto) => _verAnio(context, punto)),
         if (sinFecha > 0) ...[
           const SizedBox(height: 8),
           Text(
@@ -259,30 +247,30 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
     );
   }
 
-  Widget _selectorMes(BuildContext context) {
-    final anioActual = DateTime.now().year;
+  Widget _selectorMes(BuildContext context, WidgetRef ref, DateTime mes) {
+    final anioActual = ref.read(relojProvider)().year;
     final anios = [for (var anio = anioActual; anio >= fundacionRefugio.year; anio--) anio];
     return Row(
       children: [
         Expanded(
           child: DropdownButtonFormField<int>(
-            initialValue: _mes.month,
+            initialValue: mes.month,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Mes'),
             items: [
-              for (var mes = 1; mes <= 12; mes++)
-                DropdownMenuItem(value: mes, child: Text(_nombresMes[mes - 1])),
+              for (var numero = 1; numero <= 12; numero++)
+                DropdownMenuItem(value: numero, child: Text(_nombresMes[numero - 1])),
             ],
-            onChanged: (mes) {
-              if (mes == null) return;
-              setState(() => _mes = DateTime(_mes.year, mes));
+            onChanged: (elegido) {
+              if (elegido == null) return;
+              ref.read(mesReporteProvider.notifier).fijarMes(elegido);
             },
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: DropdownButtonFormField<int>(
-            initialValue: _mes.year,
+            initialValue: mes.year,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Año'),
             items: [
@@ -290,7 +278,7 @@ class _PantallaReportesState extends ConsumerState<PantallaReportes> {
             ],
             onChanged: (anio) {
               if (anio == null) return;
-              setState(() => _mes = DateTime(anio, _mes.month));
+              ref.read(mesReporteProvider.notifier).fijarAnio(anio);
             },
           ),
         ),
