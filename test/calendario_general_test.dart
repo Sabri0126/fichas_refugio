@@ -7,6 +7,7 @@ import 'package:fichas_refugio/models/seguimiento_model.dart';
 import 'package:fichas_refugio/models/tratamiento_model.dart';
 import 'package:fichas_refugio/theme/app_colors.dart';
 import 'package:fichas_refugio/theme/category_colors.dart';
+import 'package:fichas_refugio/views/pantalla_calendario_general.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final hoy = DateTime(2026, 6, 15);
@@ -718,5 +719,11 @@ void main() {
       CalendarioGeneralController.seguimientosActivos(lista, hoy: hoy, idPerro: 'p2'),
       isEmpty,
     );
+  });
+
+  test('deshacer dosis solo si el día sigue marcado', () {
+    expect(puedeDeshacerDosis(['2026-11-03'], '2026-11-03'), isTrue);
+    expect(puedeDeshacerDosis(['2026-11-02'], '2026-11-03'), isFalse);
+    expect(puedeDeshacerDosis(const [], '2026-11-03'), isFalse);
   });
 }

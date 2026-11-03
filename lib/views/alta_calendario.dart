@@ -5,6 +5,8 @@ import '../controllers/recordatorio_controller.dart';
 import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
+import '../models/recordatorio_model.dart';
+import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import 'dialogo_recordatorio.dart';
 import 'dialogo_seguimiento.dart';
@@ -21,27 +23,52 @@ Future<void> abrirAltaRegistroCalendario(
 }) async {
   final perro = await _elegirPerro(context, activos, idPreseleccionado);
   if (perro == null || !context.mounted) return;
+  await abrirAltaRegistroParaPerro(
+    context,
+    perro: perro,
+    fecha: fecha,
+    tratamientos: tratamientos,
+    perros: perros,
+  );
+}
+
+/// Alta de tratamiento para un perro ya elegido (ficha o calendario).
+/// `null` si canceló, `true` si guardó, `false` si falló.
+Future<bool?> abrirAltaRegistroParaPerro(
+  BuildContext context, {
+  required PerroModel perro,
+  required DateTime fecha,
+  required TratamientoController tratamientos,
+  required PerroController perros,
+  Future<void> Function(TratamientoModel modelo)? alGuardar,
+}) async {
   final categoria = await showDialog<String>(
     context: context,
     builder: (ctx) => _DialogoCategoria(
       alElegir: (elegida) => Navigator.pop(ctx, elegida),
     ),
   );
-  if (categoria == null || !context.mounted) return;
+  if (categoria == null || !context.mounted) return null;
   final modelo = await mostrarDialogoTratamiento(
     context,
     controller: tratamientos,
     categoria: categoria,
     fechaInicial: fecha,
   );
-  if (modelo == null || !context.mounted) return;
+  if (modelo == null || !context.mounted) return null;
   try {
-    await perros.agregarTratamiento(perro.id, modelo);
+    if (alGuardar != null) {
+      await alGuardar(modelo);
+    } else {
+      await perros.agregarTratamiento(perro.id, modelo);
+    }
+    return true;
   } catch (_) {
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No se pudo guardar el registro')),
     );
+    return false;
   }
 }
 
@@ -56,19 +83,44 @@ Future<void> abrirAltaRecordatorioCalendario(
 }) async {
   final perro = await _elegirPerro(context, activos, idPreseleccionado);
   if (perro == null || !context.mounted) return;
+  await abrirAltaRecordatorioParaPerro(
+    context,
+    perro: perro,
+    fecha: fecha,
+    recordatorios: recordatorios,
+    perros: perros,
+  );
+}
+
+/// Alta de recordatorio para un perro ya elegido (ficha o calendario).
+/// `null` si canceló, `true` si guardó, `false` si falló.
+Future<bool?> abrirAltaRecordatorioParaPerro(
+  BuildContext context, {
+  required PerroModel perro,
+  required DateTime fecha,
+  required RecordatorioController recordatorios,
+  required PerroController perros,
+  Future<void> Function(RecordatorioModel modelo)? alGuardar,
+}) async {
   final modelo = await mostrarDialogoRecordatorio(
     context,
     controller: recordatorios,
     fechaInicial: _fechaRecordatorio(fecha),
   );
-  if (modelo == null || !context.mounted) return;
+  if (modelo == null || !context.mounted) return null;
   try {
-    await perros.agregarRecordatorio(perro.id, modelo);
+    if (alGuardar != null) {
+      await alGuardar(modelo);
+    } else {
+      await perros.agregarRecordatorio(perro.id, modelo);
+    }
+    return true;
   } catch (_) {
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No se pudo guardar el recordatorio')),
     );
+    return false;
   }
 }
 

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:fichas_refugio/controllers/historial_notificaciones_controller.dart';
+import 'package:fichas_refugio/models/notificacion_registro_model.dart';
 import 'package:fichas_refugio/providers/auth_providers.dart';
 import 'package:fichas_refugio/providers/firestore_providers.dart';
 import 'package:fichas_refugio/providers/notificaciones_providers.dart';
@@ -54,6 +56,53 @@ void main() {
     final titulos = container.read(notificacionesProvider).value!.map((entrada) => entrada.titulo).toSet();
     expect(titulos, containsAll(['Vieja', 'Nueva']));
     expect(container.read(notificacionesNoLeidasProvider), 1);
+  });
+
+  test('restaurar saca el id de notif_eliminadas', () async {
+    SharedPreferences.setMockInitialValues({'notif_eliminadas': '["n1","n2"]'});
+    final historial = HistorialNotificacionesController(firestore: FakeFirebaseFirestore());
+    await historial.restaurar('n1');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('notif_eliminadas'), '["n2"]');
+  });
+
+  test('agruparPorDia separa hoy, ayer y antes en medianoche', () {
+    final ahora = DateTime(2026, 3, 10, 15, 30);
+    final hoy = NotificacionRegistroModel(
+      id: 'hoy',
+      titulo: 'Hoy',
+      cuerpo: '',
+      categoria: 'diario',
+      tipo: 'dosis',
+      fecha: DateTime(2026, 3, 10, 0, 0),
+      creada: DateTime(2026, 3, 10, 0, 0),
+      leida: true,
+    );
+    final ayer = NotificacionRegistroModel(
+      id: 'ayer',
+      titulo: 'Ayer',
+      cuerpo: '',
+      categoria: 'diario',
+      tipo: 'dosis',
+      fecha: DateTime(2026, 3, 9, 23, 59),
+      creada: DateTime(2026, 3, 9, 23, 59),
+      leida: true,
+    );
+    final antes = NotificacionRegistroModel(
+      id: 'antes',
+      titulo: 'Antes',
+      cuerpo: '',
+      categoria: 'diario',
+      tipo: 'dosis',
+      fecha: DateTime(2026, 3, 8, 12),
+      creada: DateTime(2026, 3, 8, 12),
+      leida: true,
+    );
+    final grupos = agruparPorDia([antes, hoy, ayer], ahora);
+    expect(grupos.map((g) => g.$1).toList(), ['Hoy', 'Ayer', 'Antes']);
+    expect(grupos[0].$2.single.id, 'hoy');
+    expect(grupos[1].$2.single.id, 'ayer');
+    expect(grupos[2].$2.single.id, 'antes');
   });
 
   test('al pasar a visitante la lista se vacía', () async {

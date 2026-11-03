@@ -67,6 +67,16 @@ class HistorialNotificacionesController {
     _avisar();
   }
 
+  /// Saca [id] de `notif_eliminadas` en este teléfono. No toca Firebase.
+  Future<void> restaurar(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await _migrar(prefs);
+    final ids = _leerIds(prefs);
+    if (!ids.remove(id)) return;
+    await prefs.setString(_claveEliminadas, jsonEncode(ids));
+    _avisar();
+  }
+
   Future<void> borrarTodo() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrar(prefs);
@@ -224,4 +234,32 @@ class HistorialNotificacionesController {
   }
 
   void _avisar() => refrescar();
+}
+
+/// Grupos "Hoy", "Ayer" y "Antes" según [ahora] (medianoche inclusive).
+List<(String etiqueta, List<NotificacionRegistroModel> items)> agruparPorDia(
+  List<NotificacionRegistroModel> items,
+  DateTime ahora,
+) {
+  final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+  final ayer = hoy.subtract(const Duration(days: 1));
+  final grupos = <String, List<NotificacionRegistroModel>>{
+    'Hoy': <NotificacionRegistroModel>[],
+    'Ayer': <NotificacionRegistroModel>[],
+    'Antes': <NotificacionRegistroModel>[],
+  };
+  for (final item in items) {
+    final dia = DateTime(item.fecha.year, item.fecha.month, item.fecha.day);
+    if (dia == hoy) {
+      grupos['Hoy']!.add(item);
+    } else if (dia == ayer) {
+      grupos['Ayer']!.add(item);
+    } else {
+      grupos['Antes']!.add(item);
+    }
+  }
+  return [
+    for (final entrada in grupos.entries)
+      if (entrada.value.isNotEmpty) (entrada.key, entrada.value),
+  ];
 }

@@ -68,22 +68,58 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final modo = ref.watch(themeModeProvider);
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'Fichas Refugio',
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('es')],
-      locale: const Locale('es'),
-      theme: buildAppTheme(),
-      darkTheme: buildAppTheme(oscuro: true),
-      themeMode: modo,
-      home: const _PuertaAuth(),
+    return _AlRetomar(
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        title: 'Fichas Refugio',
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('es')],
+        locale: const Locale('es'),
+        theme: buildAppTheme(),
+        darkTheme: buildAppTheme(oscuro: true),
+        themeMode: modo,
+        home: const _PuertaAuth(),
+      ),
     );
   }
+}
+
+/// Al volver de otra app (compartir, historial) pide un frame nuevo.
+/// Si no, la ventana puede quedarse negra hasta cerrar la app.
+class _AlRetomar extends StatefulWidget {
+  final Widget child;
+
+  const _AlRetomar({required this.child});
+
+  @override
+  State<_AlRetomar> createState() => _AlRetomarState();
+}
+
+class _AlRetomarState extends State<_AlRetomar> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Puerta de la app: cargando, usuario o login.

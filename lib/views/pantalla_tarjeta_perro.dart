@@ -141,7 +141,9 @@ class TarjetaPerro extends StatelessWidget {
   const TarjetaPerro({super.key, required this.perro});
 
   /// Edad como en la ficha: «1 año aprox.» cuando la edad es estimada.
-  static String edadVisible(PerroModel perro) {
+  /// Null si no está cargada: la tarjeta la omite.
+  static String? edadVisible(PerroModel perro) {
+    if (PerroController.edadSinCargar(perro)) return null;
     final texto = PerroController.formatearEdadTexto(perro);
     final partes = texto.split(':');
     final valor = partes.length > 1 ? partes.sublist(1).join(':').trim() : texto;
@@ -283,7 +285,7 @@ class TarjetaPerro extends StatelessWidget {
                             runSpacing: 6,
                             children: [
                               _chip(hembra ? Icons.female : Icons.male, hembra ? 'Hembra' : 'Macho'),
-                              _chip(null, edadVisible(perro)),
+                              if (edadVisible(perro) case final edad?) _chip(null, edad),
                               _chip(null, PerroController.formatearCastracion(perro)),
                               ?lugar,
                             ],

@@ -11,10 +11,11 @@ PerroModel perro({
   bool edadIndeterminada = false,
   int? edadAnioBase,
   String estado = 'activo',
+  String nombre = 'Canelo',
 }) {
   return PerroModel(
     id: 'p',
-    nombre: 'Canelo',
+    nombre: nombre,
     estado: estado,
     edad: edad,
     meses: meses,
@@ -175,5 +176,64 @@ void main() {
     expect(data['meses'], 5);
     expect(data['edad'], 0);
     expect((data['ultima_actualizacion_edad'] as Timestamp).toDate(), marca);
+  });
+
+  test('0 años y 0 meses es edad sin cargar', () {
+    final sin = perro(edad: 0, meses: 0);
+    expect(PerroController.edadSinCargar(sin), isTrue);
+    expect(PerroController.formatearEdadTexto(sin), 'Edad sin cargar');
+    expect(PerroController.formatearEdadTexto(perro(edad: 0, meses: 4)), 'Edad: 4 meses');
+  });
+
+  test('validarEdad y validarEdadCargada', () {
+    final c = PerroController();
+    expect(c.validarEdad('30'), isNotNull);
+    expect(c.validarEdad('3'), isNull);
+    expect(c.validarEdadCargada('', '', false), isNotNull);
+    expect(c.validarEdadCargada('0', '0', false), isNotNull);
+    expect(c.validarEdadCargada('0', '0', true), isNull);
+    expect(c.validarEdadCargada('0', '3', false), isNull);
+  });
+
+  test('mesesQueSumariaLaFuncion avisa con ingreso viejo', () {
+    final ingreso = DateTime(2026, 3, 1);
+    final ahora = DateTime(2026, 11, 1);
+    expect(
+      PerroController.mesesQueSumariaLaFuncion(
+        edadNueva: 0,
+        mesesNuevos: 0,
+        edadIndeterminada: false,
+        yaContaba: true,
+        edadAnterior: 0,
+        mesesAnteriores: 0,
+        ultimaActualizacionEdad: null,
+        fechaIngreso: ingreso,
+        ahora: ahora,
+      ),
+      8,
+    );
+    expect(
+      PerroController.mesesQueSumariaLaFuncion(
+        edadNueva: 1,
+        mesesNuevos: 0,
+        edadIndeterminada: false,
+        yaContaba: true,
+        edadAnterior: 0,
+        mesesAnteriores: 0,
+        ultimaActualizacionEdad: null,
+        fechaIngreso: ingreso,
+        ahora: ahora,
+      ),
+      0,
+    );
+  });
+
+  test('compararPorEdad deja sin cargar al final', () {
+    final lista = [
+      perro(edad: 0, meses: 0, nombre: 'Sin'),
+      perro(edad: 0, meses: 3, nombre: 'Cachorro'),
+      perro(edad: 2, meses: 0, nombre: 'Adulto'),
+    ]..sort(PerroController.compararPorEdad);
+    expect(lista.map((p) => p.nombre), ['Cachorro', 'Adulto', 'Sin']);
   });
 }

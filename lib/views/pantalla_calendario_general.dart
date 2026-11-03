@@ -16,11 +16,17 @@ import '../providers/perros_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/category_colors.dart';
 import '../utils/plataforma.dart';
+import '../utils/texto.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import 'alta_calendario.dart';
 import 'ficha_detalle_perro.dart';
+
+/// True si el día sigue marcado y se puede deshacer el toggle.
+bool puedeDeshacerDosis(List<String> registroDosis, String iso) {
+  return registroDosis.contains(iso);
+}
 
 class PantallaCalendarioGeneral extends ConsumerStatefulWidget {
   const PantallaCalendarioGeneral({super.key});
@@ -81,9 +87,61 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
         await tratamientos.toggleDosis(item.perro.id, tratamiento!, dia);
       },
     );
+    if (!mounted) return;
+    if (resultado == ResultadoGuardado.error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo marcar la dosis')),
+      );
+      return;
+    }
+    final iso = tratamientos.formatearFechaISO(dia);
+    final perroId = item.perro.id;
+    final tratamientoId = id;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Dosis marcada'),
+        action: SnackBarAction(
+          label: 'Deshacer',
+          onPressed: () => _deshacerDosis(perroId, tratamientoId, dia, iso),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deshacerDosis(
+    String perroId,
+    String tratamientoId,
+    DateTime dia,
+    String iso,
+  ) async {
+    final lista = ref.read(perrosProvider).asData?.value;
+    if (lista == null) return;
+    PerroModel? perro;
+    for (final actual in lista) {
+      if (actual.id == perroId) {
+        perro = actual;
+        break;
+      }
+    }
+    if (perro == null) return;
+    TratamientoModel? tratamiento;
+    for (final actual in perro.tratamientos) {
+      if (actual.id == tratamientoId) {
+        tratamiento = actual;
+        break;
+      }
+    }
+    if (tratamiento == null) return;
+    if (!puedeDeshacerDosis(tratamiento.registroDosis, iso)) return;
+    final tratamientos = ref.read(tratamientoControllerProvider);
+    final resultado = await ref.read(guardadoProvider(claveGuardadoCalendario).notifier).ejecutar(
+      () async {
+        await tratamientos.toggleDosis(perroId, tratamiento!, dia);
+      },
+    );
     if (!mounted || resultado != ResultadoGuardado.error) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No se pudo marcar la dosis')),
+      const SnackBar(content: Text('No se pudo deshacer la dosis')),
     );
   }
 
@@ -279,7 +337,7 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
   };
 
   Widget _panelLista(List<EntradaListaGeneral> todas, FiltrosCalendario filtros, List<ItemResumen> seguimientos) {
-    final consulta = filtros.busqueda.trim().toLowerCase();
+    final consulta = normalizarBusqueda(filtros.busqueda.trim());
     final filtradas = [
       for (final entrada in todas)
         if (filtros.tipo == null || entrada.categoria == filtros.tipo)
@@ -367,9 +425,9 @@ class _PantallaCalendarioGeneralState extends ConsumerState<PantallaCalendarioGe
   }
 
   bool _coincideLista(EntradaListaGeneral entrada, String consulta) {
-    return entrada.perro.nombre.toLowerCase().contains(consulta) ||
-        entrada.titulo.toLowerCase().contains(consulta) ||
-        entrada.detalle.toLowerCase().contains(consulta);
+    return normalizarBusqueda(entrada.perro.nombre).contains(consulta) ||
+        normalizarBusqueda(entrada.titulo).contains(consulta) ||
+        normalizarBusqueda(entrada.detalle).contains(consulta);
   }
 
   List<(String, List<EntradaListaGeneral>)> _agruparLista(List<EntradaListaGeneral> entradas) {

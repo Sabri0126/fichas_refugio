@@ -1,17 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/auth_providers.dart';
+import '../services/mensaje_login.dart';
 import '../theme/app_colors.dart';
 import 'pantalla_menu.dart';
 
-class PantallaLogin extends StatefulWidget {
+class PantallaLogin extends ConsumerStatefulWidget {
   const PantallaLogin({super.key});
 
   @override
-  State<PantallaLogin> createState() => _PantallaLoginState();
+  ConsumerState<PantallaLogin> createState() => _PantallaLoginState();
 }
 
-class _PantallaLoginState extends State<PantallaLogin> {
+class _PantallaLoginState extends ConsumerState<PantallaLogin> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _cargando = false;
@@ -26,7 +29,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
 
   Future<void> _ingresar() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       _mostrarError('Completá todos los campos.');
@@ -36,7 +39,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
     setState(() => _cargando = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await ref.read(firebaseAuthProvider).signInWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -46,27 +49,11 @@ class _PantallaLoginState extends State<PantallaLogin> {
         MaterialPageRoute(builder: (context) => const PantallaMenu()),
       );
     } on FirebaseAuthException catch (e) {
-      _mostrarError(_mensajeDeError(e.code));
+      _mostrarError(mensajeErrorLogin(e.code));
     } catch (_) {
       _mostrarError('Ocurrió un error inesperado.');
     } finally {
       if (mounted) setState(() => _cargando = false);
-    }
-  }
-
-  String _mensajeDeError(String code) {
-    switch (code) {
-      case 'user-not-found':
-        return 'No existe una cuenta con ese email.';
-      case 'wrong-password':
-      case 'invalid-credential':
-        return 'Contraseña incorrecta.';
-      case 'invalid-email':
-        return 'El email no es válido.';
-      case 'too-many-requests':
-        return 'Demasiados intentos. Intentá más tarde.';
-      default:
-        return 'Error al iniciar sesión.';
     }
   }
 
@@ -166,6 +153,14 @@ class _PantallaLoginState extends State<PantallaLogin> {
                                       ),
                                     )
                                   : const Text('Ingresar'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            '¿Olvidaste la contraseña? Pedísela a la administradora.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textoSecundario,
                             ),
                           ),
                         ],

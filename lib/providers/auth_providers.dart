@@ -1,9 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
 
 /// Auth de la app. Los tests lo reemplazan por un mock, sin Firebase real.
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
+});
+
+/// Biometría / Windows Hello. Los tests lo reemplazan por un falso.
+final localAuthProvider = Provider<LocalAuthentication>((ref) {
+  return LocalAuthentication();
 });
 
 /// Usuario de Firebase. Sin reintento: un error se muestra en el login,

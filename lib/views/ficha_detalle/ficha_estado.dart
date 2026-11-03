@@ -13,13 +13,17 @@ mixin _FichaEstado on ConsumerState<FichaDetallePerro> {
   bool _guardandoPeso = false;
   final PageController _controladorCarrusel = PageController();
   bool _subiendoFoto = false;
+  bool _generandoPdf = false;
   bool _modoReordenar = false;
   int? _egresoEnCurso;
   int _paginaActual = 0;
-  double _escalaTexto = 1.3;
   List<Map<String, dynamic>> _fotosReordenar = [];
   bool _hojaDosisMostrada = false;
   final ValueNotifier<PerroModel?> _perroVisible = ValueNotifier<PerroModel?>(null);
+  final GlobalKey _claveSalud = GlobalKey();
+  final GlobalKey _claveEstudios = GlobalKey();
+  final GlobalKey _claveGaleria = GlobalKey();
+  final GlobalKey _claveHistoria = GlobalKey();
 
   static const inicialesDia = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
   static const nombresDia = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];

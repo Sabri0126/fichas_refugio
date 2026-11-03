@@ -31,6 +31,7 @@ abstract final class ExportarFicha {
     bool incluirEstudios = true,
     List<EstudioModel> estudiosNuevos = const [],
     Future<Uint8List?> Function(String ruta)? bajarRuta,
+    void Function()? alGenerar,
   }) async {
     final archivo = await _archivo(
       perro,
@@ -39,6 +40,7 @@ abstract final class ExportarFicha {
       estudiosNuevos: estudiosNuevos,
       bajarRuta: bajarRuta,
     );
+    alGenerar?.call();
     await Share.shareXFiles(
       [XFile(archivo.path, mimeType: 'application/pdf')],
       subject: 'Ficha de ${perro.nombre}',
@@ -55,7 +57,16 @@ abstract final class ExportarFicha {
     final nombre = perro.nombre.trim().isEmpty ? 'Sin nombre' : perro.nombre.trim();
     final sexo = perro.sexo == 'hembra' ? 'Hembra' : 'Macho';
     final castrado = _castracion(perro);
-    return '$nombre · $sexo · $edad · $castrado. Refugio Milagros de Amor.';
+    final partes = <String>[nombre, sexo];
+    if (_edadParaExportar(edad) != null) partes.add(edad);
+    partes.add(castrado);
+    return '${partes.join(' · ')}. Refugio Milagros de Amor.';
+  }
+
+  static String? _edadParaExportar(String edad) {
+    final limpia = edad.trim();
+    if (limpia.isEmpty || limpia == 'Edad sin cargar') return null;
+    return limpia;
   }
 
   static pw.Font? _regular;
@@ -188,7 +199,7 @@ abstract final class ExportarFicha {
     final sexo = perro.sexo == 'hembra' ? 'Hembra' : 'Macho';
     final chips = <String>[
       sexo,
-      edad,
+      if (_edadParaExportar(edad) != null) edad,
       _castracion(perro),
       perro.enCasa ? 'En casa' : 'En el refugio',
       'Ingreso: ${_fecha(perro.fechaIngreso)}',

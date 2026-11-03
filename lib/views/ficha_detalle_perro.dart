@@ -28,6 +28,7 @@ import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/calendario_providers.dart';
+import '../providers/escala_ficha_provider.dart';
 import '../providers/estudios_providers.dart';
 import '../providers/firestore_providers.dart';
 import '../providers/guardado_provider.dart';
@@ -42,6 +43,8 @@ import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import '../widgets/grafico_peso.dart';
+import '../widgets/indice_secciones.dart';
+import 'alta_calendario.dart';
 import 'dialogo_peso.dart';
 import 'dialogo_tratamiento.dart';
 import 'formulario_perro.dart';
@@ -84,6 +87,7 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> with _Fic
       ref.watch(guardadoProvider(clave));
     }
     final bool esInvitado = ref.watch(sessionProvider).esInvitado;
+    final preferenciaEscala = ref.watch(escalaFichaProvider);
     final lectura = ref.watch(perroProvider(widget.idDocumento)).asData?.value;
     if (lectura == null || lectura.perro == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -99,44 +103,64 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> with _Fic
           appBar: AppBar(
             title: Text('Ficha de ${perro.nombre}', overflow: TextOverflow.ellipsis),
             actions: [
-              if (_subiendoFoto)
+              if (_subiendoFoto || _generandoPdf)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.4, color: Theme.of(context).colorScheme.onPrimary),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                      ),
+                      if (_generandoPdf) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          'Generando PDF…',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 )
               else ...[
                 if (!esInvitado) ...[
-                  if (_modoReordenar)
+                  if (_modoReordenar) ...[
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Cancelar',
+                      onPressed: _cancelarReordenar,
+                    ),
                     IconButton(
                       icon: const Icon(Icons.check),
                       tooltip: 'Guardar orden de fotos',
-                      onPressed: () async {
-                        if (_modoReordenar) {
-                          await _confirmarOrdenFotos();
-                        } else {
-                          _activarModoReordenar(perro);
-                        }
-                      },
+                      onPressed: _confirmarOrdenFotos,
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.add_a_photo),
-                    tooltip: 'Agregar foto a la galería',
-                    onPressed: _agregarFotoAGaleria,
-                  ),
+                  ] else
+                    IconButton(
+                      icon: const Icon(Icons.add_a_photo),
+                      tooltip: 'Agregar foto a la galería',
+                      onPressed: _agregarFotoAGaleria,
+                    ),
                 ],
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Más opciones',
                   onSelected: (accion) async {
+                    final escala = ref.read(escalaFichaProvider.notifier);
                     switch (accion) {
                       case 'achicar':
-                        setState(() => _escalaTexto -= 0.15);
+                        await escala.achicar();
                       case 'agrandar':
-                        setState(() => _escalaTexto += 0.15);
+                        await escala.agrandar();
+                      case 'normal':
+                        await escala.normal();
                       case 'compartir':
                         await Future<void>.delayed(Duration.zero);
                         if (!mounted) return;
@@ -154,16 +178,23 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> with _Fic
                   itemBuilder: (context) => [
                     PopupMenuItem<String>(
                       value: 'achicar',
-                      enabled: _escalaTexto > 1.0,
+                      enabled: preferenciaEscala > escalaFichaMin,
                       child: const _OpcionMenu(icono: Icons.zoom_out, texto: 'Achicar texto'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'agrandar',
-                      child: _OpcionMenu(icono: Icons.zoom_in, texto: 'Agrandar texto'),
+                      enabled: preferenciaEscala < escalaFichaMax,
+                      child: const _OpcionMenu(icono: Icons.zoom_in, texto: 'Agrandar texto'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
+                      value: 'normal',
+                      enabled: preferenciaEscala != escalaFichaMin,
+                      child: const _OpcionMenu(icono: Icons.text_fields, texto: 'Tamaño normal'),
+                    ),
+                    PopupMenuItem<String>(
                       value: 'compartir',
-                      child: _OpcionMenu(icono: Icons.picture_as_pdf_outlined, texto: 'Compartir ficha (PDF)'),
+                      enabled: !_generandoPdf,
+                      child: const _OpcionMenu(icono: Icons.picture_as_pdf_outlined, texto: 'Compartir ficha (PDF)'),
                     ),
                     const PopupMenuItem<String>(
                       value: 'imagen',
@@ -178,6 +209,19 @@ class _FichaDetallePerroState extends ConsumerState<FichaDetallePerro> with _Fic
                 ),
               ],
             ],
+            bottom: esInvitado
+                ? const PreferredSize(
+                    preferredSize: Size.fromHeight(28),
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Modo visitante · solo lectura',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )
+                : null,
           ),
           body: SafeArea(
             child: LayoutBuilder(

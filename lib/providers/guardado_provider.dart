@@ -12,6 +12,7 @@ const claveGuardadoSuspender = 'ficha-suspender';
 const claveGuardadoDosis = 'ficha-dosis';
 const claveGuardadoReanudar = 'ficha-reanudar';
 const claveGuardadoEstudio = 'ficha-estudio';
+const claveGuardadoAltaFicha = 'ficha-alta';
 const claveGuardadoCalendario = 'calendario-dosis';
 
 const clavesGuardadoFicha = <String>[
@@ -21,6 +22,7 @@ const clavesGuardadoFicha = <String>[
   claveGuardadoDosis,
   claveGuardadoReanudar,
   claveGuardadoEstudio,
+  claveGuardadoAltaFicha,
 ];
 
 /// Un guardado a la vez, con tope de espera.

@@ -67,7 +67,13 @@ export const enviarNotificaciones = onSchedule(
     const alarmas = agruparIngresos(perros.flatMap((perro) => calcularAlarmas(perro, desde, ahora)));
 
     const nuevas: Alarma[] = [...cumpleUnAnio];
+    let marcadas = 0;
     for (const alarma of alarmas) {
+      if (alarma.idTratamiento && alarma.dia) {
+        const previa = await db.collection('notificaciones').doc(alarma.clave).get();
+        if (previa.exists) continue;
+        marcadas += await marcarDosis(db, alarma.idPerro, alarma.idTratamiento, alarma.dia);
+      }
       const creada = await crearNotificacion(db, alarma);
       if (creada) nuevas.push(alarma);
     }
@@ -78,12 +84,8 @@ export const enviarNotificaciones = onSchedule(
       silenciados: listaSilenciados(doc.get('silenciados')),
     }));
     let enviados = 0;
-    let marcadas = 0;
     const tokensMalos = new Set<string>();
     for (const alarma of nuevas) {
-      if (alarma.idTratamiento && alarma.dia) {
-        marcadas += await marcarDosis(db, alarma.idPerro, alarma.idTratamiento, alarma.dia);
-      }
       const resultado = await enviarAlarma(tokensParaAlarma(dispositivos, alarma), alarma);
       enviados += resultado.enviados;
       for (const token of resultado.invalidos) tokensMalos.add(token);

@@ -52,7 +52,7 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
     });
     if (item.tipo == 'clima' || item.idPerro == null) return;
     final dosis = item.idTratamiento != null && item.dia != null
-        ? DosisAvisada(idTratamiento: item.idTratamiento!, dia: item.dia!)
+        ? DosisAvisada(idTratamiento: item.idTratamiento!, dia: item.dia!, desdeNotificacion: true)
         : null;
     Navigator.push(
       context,
@@ -143,16 +143,52 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
         ],
       );
     }
+    final grupos = agruparPorDia(items, DateTime.now());
+    var indiceAnimacion = 0;
     return ListView(
       padding: _paddingLista(context),
       children: [
-        for (var index = 0; index < items.length; index++) ...[
-          _fila(items[index], index),
-          if (index != items.length - 1) const SizedBox(height: 12),
+        for (final grupo in grupos) ...[
+          Padding(
+            padding: EdgeInsets.only(bottom: 8, top: indiceAnimacion == 0 ? 0 : 8),
+            child: Text(
+              grupo.$1,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: context.paleta.textoSuave,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          for (var i = 0; i < grupo.$2.length; i++) ...[
+            _fila(grupo.$2[i], indiceAnimacion++),
+            if (i != grupo.$2.length - 1) const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 4),
         ],
         const SizedBox(height: 12),
         _creditoClima(),
       ],
+    );
+  }
+
+  Future<void> _borrarConDeshacer(NotificacionRegistroModel item) async {
+    setState(() => _ocultasAhora.add(item.id));
+    await _historial.eliminar(item.id);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Notificación borrada'),
+        action: SnackBarAction(
+          label: 'Deshacer',
+          onPressed: () async {
+            await _historial.restaurar(item.id);
+            if (!mounted) return;
+            setState(() => _ocultasAhora.remove(item.id));
+          },
+        ),
+      ),
     );
   }
 
@@ -173,10 +209,7 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
           ),
           child: const Icon(Icons.delete_outline, color: AppColors.error),
         ),
-        onDismissed: (_) {
-          setState(() => _ocultasAhora.add(item.id));
-          _historial.eliminar(item.id);
-        },
+        onDismissed: (_) => _borrarConDeshacer(item),
         child: Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -254,6 +287,12 @@ class _PantallaNotificacionesState extends ConsumerState<PantallaNotificaciones>
                         color: AppColors.terracota,
                         shape: BoxShape.circle,
                       ),
+                    ),
+                  if (esWindows)
+                    IconButton(
+                      tooltip: 'Borrar',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _borrarConDeshacer(item),
                     ),
                 ],
               ),

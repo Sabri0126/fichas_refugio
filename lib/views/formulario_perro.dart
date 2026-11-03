@@ -31,6 +31,7 @@ import '../theme/encabezado_seccion.dart';
 import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
+import '../widgets/indice_secciones.dart';
 import 'dialogo_peso.dart';
 import 'dialogo_recordatorio.dart';
 import 'dialogo_seguimiento.dart';
@@ -56,6 +57,17 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   SeguimientoController get _seguimientoController => ref.read(seguimientoControllerProvider);
   PesoController get _pesoController => ref.read(pesoControllerProvider);
   final _formKey = GlobalKey<FormState>();
+  final _claveDatos = GlobalKey();
+  final _claveFamiliares = GlobalKey();
+  final _claveHistoria = GlobalKey();
+  final _claveSalud = GlobalKey();
+  final _claveUbicacion = GlobalKey();
+  final _claveNombre = GlobalKey<FormFieldState<String>>();
+  final _claveEdad = GlobalKey<FormFieldState<String>>();
+  final _claveMeses = GlobalKey<FormFieldState<String>>();
+  final _focoNombre = FocusNode();
+  final _focoEdad = FocusNode();
+  final _focoMeses = FocusNode();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _edadController = TextEditingController();
   final TextEditingController _mesesController = TextEditingController();
@@ -190,6 +202,9 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
     _fechaEgresoController.dispose();
     _notaEgresoController.dispose();
     _fechaRegresoController.dispose();
+    _focoNombre.dispose();
+    _focoEdad.dispose();
+    _focoMeses.dispose();
     super.dispose();
   }
 
@@ -503,8 +518,52 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
     );
   }
 
+  String? _avisoMesesGolpe() {
+    if (_edadIndeterminada) return null;
+    final edad = int.tryParse(_edadController.text.trim()) ?? 0;
+    final meses = int.tryParse(_mesesController.text.trim()) ?? 0;
+    final n = PerroController.mesesQueSumariaLaFuncion(
+      edadNueva: edad,
+      mesesNuevos: meses,
+      edadIndeterminada: _edadIndeterminada,
+      yaContaba: widget.perroActual?.cuentaMeses,
+      edadAnterior: widget.perroActual?.edad,
+      mesesAnteriores: widget.perroActual?.meses,
+      ultimaActualizacionEdad: widget.perroActual?.ultimaActualizacionEdad,
+      fechaIngreso: _fechaIngreso ?? widget.perroActual?.fechaIngreso,
+    );
+    if (n <= 1) return null;
+    return 'La actualización automática sumaría $n meses de golpe. Revisá la edad o la fecha de ingreso.';
+  }
+
+  Future<void> _irAlPrimerInvalido() async {
+    final campos = <(GlobalKey<FormFieldState<String>>, FocusNode)>[
+      (_claveNombre, _focoNombre),
+      (_claveEdad, _focoEdad),
+      (_claveMeses, _focoMeses),
+    ];
+    for (final campo in campos) {
+      final estado = campo.$1.currentState;
+      if (estado == null || !estado.hasError) continue;
+      final contexto = campo.$1.currentContext;
+      if (contexto != null) {
+        await Scrollable.ensureVisible(
+          contexto,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+          alignment: 0.1,
+        );
+      }
+      campo.$2.requestFocus();
+      return;
+    }
+  }
+
   Future<void> _guardarDatos() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      await _irAlPrimerInvalido();
+      return;
+    }
     final notifier = ref.read(guardadoProvider(claveGuardadoFormulario).notifier);
     if (!notifier.reservar()) return;
 
@@ -763,12 +822,14 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
   }
 
   Widget _tarjetaFormulario({
+    Key? key,
     String? titulo,
     IconData? icono,
     Widget? accion,
     required List<Widget> children,
   }) {
     return Card(
+      key: key,
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1931,13 +1992,25 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  IndiceSecciones(
+                    secciones: [
+                      SeccionIndice(etiqueta: 'Datos básicos', clave: _claveDatos),
+                      SeccionIndice(etiqueta: 'Familiares', clave: _claveFamiliares),
+                      SeccionIndice(etiqueta: 'Historia', clave: _claveHistoria),
+                      SeccionIndice(etiqueta: 'Salud', clave: _claveSalud),
+                      SeccionIndice(etiqueta: 'Ubicación', clave: _claveUbicacion),
+                    ],
+                  ),
                   // --- SECCIÓN: Datos básicos (nombre, ingreso, sexo, edad, castración, estado) ---
                   _tarjetaFormulario(
+                    key: _claveDatos,
                     titulo: 'Datos básicos',
                     icono: Icons.pets,
                     children: [
                   TextFormField(
+                    key: _claveNombre,
                     controller: _nombreController,
+                    focusNode: _focoNombre,
                     decoration: const InputDecoration(
                       labelText: 'Nombre del perrito',
                       prefixIcon: Icon(Icons.pets),
@@ -1987,26 +2060,56 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
+                    key: _claveEdad,
                     controller: _edadController,
+                    focusNode: _focoEdad,
                     enabled: !_edadIndeterminada,
                     decoration: const InputDecoration(
-                      labelText: 'Edad estimada (años, opcional)',
+                      labelText: 'Edad estimada (años)',
                       prefixIcon: Icon(Icons.cake),
                     ),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    validator: (valor) {
+                      if (_edadIndeterminada) return null;
+                      return _perroController.validarEdad(valor) ??
+                          _perroController.validarEdadCargada(
+                            valor,
+                            _mesesController.text,
+                            _edadIndeterminada,
+                          );
+                    },
+                    onChanged: (_) => setState(() {}),
                   ),
                   if (!_edadIndeterminada &&
-                      _edadController.text.trim() == '0') ...[
+                      (_edadController.text.trim().isEmpty ||
+                          _edadController.text.trim() == '0')) ...[
                     const SizedBox(height: 16),
                     TextFormField(
+                      key: _claveMeses,
                       controller: _mesesController,
+                      focusNode: _focoMeses,
                       decoration: const InputDecoration(
-                        labelText: 'Meses (opcional)',
+                        labelText: 'Meses',
                         prefixIcon: Icon(Icons.calendar_view_month),
                       ),
                       keyboardType: TextInputType.number,
-                      inputFormatters: [LengthLimitingTextInputFormatter(2)],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
                       validator: _perroController.validarMeses,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                  if (_avisoMesesGolpe() case final aviso?) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      aviso,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.pausado),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -2157,6 +2260,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                   const SizedBox(height: 16),
                   // --- SECCIÓN: Familiares vinculados ---
                   _tarjetaFormulario(
+                    key: _claveFamiliares,
                     titulo: 'Familiares',
                     icono: Icons.people_outline,
                     accion: FilledButton.tonalIcon(
@@ -2201,6 +2305,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                   const SizedBox(height: 16),
                   // --- SECCIÓN: Historia / observaciones ---
                   _tarjetaFormulario(
+                    key: _claveHistoria,
                     children: [
                   Row(
                     children: [
@@ -2255,11 +2360,14 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Gestión de salud ---
                   const Divider(height: 32),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: EncabezadoSeccion(
-                      titulo: 'Gestión de Salud',
-                      icono: Icons.favorite_outline,
+                  KeyedSubtree(
+                    key: _claveSalud,
+                    child: const Align(
+                      alignment: Alignment.centerLeft,
+                      child: EncabezadoSeccion(
+                        titulo: 'Gestión de Salud',
+                        icono: Icons.favorite_outline,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2511,6 +2619,7 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
                   const SizedBox(height: 24),
                   // --- SECCIÓN: Ubicación (en casa / refugio) ---
                   Card(
+                    key: _claveUbicacion,
                     margin: EdgeInsets.zero,
                     clipBehavior: Clip.antiAlias,
                     child: CheckboxListTile(

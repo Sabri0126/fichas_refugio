@@ -9,6 +9,7 @@ import 'package:fichas_refugio/providers/auth_providers.dart';
 import 'package:fichas_refugio/providers/calendario_providers.dart';
 import 'package:fichas_refugio/providers/firestore_providers.dart';
 import 'package:fichas_refugio/providers/perros_providers.dart';
+import 'package:fichas_refugio/providers/theme_mode_provider.dart';
 import 'package:fichas_refugio/services/fotos_service.dart';
 import 'package:fichas_refugio/services/mensajeria_service.dart';
 import 'package:fichas_refugio/theme/app_theme.dart';
@@ -274,6 +275,8 @@ Future<void> _montarCalendario(WidgetTester tester, PerroModel perro, {required 
 }
 
 Future<void> _montarFicha(WidgetTester tester, PerroModel perro, {required bool invitado}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -281,6 +284,7 @@ Future<void> _montarFicha(WidgetTester tester, PerroModel perro, {required bool 
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
         firestoreProvider.overrideWithValue(FakeFirebaseFirestore()),
         fotosServiceProvider.overrideWithValue(FotosService(almacen: AlmacenFotosMemoria())),
         perroProvider.overrideWith((ref, id) {

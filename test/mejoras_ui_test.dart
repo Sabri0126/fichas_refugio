@@ -16,6 +16,7 @@ import 'package:fichas_refugio/views/pantalla_perros.dart';
 import 'package:fichas_refugio/views/pantalla_tarjeta_perro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -275,6 +276,7 @@ void main() {
               onCastrado: (_) {},
               onPendientes: (_) {},
               onActivos: (_) {},
+              onDatosIncompletos: (_) {},
             ),
           ),
         ),
@@ -344,6 +346,37 @@ void main() {
       edad: '2 años',
     );
     expect(bytes, isNotEmpty);
+  });
+
+  test('compartir llama alGenerar antes de la hoja nativa', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final binding = TestDefaultBinaryMessengerBinding.instance;
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => '.',
+    );
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/share'),
+      (call) async => null,
+    );
+    addTearDown(() {
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('dev.fluttercommunity.plus/share'),
+        null,
+      );
+    });
+
+    var llamados = 0;
+    await ExportarFicha.compartir(
+      PerroModel(id: 'p1', nombre: 'Test'),
+      edad: '1 año',
+      alGenerar: () => llamados++,
+    );
+    expect(llamados, 1);
   });
 
   test('el pdf lista el evento médico con nombre y fecha', () {

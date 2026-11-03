@@ -5,6 +5,7 @@ import '../controllers/tratamiento_controller.dart';
 import '../models/estado_duracion.dart';
 import '../models/perro_model.dart';
 import '../models/tratamiento_model.dart';
+import '../utils/texto.dart';
 import 'firestore_providers.dart';
 import 'theme_mode_provider.dart';
 
@@ -64,6 +65,26 @@ final perroProvider = StreamProvider.autoDispose.family<LecturaPerro, String>((r
   return ref.watch(perroControllerProvider).observarPerroConOrigen(id);
 }, retry: (_, _) => null);
 
+enum DatoFaltante { edad, fechaIngreso, foto }
+
+/// Datos incompletos de una ficha. La edad indeterminada no cuenta como falta.
+List<DatoFaltante> datosFaltantes(PerroModel perro) {
+  final faltan = <DatoFaltante>[];
+  if (PerroController.edadSinCargar(perro)) faltan.add(DatoFaltante.edad);
+  if (perro.fechaIngreso == null) faltan.add(DatoFaltante.fechaIngreso);
+  final foto = perro.fotoPerfil?.trim() ?? '';
+  if (foto.isEmpty) faltan.add(DatoFaltante.foto);
+  return faltan;
+}
+
+String etiquetaDatoFaltante(DatoFaltante dato) {
+  return switch (dato) {
+    DatoFaltante.edad => 'edad',
+    DatoFaltante.fechaIngreso => 'fecha',
+    DatoFaltante.foto => 'foto',
+  };
+}
+
 class FiltrosPerros {
   final String texto;
   final String ubicacion;
@@ -72,6 +93,7 @@ class FiltrosPerros {
   final String castrado;
   final bool soloConTratamiento;
   final bool soloTratamientoActivo;
+  final bool soloDatosIncompletos;
   final OrdenListado orden;
   final ModoVista modoVista;
 
@@ -83,6 +105,7 @@ class FiltrosPerros {
     this.castrado = 'Todos',
     this.soloConTratamiento = false,
     this.soloTratamientoActivo = false,
+    this.soloDatosIncompletos = false,
     this.orden = OrdenListado.reciente,
     this.modoVista = ModoVista.grande,
   });
@@ -95,6 +118,7 @@ class FiltrosPerros {
     String? castrado,
     bool? soloConTratamiento,
     bool? soloTratamientoActivo,
+    bool? soloDatosIncompletos,
     OrdenListado? orden,
     ModoVista? modoVista,
   }) {
@@ -106,6 +130,7 @@ class FiltrosPerros {
       castrado: castrado ?? this.castrado,
       soloConTratamiento: soloConTratamiento ?? this.soloConTratamiento,
       soloTratamientoActivo: soloTratamientoActivo ?? this.soloTratamientoActivo,
+      soloDatosIncompletos: soloDatosIncompletos ?? this.soloDatosIncompletos,
       orden: orden ?? this.orden,
       modoVista: modoVista ?? this.modoVista,
     );
@@ -153,6 +178,19 @@ final perrosFiltradosProvider =
   return const AsyncLoading();
 });
 
+/// Activos con algún dato faltante. Solo para el menú del staff.
+final fichasIncompletasProvider = Provider<int>((ref) {
+  final async = ref.watch(perrosProvider);
+  final lista = async.asData?.value;
+  if (lista == null) return 0;
+  var n = 0;
+  for (final perro in lista) {
+    if (perro.estado != 'activo') continue;
+    if (datosFaltantes(perro).isNotEmpty) n++;
+  }
+  return n;
+});
+
 List<PerroModel> filtrarPerros(
   List<PerroModel> todos,
   FiltrosPerros filtros,
@@ -183,8 +221,9 @@ List<PerroModel> filtrarPerros(
     if (filtros.castrado == 'Sin castrar' && perro.castrado) return false;
     if (filtros.soloConTratamiento && !_tieneDosisPendiente(perro)) return false;
     if (filtros.soloTratamientoActivo && !tieneTratamientoActivo(perro.tratamientos)) return false;
+    if (filtros.soloDatosIncompletos && datosFaltantes(perro).isEmpty) return false;
     if (filtros.texto.isEmpty) return true;
-    return perro.nombre.toLowerCase().contains(filtros.texto.toLowerCase());
+    return normalizarBusqueda(perro.nombre).contains(normalizarBusqueda(filtros.texto));
   }).toList();
 
   perros.sort((a, b) {

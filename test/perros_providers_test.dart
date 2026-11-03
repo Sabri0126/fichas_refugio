@@ -121,6 +121,60 @@ void main() {
       ['Roca'],
     );
   });
+
+  test('datosFaltantes y filtro de incompletos', () async {
+    final firestore = FakeFirebaseFirestore();
+    final container = await _contenedor(firestore);
+    await firestore.collection('perros').doc('ok').set({
+      ..._perro('Ok'),
+      'edad': 2,
+      'meses': 0,
+      'foto_perfil': 'https://example.com/ok.jpg',
+      'fecha_ingreso': '2024-01-01',
+    });
+    await firestore.collection('perros').doc('falta').set({
+      ..._perro('Falta'),
+      'edad': 0,
+      'meses': 0,
+    });
+    container.listen(perrosFiltradosProvider(SeccionPerros.activos), (_, _) {});
+    await _emitio(container, cantidad: 2);
+
+    final falta = container.read(perrosProvider).value!.firstWhere((p) => p.nombre == 'Falta');
+    expect(datosFaltantes(falta).map((d) => d.name).toSet(), {'edad', 'fechaIngreso', 'foto'});
+    expect(container.read(fichasIncompletasProvider), greaterThanOrEqualTo(1));
+
+    final notifier = container.read(filtrosPerrosProvider(SeccionPerros.activos).notifier);
+    notifier.reemplazar(const FiltrosPerros(soloDatosIncompletos: true));
+    final nombres = container
+        .read(perrosFiltradosProvider(SeccionPerros.activos))
+        .value!
+        .map((perro) => perro.nombre)
+        .toList();
+    expect(nombres, contains('Falta'));
+    expect(nombres, isNot(contains('Ok')));
+  });
+
+  test('la búsqueda ignora tildes y mayúsculas', () async {
+    final firestore = FakeFirebaseFirestore();
+    final container = await _contenedor(firestore);
+    await firestore.collection('perros').doc('sofia').set(_perro('Sofía'));
+    container.listen(perrosFiltradosProvider(SeccionPerros.activos), (_, _) {});
+    await _emitio(container, cantidad: 1);
+
+    final notifier = container.read(filtrosPerrosProvider(SeccionPerros.activos).notifier);
+    notifier.reemplazar(const FiltrosPerros(texto: 'sofia'));
+    expect(
+      container.read(perrosFiltradosProvider(SeccionPerros.activos)).value!.map((perro) => perro.nombre),
+      ['Sofía'],
+    );
+
+    notifier.reemplazar(const FiltrosPerros(texto: 'SOFÍA'));
+    expect(
+      container.read(perrosFiltradosProvider(SeccionPerros.activos)).value!.map((perro) => perro.nombre),
+      ['Sofía'],
+    );
+  });
 }
 
 Map<String, Object?> _diario({required List<String> registro}) {

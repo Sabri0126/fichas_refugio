@@ -1,28 +1,34 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../main.dart';
 import '../models/dosis_avisada.dart';
+import '../providers/auth_providers.dart';
+import '../services/cerrar_sesion.dart';
+import '../services/mensaje_login.dart';
 import '../theme/app_colors.dart';
 import 'ficha_detalle_perro.dart';
+import 'pantalla_login.dart';
 import 'pantalla_menu.dart';
 
-class PantallaBloqueo extends StatefulWidget {
+class PantallaBloqueo extends ConsumerStatefulWidget {
   const PantallaBloqueo({super.key});
 
   @override
-  State<PantallaBloqueo> createState() => _PantallaBloqueoState();
+  ConsumerState<PantallaBloqueo> createState() => _PantallaBloqueoState();
 }
 
-class _PantallaBloqueoState extends State<PantallaBloqueo> {
-  final LocalAuthentication _auth = LocalAuthentication();
+class _PantallaBloqueoState extends ConsumerState<PantallaBloqueo> {
   bool _autenticando = false;
   String? _mensajeError;
+
+  LocalAuthentication get _auth => ref.read(localAuthProvider);
 
   @override
   void initState() {
     super.initState();
-    // Intentar autenticación biométrica automáticamente al entrar
     WidgetsBinding.instance.addPostFrameCallback((_) => _desbloquear());
   }
 
@@ -42,27 +48,12 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
 
       final autenticado = await _auth.authenticate(
         localizedReason: 'Verificá tu identidad para acceder a Fichas Refugio',
-        biometricOnly: false, // permite PIN/patrón como fallback
+        biometricOnly: false,
         persistAcrossBackgrounding: true,
       );
 
       if (autenticado && mounted) {
-        final idPendiente = EstadoNotificacion.payloadPendiente;
-        EstadoNotificacion.payloadPendiente = null;
-
-        navigatorKey.currentState?.pushReplacement(
-          MaterialPageRoute(builder: (_) => const PantallaMenu()),
-        );
-        if (idPendiente != null && idPendiente.isNotEmpty) {
-          final aviso = AvisoFicha.desdePayload(idPendiente);
-          if (aviso != null) {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (_) => FichaDetallePerro(idDocumento: aviso.idPerro, dosisAvisada: aviso.dosis),
-              ),
-            );
-          }
-        }
+        _entrar();
       }
     } catch (e) {
       if (mounted) {
@@ -71,6 +62,69 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
     } finally {
       if (mounted) setState(() => _autenticando = false);
     }
+  }
+
+  void _entrar() {
+    final idPendiente = EstadoNotificacion.payloadPendiente;
+    EstadoNotificacion.payloadPendiente = null;
+
+    navigatorKey.currentState?.pushReplacement(
+      MaterialPageRoute(builder: (_) => const PantallaMenu()),
+    );
+    if (idPendiente != null && idPendiente.isNotEmpty) {
+      final aviso = AvisoFicha.desdePayload(idPendiente);
+      if (aviso != null) {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => FichaDetallePerro(idDocumento: aviso.idPerro, dosisAvisada: aviso.dosis),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _ingresarConContrasena() async {
+    final usuario = ref.read(firebaseAuthProvider).currentUser;
+    final email = usuario?.email ?? '';
+    if (usuario == null || email.isEmpty) {
+      await _cerrarSesion();
+      return;
+    }
+
+    final password = await showDialog<String>(
+      context: context,
+      builder: (context) => _DialogoContrasena(email: email),
+    );
+    if (password == null || !mounted) return;
+
+    setState(() {
+      _autenticando = true;
+      _mensajeError = null;
+    });
+    try {
+      await usuario.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+      if (!mounted) return;
+      _entrar();
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => _mensajeError = mensajeErrorLogin(e.code));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _mensajeError = 'No se pudo autenticar. Intentá de nuevo.');
+      }
+    } finally {
+      if (mounted) setState(() => _autenticando = false);
+    }
+  }
+
+  Future<void> _cerrarSesion() async {
+    await cerrarSesion(ref);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PantallaLogin()),
+      (_) => false,
+    );
   }
 
   @override
@@ -169,6 +223,30 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
                         label: Text(_autenticando ? 'Verificando...' : 'Desbloquear'),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _autenticando ? null : _ingresarConContrasena,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.7)),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                        icon: const Icon(Icons.password_outlined),
+                        label: const Text('Ingresar con contraseña'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: _autenticando ? null : _cerrarSesion,
+                        style: TextButton.styleFrom(foregroundColor: AppColors.arena),
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Cerrar sesión'),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -176,6 +254,76 @@ class _PantallaBloqueoState extends State<PantallaBloqueo> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DialogoContrasena extends StatefulWidget {
+  final String email;
+
+  const _DialogoContrasena({required this.email});
+
+  @override
+  State<_DialogoContrasena> createState() => _DialogoContrasenaState();
+}
+
+class _DialogoContrasenaState extends State<_DialogoContrasena> {
+  final _password = TextEditingController();
+  bool _ver = false;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _aceptar() {
+    final valor = _password.text;
+    if (valor.isEmpty) return;
+    Navigator.pop(context, valor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Ingresar con contraseña'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              prefixIcon: Icon(Icons.email_outlined),
+            ),
+            child: Text(widget.email),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            autofocus: true,
+            obscureText: !_ver,
+            onSubmitted: (_) => _aceptar(),
+            decoration: InputDecoration(
+              labelText: 'Contraseña',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(_ver ? Icons.visibility_off : Icons.visibility),
+                onPressed: () => setState(() => _ver = !_ver),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _aceptar,
+          child: const Text('Ingresar'),
+        ),
+      ],
     );
   }
 }

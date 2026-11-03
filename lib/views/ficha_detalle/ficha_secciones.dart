@@ -5,7 +5,44 @@ mixin _FichaSecciones on _FichaEstado {
 
   String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
+
+  Future<void> _altaTratamientoDesdeFicha(PerroModel perro) async {
+    await abrirAltaRegistroParaPerro(
+      context,
+      perro: perro,
+      fecha: DateTime.now(),
+      tratamientos: _tratamientoController,
+      perros: _perroController,
+      alGuardar: (modelo) async {
+        final resultado = await _ejecutarGuardado(
+          claveGuardadoAltaFicha,
+          () => _perroController.agregarTratamiento(widget.idDocumento, modelo),
+        );
+        if (resultado == ResultadoGuardado.error) throw StateError('alta');
+      },
+    );
+  }
+
+  Future<void> _altaRecordatorioDesdeFicha(PerroModel perro) async {
+    await abrirAltaRecordatorioParaPerro(
+      context,
+      perro: perro,
+      fecha: DateTime.now(),
+      recordatorios: _recordatorioController,
+      perros: _perroController,
+      alGuardar: (modelo) async {
+        final resultado = await _ejecutarGuardado(
+          claveGuardadoAltaFicha,
+          () => _perroController.agregarRecordatorio(widget.idDocumento, modelo),
+        );
+        if (resultado == ResultadoGuardado.error) throw StateError('alta');
+      },
+    );
+  }
+
   Future<void> _compartirFicha(PerroModel perro) async {
+    if (_generandoPdf) return;
+    setState(() => _generandoPdf = true);
     try {
       final esInvitado = ref.read(sessionProvider).esInvitado;
       final nuevos = esInvitado
@@ -17,12 +54,18 @@ mixin _FichaSecciones on _FichaEstado {
         incluirEstudios: !esInvitado,
         estudiosNuevos: nuevos,
         bajarRuta: _estudioController.descargar,
+        alGenerar: () {
+          if (mounted) setState(() => _generandoPdf = false);
+        },
       );
+      if (mounted) setState(() {});
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo compartir la ficha')),
       );
+    } finally {
+      if (mounted && _generandoPdf) setState(() => _generandoPdf = false);
     }
   }
 
@@ -62,10 +105,12 @@ mixin _FichaSecciones on _FichaEstado {
       final tratamiento = _tratamientoDelAviso(perro, aviso);
       if (tratamiento == null) {
         if (!desdeCache) _hojaDosisMostrada = true;
-      } else if (listoParaAvisoDosis(
-        desdeCache: desdeCache,
-        marcada: dosisAvisadaMarcada(tratamiento.registroDosis, aviso.dia),
-      )) {
+      } else if (cartelAvisoDosis(
+            desdeCache: desdeCache,
+            marcada: dosisAvisadaMarcada(tratamiento.registroDosis, aviso.dia),
+            desdeNotificacion: aviso.desdeNotificacion,
+          ) !=
+          null) {
         _hojaDosisMostrada = true;
         mostrar = true;
       }
@@ -179,11 +224,11 @@ mixin _FichaSecciones on _FichaEstado {
 
   String _formatearEdadTexto(PerroModel perro) => PerroController.formatearEdadTexto(perro);
 
-  Widget _construirTextoFormateado(String texto, double escala) {
+  Widget _construirTextoFormateado(String texto) {
     final textoLimpio = texto.trim();
 
     if (textoLimpio.isEmpty) {
-      return Text('Sin información.', textScaler: TextScaler.linear(escala));
+      return Text('Sin información.', textScaler: _escala);
     }
 
     final textoMarkdown = textoLimpio.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), '\n\n');
@@ -192,12 +237,13 @@ mixin _FichaSecciones on _FichaEstado {
       data: textoMarkdown,
       selectable: true,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        p: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16 * escala, height: 1.45),
+        textScaler: _escala,
+        p: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 16, height: 1.45),
         strong: const TextStyle(fontWeight: FontWeight.bold),
         em: const TextStyle(fontStyle: FontStyle.italic),
-        listBullet: TextStyle(fontSize: 16 * escala),
-        h1: TextStyle(fontSize: 24 * escala, fontWeight: FontWeight.bold),
-        h2: TextStyle(fontSize: 20 * escala, fontWeight: FontWeight.bold),
+        listBullet: const TextStyle(fontSize: 16),
+        h1: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        h2: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -359,6 +405,13 @@ mixin _FichaSecciones on _FichaEstado {
     setState(() {
       _modoReordenar = true;
       _fotosReordenar = _construirListaReordenamiento(perro);
+    });
+  }
+
+  void _cancelarReordenar() {
+    setState(() {
+      _modoReordenar = false;
+      _fotosReordenar = [];
     });
   }
 
@@ -566,7 +619,7 @@ mixin _FichaSecciones on _FichaEstado {
     if (guardado == ResultadoGuardado.error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo eliminar la foto')),
+        const SnackBar(content: Text('No se pudo eliminar el estudio')),
       );
       return;
     }
@@ -741,7 +794,11 @@ mixin _FichaSecciones on _FichaEstado {
     }
   }
 
-  TextScaler get _escala => TextScaler.linear(_escalaTexto);
+  TextScaler get _escala {
+    final preferencia = ref.watch(escalaFichaProvider);
+    final sistema = MediaQuery.textScalerOf(context).scale(1);
+    return TextScaler.linear(escalaFichaEfectiva(preferencia, sistema));
+  }
 
   Widget _buildHistorialDosis(TratamientoModel tratamiento, bool esInvitado) {
     final textTheme = Theme.of(context).textTheme;
@@ -933,9 +990,27 @@ mixin _FichaSecciones on _FichaEstado {
   Widget _buildDatosBasicos(PerroModel perro) {
     final esHembra = perro.sexo == 'hembra';
     final edadTexto = _formatearEdadTexto(perro);
-    final partesEdad = edadTexto.split(':');
-    final edadValor = partesEdad.length > 1 ? partesEdad.sublist(1).join(':').trim() : edadTexto;
-    final edadChip = edadTexto.startsWith('Edad estimada') ? '$edadValor aprox.' : edadValor;
+    final String edadChip;
+    if (edadTexto == 'Edad sin cargar') {
+      edadChip = edadTexto;
+    } else {
+      final partesEdad = edadTexto.split(':');
+      final edadValor = partesEdad.length > 1 ? partesEdad.sublist(1).join(':').trim() : edadTexto;
+      edadChip = edadTexto.startsWith('Edad estimada') ? '$edadValor aprox.' : edadValor;
+    }
+    final esInvitado = ref.read(sessionProvider).esInvitado;
+    final mesesGolpe = !esInvitado
+        ? PerroController.mesesQueSumariaLaFuncion(
+            edadNueva: perro.edad,
+            mesesNuevos: perro.meses,
+            edadIndeterminada: perro.edadIndeterminada,
+            yaContaba: perro.cuentaMeses,
+            edadAnterior: perro.edad,
+            mesesAnteriores: perro.meses,
+            ultimaActualizacionEdad: perro.ultimaActualizacionEdad,
+            fechaIngreso: perro.fechaIngreso,
+          )
+        : 0;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -956,6 +1031,14 @@ mixin _FichaSecciones on _FichaEstado {
                 ),
               ],
             ),
+            if (mesesGolpe > 1) ...[
+              const SizedBox(height: 12),
+              Text(
+                'La actualización automática sumaría $mesesGolpe meses de golpe. Revisá la edad o la fecha de ingreso.',
+                textScaler: _escala,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.pausado),
+              ),
+            ],
             if (perro.fechaIngreso != null || perro.fechaFallecimiento != null) ...[
               const SizedBox(height: 16),
               if (perro.fechaIngreso != null)
@@ -981,7 +1064,6 @@ mixin _FichaSecciones on _FichaEstado {
     final marcadoHoy = t.registroDosis.contains(fechaHoy);
     final ValueChanged<bool?>? alCambiar = esInvitado ? null : (_) => _toggleDosis(t, DateTime.now());
     final fijo = t.tipoDuracion == TratamientoModel.tipoDias && t.diasDuracion > 0;
-    final hastaAviso = t.tipoDuracion == TratamientoModel.tipoHastaAviso;
     final tacharHoy = marcadoHoy && !esWindows;
 
     return AnimatedContainer(
@@ -1048,7 +1130,7 @@ mixin _FichaSecciones on _FichaEstado {
                   label: Text('Marcar un día anterior', textScaler: _escala),
                 ),
               ),
-            if (!esInvitado) _accionesTratamiento(t, nombrePerro, hastaAviso: hastaAviso),
+            if (!esInvitado) _accionesTratamiento(t, nombrePerro),
           ],
         ),
       ),
@@ -1159,37 +1241,24 @@ mixin _FichaSecciones on _FichaEstado {
     return Text(partes.join(' · '), textScaler: _escala, style: estilo);
   }
 
-  Widget _accionesTratamiento(
-    TratamientoModel tratamiento,
-    String nombrePerro, {
-    required bool hastaAviso,
-  }) {
+  Widget _accionesTratamiento(TratamientoModel tratamiento, String nombrePerro) {
     return Padding(
       padding: const EdgeInsets.only(left: 8, top: 4),
       child: Row(
         children: [
-          if (hastaAviso)
-            OutlinedButton.icon(
-              onPressed: () => _suspenderDesdeFicha(tratamiento, nombrePerro),
-              icon: const Icon(Icons.stop_circle_outlined),
-              label: Text('Suspender', textScaler: _escala),
-            ),
-          if (tratamiento.dePorVida)
+          OutlinedButton.icon(
+            onPressed: () => _suspenderDesdeFicha(tratamiento, nombrePerro),
+            icon: const Icon(Icons.stop_circle_outlined),
+            label: Text('Suspender', textScaler: _escala),
+          ),
+          if (tratamiento.dePorVida) ...[
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: () => _cambiarDosisDesdeFicha(tratamiento),
               icon: const Icon(Icons.tune),
               label: Text('Cambiar dosis', textScaler: _escala),
             ),
-          if (!hastaAviso)
-            PopupMenuButton<String>(
-              tooltip: 'Más acciones',
-              onSelected: (valor) {
-                if (valor == 'suspender') _suspenderDesdeFicha(tratamiento, nombrePerro);
-              },
-              itemBuilder: (ctx) => const [
-                PopupMenuItem(value: 'suspender', child: Text('Suspender')),
-              ],
-            ),
+          ],
         ],
       ),
     );
@@ -1439,7 +1508,7 @@ mixin _FichaSecciones on _FichaEstado {
       titulo: 'Ficha médica',
       icono: Icons.favorite_outline,
       children: [
-        _construirTextoFormateado(perro.fichaMedica, _escalaTexto),
+        _construirTextoFormateado(perro.fichaMedica),
       ],
     );
   }
@@ -2109,6 +2178,41 @@ mixin _FichaSecciones on _FichaEstado {
               ),
           ],
         ),
+        if (!esInvitado && datosFaltantes(perro).isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Material(
+            color: AppColors.terracota.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppColors.terracota),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Falta: ${datosFaltantes(perro).map(etiquetaDatoFaltante).join(', ')}',
+                      textScaler: _escala,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        Builder(
+          builder: (context) {
+            final secciones = <SeccionIndice>[
+              if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo'))
+                SeccionIndice(etiqueta: 'Salud', clave: _claveSalud),
+              if (!esInvitado) SeccionIndice(etiqueta: 'Estudios', clave: _claveEstudios),
+              if (!esWindows) SeccionIndice(etiqueta: 'Galería', clave: _claveGaleria),
+              if (perro.historia.trim().isNotEmpty)
+                SeccionIndice(etiqueta: 'Historia', clave: _claveHistoria),
+            ];
+            return IndiceSecciones(secciones: secciones);
+          },
+        ),
         if (perro.estado == 'egresado') ...[
           const SizedBox(height: 12),
           _bannerEgreso(perro),
@@ -2118,12 +2222,15 @@ mixin _FichaSecciones on _FichaEstado {
         _buildDatosBasicos(perro),
         if (perro.historia.trim().isNotEmpty) ...[
           const SizedBox(height: 12),
-          _tarjetaSeccion(
-            titulo: 'Historia y observaciones',
-            icono: Icons.menu_book_outlined,
-            children: [
-              _construirTextoFormateado(perro.historia, _escalaTexto),
-            ],
+          KeyedSubtree(
+            key: _claveHistoria,
+            child: _tarjetaSeccion(
+              titulo: 'Historia y observaciones',
+              icono: Icons.menu_book_outlined,
+              children: [
+                _construirTextoFormateado(perro.historia),
+              ],
+            ),
           ),
         ],
         if (perro.parientes.isNotEmpty) ...[
@@ -2161,13 +2268,40 @@ mixin _FichaSecciones on _FichaEstado {
           const SizedBox(height: 12),
           _historialEgresos(perro, esInvitado),
         ],
-        if (bloquesMedicos.isNotEmpty) ...[
+        if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo')) ...[
           const SizedBox(height: 28),
-          _encabezadoGrupo('Información médica', Icons.medical_services_outlined),
-          for (var i = 0; i < bloquesMedicos.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            bloquesMedicos[i],
-          ],
+          KeyedSubtree(
+            key: _claveSalud,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _encabezadoGrupo('Información médica', Icons.medical_services_outlined),
+                for (var i = 0; i < bloquesMedicos.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  bloquesMedicos[i],
+                ],
+                if (!esInvitado && perro.estado == 'activo') ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () => _altaTratamientoDesdeFicha(perro),
+                        icon: const Icon(Icons.medication_outlined),
+                        label: const Text('Agregar tratamiento'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _altaRecordatorioDesdeFicha(perro),
+                        icon: const Icon(Icons.event_note_outlined),
+                        label: const Text('Agregar recordatorio'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
         if (!esInvitado && entradasEstudios.isEmpty && !cargandoEstudios)
           Padding(
@@ -2191,9 +2325,11 @@ mixin _FichaSecciones on _FichaEstado {
     final visible = seccionEstudiosVisible(esInvitado: esInvitado, cantidad: entradas.length) ||
         (!esInvitado && cargando && entradas.isEmpty);
     if (!visible) return null;
-    return _tarjetaSeccion(
+    return KeyedSubtree(
+      key: _claveEstudios,
+      child: _tarjetaSeccion(
       titulo: 'Estudios y registros',
-      icono: Icons.grid_view_rounded,
+      icono: Icons.description_outlined,
       children: [
         _aclaracionEstudios(),
         const SizedBox(height: 12),
@@ -2214,13 +2350,14 @@ mixin _FichaSecciones on _FichaEstado {
           child: _botonAgregarEstudio(),
         ),
       ],
+    ),
     );
   }
 
   Widget _botonAgregarEstudio() {
     return TextButton.icon(
       onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
-      icon: const Icon(Icons.add_a_photo_outlined),
+      icon: const Icon(Icons.note_add_outlined),
       label: const Text('Agregar estudio'),
     );
   }
@@ -2241,7 +2378,7 @@ mixin _FichaSecciones on _FichaEstado {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Icon(Icons.document_scanner_outlined, color: context.paleta.lienzo),
+              Icon(Icons.note_add_outlined, color: context.paleta.lienzo),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -2250,7 +2387,7 @@ mixin _FichaSecciones on _FichaEstado {
                     Text('Agregar un estudio', textScaler: _escala, style: textTheme.titleMedium),
                     const SizedBox(height: 2),
                     Text(
-                      'Radiografías, análisis u otros estudios. Los registros médicos del calendario se cargan en Editar ficha.',
+                      'Radiografías, análisis u otros estudios. Los registros médicos se cargan con «Agregar tratamiento» o en Editar ficha.',
                       textScaler: _escala,
                       style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                     ),
@@ -2438,7 +2575,7 @@ mixin _FichaSecciones on _FichaEstado {
   }
   Widget _aclaracionEstudios() {
     return Text(
-      'Acá se suben fotos de estudios (radiografías, análisis) para tenerlas en la ficha. Los registros médicos que aparecen en el calendario se cargan en Editar ficha.',
+      'Acá se suben fotos de estudios (radiografías, análisis) para tenerlas en la ficha. Los registros médicos se cargan con «Agregar tratamiento» o en Editar ficha.',
       textScaler: _escala,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
     );
@@ -2450,6 +2587,7 @@ mixin _FichaSecciones on _FichaEstado {
         ? 'Fotos del perro.'
         : 'Fotos del perro. Los estudios médicos van en Estudios y registros.';
     return Padding(
+      key: _claveGaleria,
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2590,7 +2728,7 @@ mixin _FichaSecciones on _FichaEstado {
                         ),
                         child: Text(
                           foto['texto'],
-                          textScaler: TextScaler.linear(_escalaTexto),
+                          textScaler: _escala,
                           style: Theme.of(context).textTheme.bodyMedium,
                           textAlign: TextAlign.center,
                           maxLines: 3,

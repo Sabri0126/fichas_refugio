@@ -151,14 +151,37 @@ class PerroController {
     return null;
   }
 
+  /// Valida el campo de años: solo dígitos, entre 0 y 25.
+  String? validarEdad(String? valor) {
+    if (valor == null || valor.trim().isEmpty) return null;
+    final edad = int.tryParse(valor.trim());
+    if (edad == null) return 'Ingresá un número válido.';
+    if (edad < 0 || edad > 25) return 'La edad debe estar entre 0 y 25 años.';
+    return null;
+  }
+
   /// Valida el campo de meses del formulario de ficha: debe estar entre 0 y 11,
   /// ya que a partir de los 12 meses la edad pasa a contarse en años.
   ///
   /// @param valor el texto ingresado por el usuario.
   /// @return un mensaje de error si el valor es inválido, o `null` si es correcto.
   String? validarMeses(String? valor) {
-    if (valor != null && valor.isNotEmpty && (int.tryParse(valor) ?? 0) >= 12) {
+    if (valor == null || valor.isEmpty) return null;
+    final meses = int.tryParse(valor);
+    if (meses == null) return 'Ingresá un número válido.';
+    if (meses < 0 || meses >= 12) {
       return 'El valor debe estar entre 0 y 11. A partir de los 12 meses equivale a 1 año.';
+    }
+    return null;
+  }
+
+  /// Exige edad cargada o «Edad indeterminada».
+  String? validarEdadCargada(String? anios, String? meses, bool indeterminada) {
+    if (indeterminada) return null;
+    final a = int.tryParse((anios ?? '').trim()) ?? 0;
+    final m = int.tryParse((meses ?? '').trim()) ?? 0;
+    if (a == 0 && m == 0) {
+      return 'Cargá la edad o marcá «Edad indeterminada».';
     }
     return null;
   }
@@ -216,10 +239,50 @@ class PerroController {
   }
 
   /// Del más joven al más viejo. Si empatan los años, desempatan los meses.
+  /// Las edades sin cargar van al final.
   static int compararPorEdad(PerroModel a, PerroModel b) {
+    final aSin = edadSinCargar(a);
+    final bSin = edadSinCargar(b);
+    if (aSin != bSin) return aSin ? 1 : -1;
     final porAnios = calcularEdadEstimada(a).compareTo(calcularEdadEstimada(b));
     if (porAnios != 0) return porAnios;
     return a.meses.compareTo(b.meses);
+  }
+
+  /// True si no es indeterminada y tiene 0 años y 0 meses.
+  static bool edadSinCargar(PerroModel perro) =>
+      !perro.edadIndeterminada && perro.edad == 0 && perro.meses == 0;
+
+  /// Meses que sumaría `enviarNotificaciones` si guardara ahora con estos datos.
+  /// 0 si la edad se editó (se escribe `ultima` = ahora) o no cuenta por meses.
+  static int mesesQueSumariaLaFuncion({
+    required int edadNueva,
+    required int mesesNuevos,
+    required bool edadIndeterminada,
+    required bool? yaContaba,
+    required int? edadAnterior,
+    required int? mesesAnteriores,
+    required DateTime? ultimaActualizacionEdad,
+    required DateTime? fechaIngreso,
+    DateTime? ahora,
+  }) {
+    if (edadIndeterminada) return 0;
+    final cuenta = cuentaMesesAlGuardar(
+      edadNueva: edadNueva,
+      yaContaba: yaContaba,
+      edadAnterior: edadAnterior,
+      edadIndeterminada: edadIndeterminada,
+    );
+    if (!cuenta) return 0;
+    final conservada = edadAnterior != null &&
+        mesesAnteriores != null &&
+        edadNueva == edadAnterior &&
+        mesesNuevos == mesesAnteriores;
+    if (!conservada) return 0;
+    final base = ultimaActualizacionEdad ?? fechaIngreso;
+    if (base == null) return 0;
+    final momento = ahora ?? DateTime.now();
+    return mesesCalendario(base, momento);
   }
 
   /// True si la ficha que se guarda sigue contando la edad por meses.
@@ -244,6 +307,10 @@ class PerroController {
   static String formatearEdadTexto(PerroModel perro) {
     if (perro.edadIndeterminada) {
       return 'Edad: Indeterminada';
+    }
+
+    if (edadSinCargar(perro)) {
+      return 'Edad sin cargar';
     }
 
     if (cuentaPorMeses(perro)) {
