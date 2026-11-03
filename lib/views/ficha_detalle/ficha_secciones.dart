@@ -2250,7 +2250,7 @@ mixin _FichaSecciones on _FichaEstado {
                     Text('Agregar un estudio', textScaler: _escala, style: textTheme.titleMedium),
                     const SizedBox(height: 2),
                     Text(
-                      'Estas fotos quedan en la ficha. Los registros médicos del calendario se cargan en Editar ficha.',
+                      'Radiografías, análisis u otros estudios. Los registros médicos del calendario se cargan en Editar ficha.',
                       textScaler: _escala,
                       style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
                     ),
@@ -2276,12 +2276,12 @@ mixin _FichaSecciones on _FichaEstado {
         onTap: habilitado ? _agregarFotoAGaleria : null,
         child: CustomPaint(
           painter: _BordePunteado(color: colorBorde),
-          child: SizedBox(
-            height: 168,
-            width: double.infinity,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 168, minWidth: double.infinity),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.add_a_photo_outlined, size: 32, color: context.paleta.lienzo),
@@ -2295,7 +2295,7 @@ mixin _FichaSecciones on _FichaEstado {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Fotos del perro, aparte de los estudios médicos.',
+                    'Fotos del perro. Los estudios médicos van en Estudios y registros.',
                     textScaler: _escala,
                     textAlign: TextAlign.center,
                     style: textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
@@ -2438,13 +2438,17 @@ mixin _FichaSecciones on _FichaEstado {
   }
   Widget _aclaracionEstudios() {
     return Text(
-      'Estas fotos quedan en la ficha. Los registros médicos del calendario se cargan en Editar ficha.',
+      'Acá se suben fotos de estudios (radiografías, análisis) para tenerlas en la ficha. Los registros médicos que aparecen en el calendario se cargan en Editar ficha.',
       textScaler: _escala,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
     );
   }
 
   Widget _rotuloFotos() {
+    final esInvitado = ref.read(sessionProvider).esInvitado;
+    final detalle = esInvitado
+        ? 'Fotos del perro.'
+        : 'Fotos del perro. Los estudios médicos van en Estudios y registros.';
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
@@ -2453,7 +2457,7 @@ mixin _FichaSecciones on _FichaEstado {
           Text('Galería', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 2),
           Text(
-            'Fotos del perro, aparte de los estudios médicos.',
+            detalle,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
           ),
         ],

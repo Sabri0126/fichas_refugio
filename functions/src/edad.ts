@@ -1,4 +1,5 @@
 import { type Firestore, type QueryDocumentSnapshot, Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
 import { DateTime } from 'luxon';
 
 import { type Alarma, ZONA, aZona } from './alarmas.js';
@@ -9,7 +10,24 @@ export function mesesCalendario(desde: DateTime, hasta: DateTime): number {
   return (hasta.year - desde.year) * 12 + hasta.month - desde.month;
 }
 
-/// Suma meses a una edad. `cruzoUnAnio` solo la primera vez que deja los 0 años.
+/// Entero de la ficha. Null si falta, está vacío o no es un número entero.
+export function edadEntera(valor: unknown): number | null {
+  if (typeof valor === 'number' && Number.isInteger(valor)) return valor;
+  if (typeof valor === 'string' && /^-?\d+$/.test(valor.trim())) {
+    return Number.parseInt(valor.trim(), 10);
+  }
+  return null;
+}
+
+/// Cuenta por meses si la marca está puesta, o si la edad guardada es 0.
+/// Una edad ausente o ilegible no alcanza: esa ficha no se toca.
+export function cuentaPorMeses(edad: unknown, cuentaMeses: unknown): boolean {
+  if (cuentaMeses === true) return true;
+  return edadEntera(edad) === 0;
+}
+
+/// Suma meses a una edad. `cruzoUnAnio` es true solo si el mes en que llega
+/// a 12 meses es el último mes sumado, o sea el mes actual.
 export function avanzarEdad(
   edad: number,
   meses: number,
@@ -18,10 +36,11 @@ export function avanzarEdad(
   if (mesesPasados <= 0) return null;
   const total = edad * 12 + meses + mesesPasados;
   if (total < 0) return null;
+  const antesDelUltimoMes = total - 1;
   return {
     edad: Math.floor(total / 12),
     meses: total % 12,
-    cruzoUnAnio: edad === 0 && total >= 12,
+    cruzoUnAnio: antesDelUltimoMes < 12 && total >= 12,
   };
 }
 
@@ -47,9 +66,9 @@ export async function actualizarEdadesPorMes(
     const fallecio = data.fecha_fallecimiento;
     if (fallecio != null && String(fallecio).trim() !== '') continue;
 
-    const edad = numero(data.edad);
-    const cuenta = data.cuenta_meses === true || edad === 0;
-    if (!cuenta) continue;
+    if (!cuentaPorMeses(data.edad, data.cuenta_meses)) continue;
+    const edad = edadEntera(data.edad);
+    if (edad == null) continue;
 
     const ultima = aZona(data.ultima_actualizacion_edad) ?? aZona(data.fecha_ingreso);
     if (!ultima) continue;
@@ -92,7 +111,11 @@ export async function actualizarEdadesPorMes(
     for (const cambio of cambios.slice(i, i + 400)) {
       lote.update(cambio.ref, cambio.datos);
     }
-    await lote.commit();
+    try {
+      await lote.commit();
+    } catch (error) {
+      logger.error('No se pudo guardar un lote de edades', error);
+    }
   }
 
   return nuevas;

@@ -613,8 +613,11 @@ class _FormularioPerroState extends ConsumerState<FormularioPerro> {
           estado: _estado,
           edad: edad,
           meses: int.tryParse(_mesesController.text.trim()) ?? 0,
-          cuentaMeses: widget.perroActual?.cuentaMeses == true ||
-              (edad == 0 && !_edadIndeterminada),
+          cuentaMeses: PerroController.cuentaMesesAlGuardar(
+            edadNueva: edad,
+            yaContaba: widget.perroActual?.cuentaMeses,
+            edadAnterior: widget.perroActual?.edad,
+          ),
           edadIndeterminada: _edadIndeterminada,
           edadAnioBase: _estado == 'activo' ? DateTime.now().year : null,
           fechaIngreso: _fechaIngreso,

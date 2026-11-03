@@ -41,6 +41,24 @@ void main() {
     );
   });
 
+  test('un salto que cae justo en 12 meses avisa este mes', () {
+    expect(
+      PerroController.avanzarEdad(edad: 0, meses: 4, mesesPasados: 8),
+      (edad: 1, meses: 0, cruzoUnAnio: true),
+    );
+  });
+
+  test('un salto que pasó el año en un mes anterior no avisa', () {
+    expect(
+      PerroController.avanzarEdad(edad: 0, meses: 4, mesesPasados: 10),
+      (edad: 1, meses: 2, cruzoUnAnio: false),
+    );
+    expect(
+      PerroController.avanzarEdad(edad: 0, meses: 11, mesesPasados: 2),
+      (edad: 1, meses: 1, cruzoUnAnio: false),
+    );
+  });
+
   test('1 año y 11 meses pasa a 2 años sin aviso', () {
     expect(
       PerroController.avanzarEdad(edad: 1, meses: 11, mesesPasados: 1),
@@ -67,5 +85,20 @@ void main() {
     final cachorro = perro(edad: 0, meses: 4);
     expect(PerroController.cuentaPorMeses(cachorro), isTrue);
     expect(PerroController.formatearEdadTexto(cachorro), 'Edad: 4 meses');
+  });
+
+  test('corregir la edad a años deja de contar por meses', () {
+    expect(
+      PerroController.cuentaMesesAlGuardar(edadNueva: 0, yaContaba: false, edadAnterior: null),
+      isTrue,
+    );
+    expect(
+      PerroController.cuentaMesesAlGuardar(edadNueva: 1, yaContaba: true, edadAnterior: 1),
+      isTrue,
+    );
+    expect(
+      PerroController.cuentaMesesAlGuardar(edadNueva: 3, yaContaba: true, edadAnterior: 0),
+      isFalse,
+    );
   });
 }
