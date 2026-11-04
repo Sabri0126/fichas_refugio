@@ -30,6 +30,10 @@ abstract final class AppColors {
   static const Color avisoMenuOscuro = Color(0xFF8D6B2A);
   static const Color veterinariasMenu = Color(0xFF8A3D62);
   static const Color veterinariasMenuOscuro = Color(0xFF6E3550);
+
+  // --- Sexo en tarjetas (sobre foto con degradé oscuro) ---
+  static const Color sexoHembraSuave = Color(0xFFF2A6C8);
+  static const Color sexoMachoSuave = Color(0xFF8EC8E8);
 }
 
 /// Colores que cambian entre el tema claro y el oscuro.

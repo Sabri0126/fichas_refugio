@@ -29,9 +29,9 @@ service cloud.firestore {
     match /config/{doc} { allow read, write: if false; }
 
     // veterinarias/{id}
-    // nombre, ubicacion, telefono, notas. Solo el personal del refugio.
+    // nombre, ubicacion, telefono, email opcional, notas. Solo el personal del refugio.
     function esContactoVeterinario(data) {
-      return data.keys().hasOnly(['nombre', 'ubicacion', 'telefono', 'notas'])
+      return data.keys().hasOnly(['nombre', 'ubicacion', 'telefono', 'email', 'notas'])
         && data.nombre is string
         && data.nombre.size() > 0
         && data.nombre.size() <= 80
@@ -45,6 +45,7 @@ service cloud.firestore {
         && data.telefono.size() <= 40
         && data.telefono.matches('^[0-9+() -]{1,40}$')
         && data.telefono.matches('(.*[0-9]){6}.*')
+        && (!('email' in data) || (data.email is string && data.email.size() <= 120))
         && data.notas is string
         && data.notas.size() <= 400;
     }

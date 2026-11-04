@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('el notifier persiste y respeta los límites', () async {
+  test('sin preferencia arranca en 1.3 y normal vuelve ahí', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final container = ProviderContainer(
@@ -15,11 +15,11 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    expect(container.read(escalaFichaProvider), escalaFichaMin);
+    expect(container.read(escalaFichaProvider), closeTo(escalaFichaDefault, 0.001));
 
     await container.read(escalaFichaProvider.notifier).agrandar();
-    expect(container.read(escalaFichaProvider), closeTo(1.15, 0.001));
-    expect(prefs.getDouble(claveEscalaFicha), closeTo(1.15, 0.001));
+    expect(container.read(escalaFichaProvider), closeTo(1.45, 0.001));
+    expect(prefs.getDouble(claveEscalaFicha), closeTo(1.45, 0.001));
 
     await container.read(escalaFichaProvider.notifier).fijar(9);
     expect(container.read(escalaFichaProvider), escalaFichaMax);
@@ -28,11 +28,22 @@ void main() {
     expect(container.read(escalaFichaProvider), escalaFichaMin);
 
     await container.read(escalaFichaProvider.notifier).normal();
+    expect(container.read(escalaFichaProvider), closeTo(escalaFichaDefault, 0.001));
+  });
+
+  test('una preferencia guardada se conserva', () async {
+    SharedPreferences.setMockInitialValues({claveEscalaFicha: 1.0});
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(container.dispose);
+
     expect(container.read(escalaFichaProvider), escalaFichaMin);
   });
 
   test('la escala efectiva respeta el tope 2.0', () {
-    expect(escalaFichaEfectiva(1.6, 1.8), escalaFichaTopeEfectivo);
+    expect(escalaFichaEfectiva(1.9, 1.2), escalaFichaTopeEfectivo);
     expect(escalaFichaEfectiva(1.0, 1.0), 1.0);
     expect(escalaFichaEfectiva(1.3, 1.0), closeTo(1.3, 0.001));
   });

@@ -2133,53 +2133,53 @@ mixin _FichaSecciones on _FichaEstado {
       crossAxisAlignment: esWindows ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
-              textScaler: _escala,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            if (!esInvitado)
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: context.temaOscuro
-                      ? (esWindows ? context.paleta.relleno : Colors.transparent)
-                      : Color.lerp(AppColors.arena, AppColors.navy, 0.14),
-                  foregroundColor: context.paleta.texto,
-                  side: BorderSide(
-                    color: context.temaOscuro
-                        ? context.paleta.borde
-                        : Color.lerp(AppColors.arena, AppColors.navy, 0.28)!,
-                  ),
-                  minimumSize: const Size(48, 48),
-                ),
-                onPressed: _subiendoFoto || _modoReordenar
-                    ? null
-                    : () async {
-                        final eliminado = await Navigator.push<bool>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => FormularioPerro(
-                              idDocumento: widget.idDocumento,
-                              perroActual: perro,
-                            ),
-                          ),
-                        );
-                        if (eliminado == true && mounted) Navigator.pop(context);
-                      },
-                icon: const Icon(Icons.edit_note_rounded),
-                label: Text('Editar ficha', textScaler: _escala),
-              ),
-          ],
+        Text(
+          perro.nombre.isNotEmpty ? perro.nombre : 'Sin nombre',
+          textScaler: _escala,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
         ),
-        if (!esInvitado && datosFaltantes(perro).isNotEmpty) ...[
+        if (!esInvitado) ...[
           const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: context.temaOscuro
+                    ? (esWindows ? context.paleta.relleno : Colors.transparent)
+                    : Color.lerp(AppColors.arena, AppColors.navy, 0.14),
+                foregroundColor: context.paleta.texto,
+                side: BorderSide(
+                  color: context.temaOscuro
+                      ? context.paleta.borde
+                      : Color.lerp(AppColors.arena, AppColors.navy, 0.28)!,
+                ),
+                minimumSize: const Size(48, 48),
+              ),
+              onPressed: _subiendoFoto || _modoReordenar
+                  ? null
+                  : () async {
+                      final eliminado = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FormularioPerro(
+                            idDocumento: widget.idDocumento,
+                            perroActual: perro,
+                          ),
+                        ),
+                      );
+                      if (eliminado == true && mounted) Navigator.pop(context);
+                    },
+              icon: const Icon(Icons.edit_note_rounded),
+              label: Text('Editar ficha', textScaler: _escala),
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        if (!esInvitado && datosFaltantes(perro).isNotEmpty) ...[
           Material(
             color: AppColors.terracota.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(12),
@@ -2199,20 +2199,29 @@ mixin _FichaSecciones on _FichaEstado {
               ),
             ),
           ),
+          const SizedBox(height: 12),
         ],
-        Builder(
-          builder: (context) {
-            final hayHistoria = perro.historia.trim().isNotEmpty ||
-                perro.parientes.isNotEmpty ||
-                perro.historialEgresos.isNotEmpty;
-            final secciones = <SeccionIndice>[
-              if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo'))
-                SeccionIndice(etiqueta: 'Salud', clave: _claveSalud),
-              if (hayHistoria) SeccionIndice(etiqueta: 'Historia', clave: _claveHistoria),
-            ];
-            return IndiceSecciones(secciones: secciones);
-          },
-        ),
+        if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo'))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: const Icon(Icons.medical_services_outlined, size: 18),
+                label: Text('Salud', textScaler: _escala),
+                onPressed: () {
+                  final contexto = _claveSalud.currentContext;
+                  if (contexto == null) return;
+                  Scrollable.ensureVisible(
+                    contexto,
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    alignment: 0.05,
+                  );
+                },
+              ),
+            ),
+          ),
         if (perro.estado == 'egresado') ...[
           const SizedBox(height: 12),
           _bannerEgreso(perro),
@@ -2220,62 +2229,51 @@ mixin _FichaSecciones on _FichaEstado {
         const SizedBox(height: 16),
         _encabezadoGrupo('Perfil general', Icons.pets_rounded),
         _buildDatosBasicos(perro),
-        if (perro.historia.trim().isNotEmpty ||
-            perro.parientes.isNotEmpty ||
-            perro.historialEgresos.isNotEmpty)
-          KeyedSubtree(
-            key: _claveHistoria,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (perro.historia.trim().isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _tarjetaSeccion(
-                    titulo: 'Historia y observaciones',
-                    icono: Icons.menu_book_outlined,
-                    children: [
-                      _construirTextoFormateado(perro.historia),
-                    ],
-                  ),
-                ],
-                if (perro.parientes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _tarjetaSeccion(
-                    titulo: 'Familiares/Parientes',
-                    icono: Icons.people_outline,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: perro.parientes.map((familiar) {
-                          final nombre = familiar['nombre']?.toString() ?? '';
-                          final relacion = familiar['relacion']?.toString() ?? '';
-                          final idDoc = familiar['id_documento']?.toString() ?? '';
-                          return ActionChip(
-                            backgroundColor: context.paleta.relleno,
-                            avatar: Icon(Icons.pets, size: 18, color: colorIconoSeccion(context)),
-                            label: Text('$nombre ($relacion)', textScaler: _escala),
-                            onPressed: idDoc.isEmpty
-                                ? null
-                                : () => Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => FichaDetallePerro(idDocumento: idDoc),
-                                      ),
-                                    ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ],
-                if (perro.historialEgresos.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _historialEgresos(perro, esInvitado),
-                ],
-              ],
-            ),
+        if (perro.historia.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _tarjetaSeccion(
+            titulo: 'Historia y observaciones',
+            icono: Icons.menu_book_outlined,
+            children: [
+              _construirTextoFormateado(perro.historia),
+            ],
           ),
+        ],
+        if (perro.parientes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _tarjetaSeccion(
+            titulo: 'Familiares/Parientes',
+            icono: Icons.people_outline,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: perro.parientes.map((familiar) {
+                  final nombre = familiar['nombre']?.toString() ?? '';
+                  final relacion = familiar['relacion']?.toString() ?? '';
+                  final idDoc = familiar['id_documento']?.toString() ?? '';
+                  return ActionChip(
+                    backgroundColor: context.paleta.relleno,
+                    avatar: Icon(Icons.pets, size: 18, color: colorIconoSeccion(context)),
+                    label: Text('$nombre ($relacion)', textScaler: _escala),
+                    onPressed: idDoc.isEmpty
+                        ? null
+                        : () => Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FichaDetallePerro(idDocumento: idDoc),
+                              ),
+                            ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ],
+        if (perro.historialEgresos.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _historialEgresos(perro, esInvitado),
+        ],
         if (bloquesMedicos.isNotEmpty || (!esInvitado && perro.estado == 'activo')) ...[
           const SizedBox(height: 28),
           KeyedSubtree(

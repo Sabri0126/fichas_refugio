@@ -104,6 +104,20 @@ class _PantallaVeterinariasState extends ConsumerState<PantallaVeterinarias> {
     }
   }
 
+  Future<void> _abrirEmail(ContactoVeterinarioModel contacto) async {
+    final uri = VeterinariaController.uriEmail(contacto.email);
+    if (uri == null) {
+      _aviso('El email no es válido.');
+      return;
+    }
+    try {
+      final abrio = await launchUrl(Uri.parse(uri));
+      if (!abrio) _aviso('No se pudo abrir el correo.');
+    } catch (_) {
+      _aviso('No se pudo abrir el correo.');
+    }
+  }
+
   Future<void> _compartir(ContactoVeterinarioModel contacto) async {
     try {
       await Share.share(VeterinariaController.textoCompartir(contacto));
@@ -166,6 +180,9 @@ class _PantallaVeterinariasState extends ConsumerState<PantallaVeterinarias> {
                 return _TarjetaContacto(
                   contacto: contacto,
                   onTap: () => _opciones(contacto),
+                  onEmail: contacto.email.trim().isEmpty
+                      ? null
+                      : () => _abrirEmail(contacto),
                   onEditar: () => _guardar(contacto),
                   onEliminar: () => _eliminar(contacto),
                 );
@@ -196,6 +213,7 @@ class HojaContactoVeterinario extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notas = contacto.notas.trim();
+    final email = contacto.email.trim();
     final suave = context.paleta.textoSuave;
     return SafeArea(
       child: Padding(
@@ -220,6 +238,10 @@ class HojaContactoVeterinario extends StatelessWidget {
               contacto.telefono,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (email.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(email, style: Theme.of(context).textTheme.bodyMedium),
+            ],
             if (notas.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -257,12 +279,14 @@ class HojaContactoVeterinario extends StatelessWidget {
 class _TarjetaContacto extends StatelessWidget {
   final ContactoVeterinarioModel contacto;
   final VoidCallback onTap;
+  final VoidCallback? onEmail;
   final VoidCallback onEditar;
   final VoidCallback onEliminar;
 
   const _TarjetaContacto({
     required this.contacto,
     required this.onTap,
+    this.onEmail,
     required this.onEditar,
     required this.onEliminar,
   });
@@ -270,6 +294,7 @@ class _TarjetaContacto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notas = contacto.notas.trim();
+    final email = contacto.email.trim();
     final suave = context.paleta.textoSuave;
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -318,6 +343,28 @@ class _TarjetaContacto extends StatelessWidget {
                       contacto.telefono,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      InkWell(
+                        onTap: onEmail,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(Icons.email_outlined, size: 18, color: suave),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  email,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     if (notas.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -364,6 +411,7 @@ class _DialogoContactoState extends State<_DialogoContacto> {
   late final TextEditingController _nombre;
   late final TextEditingController _ubicacion;
   late final TextEditingController _telefono;
+  late final TextEditingController _email;
   late final TextEditingController _notas;
   var _error = '';
   var _cerrando = false;
@@ -375,6 +423,7 @@ class _DialogoContactoState extends State<_DialogoContacto> {
     _nombre = TextEditingController(text: actual?.nombre ?? '');
     _ubicacion = TextEditingController(text: actual?.ubicacion ?? '');
     _telefono = TextEditingController(text: actual?.telefono ?? '');
+    _email = TextEditingController(text: actual?.email ?? '');
     _notas = TextEditingController(text: actual?.notas ?? '');
   }
 
@@ -383,6 +432,7 @@ class _DialogoContactoState extends State<_DialogoContacto> {
     _nombre.dispose();
     _ubicacion.dispose();
     _telefono.dispose();
+    _email.dispose();
     _notas.dispose();
     super.dispose();
   }
@@ -393,6 +443,7 @@ class _DialogoContactoState extends State<_DialogoContacto> {
       nombre: _nombre.text,
       ubicacion: _ubicacion.text,
       telefono: _telefono.text,
+      email: _email.text,
       notas: _notas.text,
     );
     if (error != null) {
@@ -407,6 +458,7 @@ class _DialogoContactoState extends State<_DialogoContacto> {
         nombre: _nombre.text.trim(),
         ubicacion: _ubicacion.text.trim(),
         telefono: _telefono.text.trim(),
+        email: _email.text.trim(),
         notas: _notas.text.trim(),
       ),
     );
@@ -453,6 +505,16 @@ class _DialogoContactoState extends State<_DialogoContacto> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9+()\s\-]')),
             ],
             decoration: const InputDecoration(labelText: 'Teléfono'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _email,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.next,
+            scrollPadding: EdgeInsets.zero,
+            decoration: const InputDecoration(labelText: 'Email (opcional)'),
           ),
           const SizedBox(height: 12),
           TextField(

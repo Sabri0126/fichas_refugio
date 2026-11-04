@@ -241,15 +241,33 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
     return anios == 1 ? '1 a' : '$anios a';
   }
 
-  String _datoDistintivo(PerroModel perro) {
-    if (esAndroid) {
-      final simbolo = perro.sexo == 'hembra' ? '♀' : '♂';
-      if (_sinEdadUtil(perro)) return simbolo;
-      return '$simbolo · ${_edadCompacta(perro)}';
-    }
-    final sexo = perro.sexo == 'hembra' ? 'Hembra' : 'Macho';
-    if (_sinEdadUtil(perro)) return sexo;
-    return '$sexo · ${_edadCorta(perro)}';
+  Widget _datoDistintivo(PerroModel perro, {required TextStyle? estilo}) {
+    final hembra = perro.sexo == 'hembra';
+    final icono = hembra ? Icons.female : Icons.male;
+    final color = hembra ? AppColors.sexoHembraSuave : AppColors.sexoMachoSuave;
+    final edad = esAndroid ? _edadCompacta(perro) : _edadCorta(perro);
+    final etiqueta = esAndroid ? null : (hembra ? 'Hembra' : 'Macho');
+    final soloIcono = _sinEdadUtil(perro) && etiqueta == null;
+    final texto = _sinEdadUtil(perro)
+        ? (etiqueta ?? '')
+        : etiqueta == null
+            ? ' · $edad'
+            : '$etiqueta · $edad';
+    final tamanoIcono = (estilo?.fontSize ?? 12) + 2;
+    return Text.rich(
+      TextSpan(
+        style: estilo,
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Icon(icono, size: tamanoIcono, color: color),
+          ),
+          if (!soloIcono && texto.isNotEmpty) TextSpan(text: texto),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   Widget _grillaGrande(List<PerroModel> perros, int crossAxisCount) {
@@ -525,11 +543,9 @@ class _PantallaPerrosState extends ConsumerState<PantallaPerros> {
                                 height: 1.15,
                               ),
                             ),
-                            Text(
-                              _datoDistintivo(perro),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            _datoDistintivo(
+                              perro,
+                              estilo: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 color: Colors.white.withValues(alpha: 0.92),
                               ),
                             ),

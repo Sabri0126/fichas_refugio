@@ -43,7 +43,6 @@ import '../theme/entrada_escalonada.dart';
 import '../theme/recordatorio_tipos.dart';
 import '../theme/seguimiento_tipos.dart';
 import '../widgets/grafico_peso.dart';
-import '../widgets/indice_secciones.dart';
 import 'alta_calendario.dart';
 import 'dialogo_peso.dart';
 import 'dialogo_tratamiento.dart';

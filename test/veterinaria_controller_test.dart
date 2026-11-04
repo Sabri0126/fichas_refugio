@@ -6,19 +6,23 @@ import 'package:fichas_refugio/views/pantalla_veterinarias.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-ContactoVeterinarioModel _contacto({String notas = 'Atiende urgencias'}) {
+ContactoVeterinarioModel _contacto({
+  String notas = 'Atiende urgencias',
+  String email = '',
+}) {
   return ContactoVeterinarioModel(
     id: 'v1',
     nombre: 'Ana Pérez',
     ubicacion: 'Av. San Martín 120',
     telefono: '+54 9 11 5555-5555',
+    email: email,
     notas: notas,
   );
 }
 
 void main() {
   test('el mapa guarda los datos y los vuelve a leer', () {
-    final contacto = _contacto();
+    final contacto = _contacto(email: 'ana@vet.test');
     final leido = ContactoVeterinarioModel.fromMap(
       contacto.toMap(),
       contacto.id,
@@ -26,8 +30,25 @@ void main() {
     expect(leido.nombre, contacto.nombre);
     expect(leido.ubicacion, contacto.ubicacion);
     expect(leido.telefono, contacto.telefono);
+    expect(leido.email, contacto.email);
     expect(leido.notas, contacto.notas);
     expect(leido.id, contacto.id);
+  });
+
+  test('fromMap sin email sigue leyendo el contacto', () {
+    final leido = ContactoVeterinarioModel.fromMap({
+      'nombre': 'Ana',
+      'ubicacion': 'Centro',
+      'telefono': '1155555555',
+      'notas': '',
+    }, 'v1');
+    expect(leido.email, isEmpty);
+  });
+
+  test('toMap sin email no incluye la clave', () {
+    final mapa = _contacto().toMap();
+    expect(mapa.containsKey('email'), isFalse);
+    expect(_contacto(email: 'ana@vet.test').toMap()['email'], 'ana@vet.test');
   });
 
   test('un contacto sin nombre no se lee', () {
@@ -60,9 +81,35 @@ void main() {
         nombre: 'Ana',
         ubicacion: 'Centro',
         telefono: '123',
+        email: '',
         notas: '',
       ),
       'El teléfono no se puede marcar.',
+    );
+  });
+
+  test('el email vacío se acepta y el inválido no', () {
+    expect(VeterinariaController.uriEmail(''), isNull);
+    expect(VeterinariaController.uriEmail('ana@vet.test'), 'mailto:ana@vet.test');
+    expect(
+      VeterinariaController.validar(
+        nombre: 'Ana',
+        ubicacion: 'Centro',
+        telefono: '1155555555',
+        email: 'mal',
+        notas: '',
+      ),
+      'El email no tiene un formato válido.',
+    );
+    expect(
+      VeterinariaController.validar(
+        nombre: 'Ana',
+        ubicacion: 'Centro',
+        telefono: '1155555555',
+        email: '${'a' * 112}@vet.test',
+        notas: '',
+      ),
+      'El email es demasiado largo.',
     );
   });
 
@@ -72,8 +119,8 @@ void main() {
       'Ana Pérez\nAv. San Martín 120\nTeléfono: +54 9 11 5555-5555\nNotas: Atiende urgencias',
     );
     expect(
-      VeterinariaController.textoCompartir(_contacto(notas: '   ')),
-      'Ana Pérez\nAv. San Martín 120\nTeléfono: +54 9 11 5555-5555',
+      VeterinariaController.textoCompartir(_contacto(notas: '   ', email: 'ana@vet.test')),
+      'Ana Pérez\nAv. San Martín 120\nTeléfono: +54 9 11 5555-5555\nEmail: ana@vet.test',
     );
   });
 
@@ -83,6 +130,7 @@ void main() {
         nombre: ' ',
         ubicacion: 'Centro',
         telefono: '1155555555',
+        email: '',
         notas: '',
       ),
       'Ingresá el nombre del veterinario.',
@@ -92,6 +140,7 @@ void main() {
         nombre: 'Ana',
         ubicacion: ' ',
         telefono: '1155555555',
+        email: '',
         notas: '',
       ),
       'Ingresá la ubicación de la veterinaria.',
@@ -101,6 +150,7 @@ void main() {
         nombre: 'Ana',
         ubicacion: 'Centro',
         telefono: '1155555555',
+        email: '',
         notas: '',
       ),
       isNull,

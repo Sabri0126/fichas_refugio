@@ -4,6 +4,7 @@ class ContactoVeterinarioModel {
   final String nombre;
   final String ubicacion;
   final String telefono;
+  final String email;
   final String notas;
 
   const ContactoVeterinarioModel({
@@ -11,6 +12,7 @@ class ContactoVeterinarioModel {
     required this.nombre,
     required this.ubicacion,
     required this.telefono,
+    this.email = '',
     required this.notas,
   });
 
@@ -29,17 +31,21 @@ class ContactoVeterinarioModel {
       nombre: nombre,
       ubicacion: ubicacion,
       telefono: telefono,
+      email: data['email']?.toString().trim() ?? '',
       notas: data['notas']?.toString().trim() ?? '',
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    final mapa = <String, dynamic>{
       'nombre': nombre,
       'ubicacion': ubicacion,
       'telefono': telefono,
       'notas': notas,
     };
+    final correo = email.trim();
+    if (correo.isNotEmpty) mapa['email'] = correo;
+    return mapa;
   }
 
   ContactoVeterinarioModel copyWith({
@@ -47,6 +53,7 @@ class ContactoVeterinarioModel {
     String? nombre,
     String? ubicacion,
     String? telefono,
+    String? email,
     String? notas,
   }) {
     return ContactoVeterinarioModel(
@@ -54,6 +61,7 @@ class ContactoVeterinarioModel {
       nombre: nombre ?? this.nombre,
       ubicacion: ubicacion ?? this.ubicacion,
       telefono: telefono ?? this.telefono,
+      email: email ?? this.email,
       notas: notas ?? this.notas,
     );
   }

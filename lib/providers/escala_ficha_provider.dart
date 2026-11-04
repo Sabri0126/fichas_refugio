@@ -4,11 +4,12 @@ import 'theme_mode_provider.dart';
 
 const claveEscalaFicha = 'escala_texto_ficha';
 const escalaFichaMin = 1.0;
-const escalaFichaMax = 1.6;
+const escalaFichaDefault = 1.3;
+const escalaFichaMax = 1.9;
 const escalaFichaPaso = 0.15;
 const escalaFichaTopeEfectivo = 2.0;
 
-/// Preferencia de tamaño de la ficha. Parte de 1.0 y se multiplica por el del sistema.
+/// Preferencia de tamaño de la ficha. Parte de [escalaFichaDefault] y se multiplica por el del sistema.
 final escalaFichaProvider = NotifierProvider<EscalaFichaNotifier, double>(
   EscalaFichaNotifier.new,
 );
@@ -17,14 +18,14 @@ class EscalaFichaNotifier extends Notifier<double> {
   @override
   double build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    return _acotar(prefs.getDouble(claveEscalaFicha) ?? escalaFichaMin);
+    return _acotar(prefs.getDouble(claveEscalaFicha) ?? escalaFichaDefault);
   }
 
   Future<void> achicar() => fijar(state - escalaFichaPaso);
 
   Future<void> agrandar() => fijar(state + escalaFichaPaso);
 
-  Future<void> normal() => fijar(escalaFichaMin);
+  Future<void> normal() => fijar(escalaFichaDefault);
 
   Future<void> fijar(double valor) async {
     final acotado = _acotar(valor);

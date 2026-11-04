@@ -21,7 +21,11 @@ class VeterinariaController {
   static const int maxNombre = 80;
   static const int maxUbicacion = 160;
   static const int maxTelefono = 40;
+  static const int maxEmail = 120;
   static const int maxNotas = 400;
+
+  static final RegExp _telefonoPermitido = RegExp(r'^[0-9+()\s\-]+$');
+  static final RegExp _emailPermitido = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   /// Deja dígitos y, si estaba al principio, el `+`. Null si no alcanza para marcar.
   static String? uriTelefono(String telefono) {
@@ -38,13 +42,22 @@ class VeterinariaController {
     return 'tel:$limpio';
   }
 
-  /// Texto para la hoja de compartir. Omite las notas cuando están vacías.
+  /// `mailto:` si el correo tiene formato válido. Null si está vacío o no sirve.
+  static String? uriEmail(String email) {
+    final limpio = email.trim();
+    if (limpio.isEmpty || !_emailPermitido.hasMatch(limpio)) return null;
+    return 'mailto:$limpio';
+  }
+
+  /// Texto para la hoja de compartir. Omite email y notas cuando van vacíos.
   static String textoCompartir(ContactoVeterinarioModel contacto) {
     final lineas = <String>[
       contacto.nombre.trim(),
       contacto.ubicacion.trim(),
       'Teléfono: ${contacto.telefono.trim()}',
     ];
+    final email = contacto.email.trim();
+    if (email.isNotEmpty) lineas.add('Email: $email');
     final notas = contacto.notas.trim();
     if (notas.isNotEmpty) lineas.add('Notas: $notas');
     return lineas.join('\n');
@@ -55,11 +68,13 @@ class VeterinariaController {
     required String nombre,
     required String ubicacion,
     required String telefono,
+    required String email,
     required String notas,
   }) {
     final nombreLimpio = nombre.trim();
     final ubicacionLimpia = ubicacion.trim();
     final telefonoLimpio = telefono.trim();
+    final emailLimpio = email.trim();
     final notasLimpias = notas.trim();
     if (nombreLimpio.isEmpty) {
       return 'Ingresá el nombre del veterinario.';
@@ -82,13 +97,19 @@ class VeterinariaController {
     if (!_telefonoPermitido.hasMatch(telefonoLimpio) || uriTelefono(telefonoLimpio) == null) {
       return 'El teléfono no se puede marcar.';
     }
+    if (emailLimpio.isNotEmpty) {
+      if (emailLimpio.length > maxEmail) {
+        return 'El email es demasiado largo.';
+      }
+      if (!_emailPermitido.hasMatch(emailLimpio)) {
+        return 'El email no tiene un formato válido.';
+      }
+    }
     if (notasLimpias.length > maxNotas) {
       return 'Las notas son demasiado largas.';
     }
     return null;
   }
-
-  static final RegExp _telefonoPermitido = RegExp(r'^[0-9+()\s\-]+$');
 
   Stream<List<ContactoVeterinarioModel>> observar() {
     return _ref.snapshots().map((snapshot) {
@@ -114,6 +135,7 @@ class VeterinariaController {
       nombre: contacto.nombre,
       ubicacion: contacto.ubicacion,
       telefono: contacto.telefono,
+      email: contacto.email,
       notas: contacto.notas,
     );
     if (error != null) throw ArgumentError(error);
@@ -123,6 +145,7 @@ class VeterinariaController {
       nombre: contacto.nombre.trim(),
       ubicacion: contacto.ubicacion.trim(),
       telefono: contacto.telefono.trim(),
+      email: contacto.email.trim(),
       notas: contacto.notas.trim(),
     );
     await _ref.doc(id).set(limpio.toMap());

@@ -241,7 +241,7 @@ void main() {
     expect(find.text('Estudios y registros'), findsNothing);
   });
 
-  testWidgets('la ficha muestra solo Salud e Historia y sin el texto viejo de la galería', (tester) async {
+  testWidgets('la ficha muestra solo el acceso Salud y sin el texto viejo de la galería', (tester) async {
     final perro = PerroModel(
       id: 'p1',
       nombre: 'Luna',
@@ -264,7 +264,7 @@ void main() {
 
     await _montarFicha(tester, perro, invitado: false);
     expect(find.text('Salud'), findsOneWidget);
-    expect(find.text('Historia'), findsOneWidget);
+    expect(find.text('Historia'), findsNothing);
     expect(find.text('Estudios'), findsNothing);
     expect(find.text('Galería'), findsNothing);
     expect(find.text('Agregar la primera foto'), findsOneWidget);
@@ -274,7 +274,7 @@ void main() {
     );
   });
 
-  testWidgets('con solo familiares aparece el acceso Historia', (tester) async {
+  testWidgets('personal con perro activo ve Salud aunque no haya tratamientos', (tester) async {
     final perro = PerroModel(
       id: 'p1',
       nombre: 'Luna',
@@ -287,7 +287,8 @@ void main() {
     );
 
     await _montarFicha(tester, perro, invitado: false);
-    expect(find.text('Historia'), findsOneWidget);
+    expect(find.text('Salud'), findsOneWidget);
+    expect(find.text('Historia'), findsNothing);
     expect(find.text('Familiares/Parientes'), findsOneWidget);
   });
 }
