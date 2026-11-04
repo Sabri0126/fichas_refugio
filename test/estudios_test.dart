@@ -189,12 +189,18 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Estudios y registros'), findsNothing);
+    expect(find.text('Fotos de estudios'), findsNothing);
 
     await auth.signInWithEmailAndPassword(email: 'staff@refugio.test', password: 'clave');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('Estudios y registros'), findsOneWidget);
+    expect(find.text('Fotos de estudios'), findsOneWidget);
+  });
+
+  test('sin estudios la sección no es visible', () {
+    expect(seccionEstudiosVisible(esInvitado: false, cantidad: 0), isFalse);
+    expect(seccionEstudiosVisible(esInvitado: true, cantidad: 3), isFalse);
+    expect(seccionEstudiosVisible(esInvitado: false, cantidad: 1), isTrue);
   });
 }
 
@@ -218,7 +224,7 @@ class _VistaEstudios extends ConsumerWidget {
     if (!seccionEstudiosVisible(esInvitado: esInvitado, cantidad: cantidad)) {
       return const SizedBox.shrink();
     }
-    return const Text('Estudios y registros');
+    return const Text('Fotos de estudios');
   }
 }
 

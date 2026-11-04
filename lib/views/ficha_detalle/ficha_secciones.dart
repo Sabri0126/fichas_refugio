@@ -6,6 +6,19 @@ mixin _FichaSecciones on _FichaEstado {
   String _fechaHoyISO() => _tratamientoController.formatearFechaISO(DateTime.now());
 
 
+  Future<void> _registrarEnCalendarioDesdeFicha(PerroModel perro) async {
+    final tipo = await elegirTipoRegistroCalendario(context);
+    if (tipo == null || !mounted) return;
+    switch (tipo) {
+      case TipoRegistroCalendario.tratamiento:
+        await _altaTratamientoDesdeFicha(perro);
+      case TipoRegistroCalendario.seguimiento:
+        await _altaSeguimientoDesdeFicha(perro);
+      case TipoRegistroCalendario.recordatorio:
+        await _altaRecordatorioDesdeFicha(perro);
+    }
+  }
+
   Future<void> _altaTratamientoDesdeFicha(PerroModel perro) async {
     await abrirAltaRegistroParaPerro(
       context,
@@ -17,6 +30,23 @@ mixin _FichaSecciones on _FichaEstado {
         final resultado = await _ejecutarGuardado(
           claveGuardadoAltaFicha,
           () => _perroController.agregarTratamiento(widget.idDocumento, modelo),
+        );
+        if (resultado == ResultadoGuardado.error) throw StateError('alta');
+      },
+    );
+  }
+
+  Future<void> _altaSeguimientoDesdeFicha(PerroModel perro) async {
+    await abrirAltaSeguimientoParaPerro(
+      context,
+      perro: perro,
+      fecha: DateTime.now(),
+      seguimientos: _seguimientoController,
+      perros: _perroController,
+      alGuardar: (modelo) async {
+        final resultado = await _ejecutarGuardado(
+          claveGuardadoAltaFicha,
+          () => _perroController.agregarSeguimiento(widget.idDocumento, modelo),
         );
         if (resultado == ResultadoGuardado.error) throw StateError('alta');
       },
@@ -2288,32 +2318,12 @@ mixin _FichaSecciones on _FichaEstado {
                 ],
                 if (!esInvitado && perro.estado == 'activo') ...[
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: () => _altaTratamientoDesdeFicha(perro),
-                        icon: const Icon(Icons.medication_outlined),
-                        label: const Text('Agregar tratamiento'),
-                      ),
-                      FilledButton.tonalIcon(
-                        onPressed: () => _altaRecordatorioDesdeFicha(perro),
-                        icon: const Icon(Icons.event_note_outlined),
-                        label: const Text('Agregar recordatorio'),
-                      ),
-                    ],
-                  ),
+                  _botonesAltaMedica(perro),
                 ],
               ],
             ),
           ),
         ],
-        if (!esInvitado && entradasEstudios.isEmpty && !cargandoEstudios)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: _filaAgregarEstudio(),
-          ),
         if (_textoUltimaEdicion(perro) case final marca?)
           Padding(
             padding: const EdgeInsets.only(top: 20),
@@ -2327,16 +2337,47 @@ mixin _FichaSecciones on _FichaEstado {
     );
   }
 
+  Widget _botonesAltaMedica(PerroModel perro) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final apilar = constraints.maxWidth < 520;
+        final registrar = FilledButton.tonalIcon(
+          onPressed: () => _registrarEnCalendarioDesdeFicha(perro),
+          icon: const Icon(Icons.edit_calendar_outlined),
+          label: Text('Registrar en el calendario', textScaler: _escala),
+        );
+        final subir = FilledButton.tonalIcon(
+          onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: Text('Subir foto de estudio', textScaler: _escala),
+        );
+        if (apilar) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              registrar,
+              const SizedBox(height: 8),
+              subir,
+            ],
+          );
+        }
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [registrar, subir],
+        );
+      },
+    );
+  }
+
   Widget? _buildEstudios(List<EntradaEstudio> entradas, bool esInvitado, bool cargando) {
     final visible = seccionEstudiosVisible(esInvitado: esInvitado, cantidad: entradas.length) ||
         (!esInvitado && cargando && entradas.isEmpty);
     if (!visible) return null;
     return _tarjetaSeccion(
-      titulo: 'Estudios y registros',
-      icono: Icons.description_outlined,
+      titulo: 'Fotos de estudios',
+      icono: Icons.add_photo_alternate_outlined,
       children: [
-        _aclaracionEstudios(),
-        const SizedBox(height: 12),
         if (cargando && entradas.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -2346,59 +2387,30 @@ mixin _FichaSecciones on _FichaEstado {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [for (final entrada in entradas) _miniaturaEstudio(entrada)],
+            children: [
+              for (final entrada in entradas) _miniaturaEstudio(entrada),
+              if (!esInvitado) _botonMasEstudio(),
+            ],
           ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _botonAgregarEstudio(),
-        ),
       ],
     );
   }
 
-  Widget _botonAgregarEstudio() {
-    return TextButton.icon(
-      onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
-      icon: const Icon(Icons.note_add_outlined),
-      label: const Text('Agregar estudio'),
-    );
-  }
-
-  Widget _filaAgregarEstudio() {
-    final textTheme = Theme.of(context).textTheme;
-    final habilitado = !_subiendoFoto && !_modoReordenar;
-    return Material(
-      color: context.paleta.superficie,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: context.paleta.borde),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: habilitado ? () => _agregarFoto(estudios: true) : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(Icons.note_add_outlined, color: context.paleta.lienzo),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Agregar un estudio', textScaler: _escala, style: textTheme.titleMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Radiografías, análisis u otros estudios. Los registros médicos se cargan con «Agregar tratamiento» o en Editar ficha.',
-                      textScaler: _escala,
-                      style: textTheme.bodyMedium?.copyWith(color: context.paleta.textoSuave),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+  Widget _botonMasEstudio() {
+    return SizedBox(
+      width: 88,
+      height: 88,
+      child: Material(
+        color: context.paleta.relleno,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: context.paleta.borde),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: IconButton(
+          tooltip: 'Subir foto de estudio',
+          onPressed: _subiendoFoto || _modoReordenar ? null : () => _agregarFoto(estudios: true),
+          icon: Icon(Icons.add, size: _escala.scale(28), color: context.paleta.lienzo),
         ),
       ),
     );
@@ -2569,14 +2581,6 @@ mixin _FichaSecciones on _FichaEstado {
       },
     );
   }
-  Widget _aclaracionEstudios() {
-    return Text(
-      'Acá se suben fotos de estudios (radiografías, análisis) para tenerlas en la ficha. Los registros médicos se cargan con «Agregar tratamiento» o en Editar ficha.',
-      textScaler: _escala,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.paleta.textoSuave),
-    );
-  }
-
   Widget _rotuloFotos() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),

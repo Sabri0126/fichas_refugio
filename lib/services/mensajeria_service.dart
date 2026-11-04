@@ -239,20 +239,12 @@ class MensajeriaService {
   }
 
   Future<void> _guardarToken(FirebaseFirestore db, String token, String uid) async {
-    final ref = db.collection('dispositivos').doc(token);
     final locales = await leerSilenciados();
-    var remotos = <String>{};
-    try {
-      final snap = await ref.get();
-      remotos = _conjuntoSilenciados(snap.data()?['silenciados']);
-    } catch (_) {}
-    final unidos = {...locales, ...remotos};
-    await _guardarSilenciadosLocales(unidos);
-    await ref.set({
+    await db.collection('dispositivos').doc(token).set({
       'uid': uid,
       'plataforma': defaultTargetPlatform.name,
       'actualizado': FieldValue.serverTimestamp(),
-      'silenciados': _listaOrdenada(unidos),
+      'silenciados': _listaOrdenada(locales),
     }, SetOptions(merge: true));
   }
 

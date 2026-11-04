@@ -156,6 +156,31 @@ void main() {
     expect(despues.exists, isFalse);
   });
 
+  test('registrar el dispositivo no lee el documento remoto', () async {
+    SharedPreferences.setMockInitialValues({
+      MensajeriaService.claveSilenciados: '["local-1"]',
+    });
+    final firestore = FakeFirebaseFirestore();
+    await firestore.collection('dispositivos').doc('token-1').set({
+      'uid': 'otro',
+      'silenciados': ['remoto-1'],
+    });
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'u1', email: 'staff@refugio.test'),
+    );
+    final servicio = MensajeriaService(
+      firestore: firestore,
+      auth: auth,
+      push: FuentePushFija('token-1'),
+    );
+
+    await servicio.registrarDispositivo();
+    final doc = await firestore.collection('dispositivos').doc('token-1').get();
+    expect(doc.data()?['uid'], 'u1');
+    expect(doc.data()?['silenciados'], ['local-1']);
+  });
+
   testWidgets('el formulario guarda con los controladores del provider', (tester) async {
     final firestore = FakeFirebaseFirestore();
     tester.view.physicalSize = const Size(800, 1400);
@@ -229,7 +254,10 @@ void main() {
     expect(find.text('Fecha de ingreso'), findsOneWidget);
     expect(find.text('Historia y observaciones'), findsOneWidget);
     expect(find.text('Editar ficha'), findsOneWidget);
-    expect(find.text('Agregar un estudio'), findsOneWidget);
+    expect(find.text('Registrar en el calendario'), findsOneWidget);
+    expect(find.text('Subir foto de estudio'), findsOneWidget);
+    expect(find.text('Fotos de estudios'), findsNothing);
+    expect(find.text('Agregar un estudio'), findsNothing);
 
     await _montarFicha(tester, perro, invitado: true);
     expect(find.text('Ficha de Luna'), findsOneWidget);
@@ -237,8 +265,35 @@ void main() {
     expect(find.text('Fecha de ingreso'), findsOneWidget);
     expect(find.text('Historia y observaciones'), findsOneWidget);
     expect(find.text('Editar ficha'), findsNothing);
-    expect(find.text('Agregar un estudio'), findsNothing);
-    expect(find.text('Estudios y registros'), findsNothing);
+    expect(find.text('Registrar en el calendario'), findsNothing);
+    expect(find.text('Subir foto de estudio'), findsNothing);
+    expect(find.text('Fotos de estudios'), findsNothing);
+  });
+
+  testWidgets('Registrar en el calendario abre tratamiento, seguimiento o recordatorio', (tester) async {
+    final perro = PerroModel(
+      id: 'p1',
+      nombre: 'Luna',
+      estado: 'activo',
+      sexo: 'hembra',
+      fechaIngreso: DateTime(2020, 4, 29),
+    );
+
+    Future<void> abrirOpcion(String etiqueta, String tituloFormulario) async {
+      await _montarFicha(tester, perro, invitado: false);
+      await tester.tap(find.text('Registrar en el calendario'));
+      await tester.pumpAndSettle();
+      expect(find.text('¿Qué querés registrar?'), findsOneWidget);
+      await tester.tap(find.text(etiqueta));
+      await tester.pumpAndSettle();
+      expect(find.text(tituloFormulario), findsOneWidget);
+      await tester.tap(find.text('Cancelar').last);
+      await tester.pumpAndSettle();
+    }
+
+    await abrirOpcion('Tratamiento', 'Agregar registro médico');
+    await abrirOpcion('Seguimiento', 'Agregar seguimiento');
+    await abrirOpcion('Recordatorio', 'Agendar recordatorio');
   });
 
   testWidgets('la ficha muestra solo el acceso Salud y sin el texto viejo de la galería', (tester) async {

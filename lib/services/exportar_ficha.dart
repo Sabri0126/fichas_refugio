@@ -152,7 +152,7 @@ abstract final class ExportarFicha {
           if (perro.estado == 'egresado' || perro.historialEgresos.isNotEmpty) _egresos(perro),
           if (estudios.isNotEmpty) ...[
             pw.SizedBox(height: 16),
-            _titulo('Estudios y registros médicos'),
+            _titulo('Fotos de estudios'),
             pw.SizedBox(height: 10),
             for (final estudio in estudios)
               _bloqueEstudio(estudio, alto: estudios.length == 1 ? _altoEstudioUnico : _altoEstudio),

@@ -6,6 +6,7 @@ mixin _FichaEstado on ConsumerState<FichaDetallePerro> {
   EstudioController get _estudioController => ref.read(estudioControllerProvider);
   TratamientoController get _tratamientoController => ref.read(tratamientoControllerProvider);
   RecordatorioController get _recordatorioController => ref.read(recordatorioControllerProvider);
+  SeguimientoController get _seguimientoController => ref.read(seguimientoControllerProvider);
   PesoController get _pesoController => ref.read(pesoControllerProvider);
   FotosService get _fotos => ref.read(fotosServiceProvider);
   final MarcaArchivado _marcaArchivado = MarcaArchivado();

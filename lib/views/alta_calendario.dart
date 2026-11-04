@@ -6,11 +6,23 @@ import '../controllers/seguimiento_controller.dart';
 import '../controllers/tratamiento_controller.dart';
 import '../models/perro_model.dart';
 import '../models/recordatorio_model.dart';
+import '../models/seguimiento_model.dart';
 import '../models/tratamiento_model.dart';
 import '../theme/app_colors.dart';
 import 'dialogo_recordatorio.dart';
 import 'dialogo_seguimiento.dart';
 import 'dialogo_tratamiento.dart';
+
+/// Opciones del alta desde la ficha ("Registrar en el calendario").
+enum TipoRegistroCalendario { tratamiento, seguimiento, recordatorio }
+
+/// Diálogo con las tres opciones de alta, una por renglón.
+Future<TipoRegistroCalendario?> elegirTipoRegistroCalendario(BuildContext context) {
+  return showDialog<TipoRegistroCalendario>(
+    context: context,
+    builder: (ctx) => const _DialogoTipoRegistro(),
+  );
+}
 
 /// Elige un perro activo y abre el alta de un registro médico.
 Future<void> abrirAltaRegistroCalendario(
@@ -136,18 +148,172 @@ Future<void> abrirAltaSeguimientoCalendario(
 }) async {
   final perro = await _elegirPerro(context, activos, idPreseleccionado);
   if (perro == null || !context.mounted) return;
+  await abrirAltaSeguimientoParaPerro(
+    context,
+    perro: perro,
+    fecha: fecha,
+    seguimientos: seguimientos,
+    perros: perros,
+  );
+}
+
+/// Alta de seguimiento para un perro ya elegido (ficha o calendario).
+/// `null` si canceló, `true` si guardó, `false` si falló.
+Future<bool?> abrirAltaSeguimientoParaPerro(
+  BuildContext context, {
+  required PerroModel perro,
+  required DateTime fecha,
+  required SeguimientoController seguimientos,
+  required PerroController perros,
+  Future<void> Function(SeguimientoModel modelo)? alGuardar,
+}) async {
   final modelo = await mostrarDialogoSeguimiento(
     context,
     controller: seguimientos,
     fechaInicial: fecha,
   );
-  if (modelo == null || !context.mounted) return;
+  if (modelo == null || !context.mounted) return null;
   try {
-    await perros.agregarSeguimiento(perro.id, modelo);
+    if (alGuardar != null) {
+      await alGuardar(modelo);
+    } else {
+      await perros.agregarSeguimiento(perro.id, modelo);
+    }
+    return true;
   } catch (_) {
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No se pudo guardar el seguimiento')),
+    );
+    return false;
+  }
+}
+
+/// Misma forma que el diálogo de categoría: no usa AlertDialog porque la grilla
+/// mide el ancho con LayoutBuilder y AlertDialog pide el intrínseco.
+class _DialogoTipoRegistro extends StatelessWidget {
+  const _DialogoTipoRegistro();
+
+  static const _opciones = <(TipoRegistroCalendario, IconData, String, String, Color)>[
+    (
+      TipoRegistroCalendario.tratamiento,
+      Icons.medical_services_outlined,
+      'Tratamiento',
+      'Vacunas, medicación, visitas al veterinario',
+      AppColors.navy,
+    ),
+    (
+      TipoRegistroCalendario.seguimiento,
+      Icons.visibility_outlined,
+      'Seguimiento',
+      'Observar algo unos días: un ojo, una herida, el ánimo',
+      AppColors.terracota,
+    ),
+    (
+      TipoRegistroCalendario.recordatorio,
+      Icons.alarm_add,
+      'Recordatorio',
+      'Algo para hacer en una fecha',
+      AppColors.navy,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final pantalla = MediaQuery.sizeOf(context);
+    var ancho = pantalla.width - 80;
+    if (ancho > 560) ancho = 560;
+    if (ancho < 280) ancho = 280;
+    var alto = pantalla.height - 80;
+    if (alto < 240) alto = 240;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: ancho, maxHeight: alto),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('¿Qué querés registrar?', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              for (var i = 0; i < _opciones.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                _opcion(
+                  context,
+                  tipo: _opciones[i].$1,
+                  icono: _opciones[i].$2,
+                  titulo: _opciones[i].$3,
+                  ejemplo: _opciones[i].$4,
+                  color: _opciones[i].$5,
+                ),
+              ],
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _opcion(
+    BuildContext context, {
+    required TipoRegistroCalendario tipo,
+    required IconData icono,
+    required String titulo,
+    required String ejemplo,
+    required Color color,
+  }) {
+    return Material(
+      color: context.paleta.superficie,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.paleta.borde),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.pop(context, tipo),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icono, size: 22, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titulo, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      ejemplo,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.paleta.textoSuave,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
