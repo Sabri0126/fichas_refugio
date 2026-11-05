@@ -1272,24 +1272,42 @@ mixin _FichaSecciones on _FichaEstado {
   }
 
   Widget _accionesTratamiento(TratamientoModel tratamiento, String nombrePerro) {
+    final suspender = OutlinedButton.icon(
+      onPressed: () => _suspenderDesdeFicha(tratamiento, nombrePerro),
+      icon: const Icon(Icons.stop_circle_outlined),
+      label: Text('Suspender', textScaler: _escala),
+    );
+    final cambiar = !tratamiento.dePorVida
+        ? null
+        : OutlinedButton.icon(
+            onPressed: () => _cambiarDosisDesdeFicha(tratamiento),
+            icon: const Icon(Icons.tune),
+            label: Text('Cambiar dosis', textScaler: _escala),
+          );
     return Padding(
       padding: const EdgeInsets.only(left: 8, top: 4),
-      child: Row(
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => _suspenderDesdeFicha(tratamiento, nombrePerro),
-            icon: const Icon(Icons.stop_circle_outlined),
-            label: Text('Suspender', textScaler: _escala),
-          ),
-          if (tratamiento.dePorVida) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => _cambiarDosisDesdeFicha(tratamiento),
-              icon: const Icon(Icons.tune),
-              label: Text('Cambiar dosis', textScaler: _escala),
-            ),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final apilar = cambiar != null && constraints.maxWidth < 520;
+          if (apilar) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                suspender,
+                const SizedBox(height: 8),
+                cambiar,
+              ],
+            );
+          }
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              suspender,
+              ?cambiar,
+            ],
+          );
+        },
       ),
     );
   }

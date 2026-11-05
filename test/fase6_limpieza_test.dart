@@ -346,6 +346,61 @@ void main() {
     expect(find.text('Historia'), findsNothing);
     expect(find.text('Familiares/Parientes'), findsOneWidget);
   });
+
+  testWidgets('en celular angosto Suspender y Cambiar dosis se leen enteros', (tester) async {
+    final perro = PerroModel(
+      id: 'p1',
+      nombre: 'Merlina',
+      estado: 'activo',
+      sexo: 'hembra',
+      fechaIngreso: DateTime(2020, 4, 29),
+      tratamientos: [
+        TratamientoModel(
+          id: 'vida',
+          categoria: 'diario',
+          medicacion: 'Fenobarbital P-100',
+          indicaciones: '1/4 comp. c/ 24hs',
+          fechaInicio: DateTime(2026, 9, 10),
+          diasDuracion: 0,
+          activo: true,
+          tipoDuracion: TratamientoModel.tipoDePorVida,
+        ),
+      ],
+    );
+
+    final overflows = <String>[];
+    final previo = FlutterError.onError;
+    FlutterError.onError = (details) {
+      final texto = details.toString();
+      if (texto.contains('overflowed') || texto.contains('OVERFLOW')) {
+        overflows.add(texto);
+      }
+      previo?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previo);
+
+    await _montarFicha(tester, perro, invitado: false, tamano: const Size(360, 1400));
+    await tester.scrollUntilVisible(find.text('Cambiar dosis'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Suspender'), findsOneWidget);
+    expect(find.text('Cambiar dosis'), findsOneWidget);
+    expect(tester.getRect(find.text('Cambiar dosis')).right, lessThanOrEqualTo(360));
+    expect(overflows, isEmpty);
+
+    await tester.tap(find.text('Suspender'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Suspender Fenobarbital'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cambiar dosis'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dosis nueva'), findsOneWidget);
+    expect(find.text('Guardar cambio'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Dosis nueva'))).pop();
+    await tester.pumpAndSettle();
+  });
 }
 
 Future<void> _montarCalendario(WidgetTester tester, PerroModel perro, {required bool invitado}) async {
@@ -380,10 +435,15 @@ Future<void> _montarCalendario(WidgetTester tester, PerroModel perro, {required 
   fail('el calendario no mostró los pendientes');
 }
 
-Future<void> _montarFicha(WidgetTester tester, PerroModel perro, {required bool invitado}) async {
+Future<void> _montarFicha(
+  WidgetTester tester,
+  PerroModel perro, {
+  required bool invitado,
+  Size tamano = const Size(800, 1400),
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
-  tester.view.physicalSize = const Size(800, 1400);
+  tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
